@@ -1,20 +1,24 @@
 """LangGraph state machine that wires the agents together.
 
-Step 2 wires one specialist: START -> marketing -> END. Later steps add the
-rest of the team around it.
+The four specialists fan out from START, run in parallel, and end. Later steps
+add the Chief of Staff around them.
 """
 
 from langgraph.graph import END, START, StateGraph
 
-from agents.roles import MARKETING
+from agents.roles import SPECIALISTS
 from agents.specialist import specialist_node
 from state import WorkflowState
 
 
 def build_graph():
-    """Build and compile the workflow graph."""
+    """Build and compile the workflow graph.
+
+    The specialists fan out from START and run in parallel, then end.
+    """
     builder = StateGraph(WorkflowState)
-    builder.add_node(MARKETING.name, specialist_node(MARKETING))
-    builder.add_edge(START, MARKETING.name)
-    builder.add_edge(MARKETING.name, END)
+    for role in SPECIALISTS:
+        builder.add_node(role.name, specialist_node(role))
+        builder.add_edge(START, role.name)
+        builder.add_edge(role.name, END)
     return builder.compile()
