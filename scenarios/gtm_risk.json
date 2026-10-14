@@ -1,0 +1,8 @@
+{
+  "prompt": "Identify risks in our go-to-market plan for a tool that automates expense reports for small businesses.",
+  "context": {
+    "target_market": "Bookkeepers serving 5-50 person companies",
+    "constraints": "Two co-founders, bootstrapped, launching in one quarter",
+    "competitive_landscape": "Established expense suites and several free spreadsheet templates"
+  }
+}

@@ -13,7 +13,7 @@ def _only(name: str) -> DelegationPlan:
     )
 
 
-def test_rejected_report_is_revised_with_feedback(fake_llm):
+def test_rejected_report_is_revised_with_feedback(fake_llm, thread):
     fake_llm.plan = _only("marketing")
 
     def review_for(report: str) -> ReviewResult:
@@ -24,7 +24,7 @@ def test_rejected_report_is_revised_with_feedback(fake_llm):
     fake_llm._review_for = review_for
     graph = build_graph()
 
-    result = graph.invoke({"request": "Evaluate an AI tool."})
+    result = graph.invoke({"request": "Evaluate an AI tool."}, thread)
 
     # The specialist ran twice: initial report, then a revision.
     assert fake_llm.specialist_calls["marketing"] == 2
@@ -35,19 +35,19 @@ def test_rejected_report_is_revised_with_feedback(fake_llm):
     assert result["reviews"]["marketing"].approved
 
 
-def test_approved_reports_are_not_rerun(fake_llm):
+def test_approved_reports_are_not_rerun(fake_llm, thread):
     fake_llm.plan = _only("marketing")
     # Default review approves everything.
     graph = build_graph()
 
-    result = graph.invoke({"request": "Evaluate an AI tool."})
+    result = graph.invoke({"request": "Evaluate an AI tool."}, thread)
 
     assert fake_llm.specialist_calls["marketing"] == 1
     assert len(result["review_history"]) == 1
     assert fake_llm.synthesis_calls == 1
 
 
-def test_loop_stops_at_max_iterations(fake_llm):
+def test_loop_stops_at_max_iterations(fake_llm, thread):
     fake_llm.plan = _only("marketing")
     # Always reject: the single-revision cap must still end the loop.
     fake_llm._review_for = lambda report: ReviewResult(
@@ -55,7 +55,7 @@ def test_loop_stops_at_max_iterations(fake_llm):
     )
     graph = build_graph()
 
-    result = graph.invoke({"request": "Evaluate an AI tool."})
+    result = graph.invoke({"request": "Evaluate an AI tool."}, thread)
 
     # One initial + one revision, then it stops despite the rejection.
     assert fake_llm.specialist_calls["marketing"] == 2

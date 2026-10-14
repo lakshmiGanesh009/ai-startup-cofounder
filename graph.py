@@ -4,8 +4,12 @@ The Chief of Staff plans, the assigned specialists run in parallel, the Chief of
 Staff reviews their reports and sends weak ones back once, the specialists
 cross-critique and the Chief of Staff resolves any conflicts, then the approved
 reports are synthesised into one strategy.
+
+The graph is compiled with a checkpointer, so a session's state survives between
+requests and a follow-up can reuse the reports that still stand.
 """
 
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
 from agents.chief_of_staff import (
@@ -27,9 +31,15 @@ def _route_to_assigned(state: WorkflowState) -> list[str]:
 
 
 def _route_after_review(state: WorkflowState) -> list[str] | str:
-    """Send rejected reports back to their specialists, or move on to critique."""
+    """Send rejected reports back, else critique, else straight to synthesis.
+
+    With a single specialist there is no one to cross-critique against, so the
+    critique and resolve pass is skipped.
+    """
     revisions = state.get("revisions", {})
-    return list(revisions) if revisions else "critique"
+    if revisions:
+        return list(revisions)
+    return "critique" if len(state["analyses"]) > 1 else "synthesis"
 
 
 def _route_after_specialist(role_name: str):
@@ -63,8 +73,10 @@ def build_graph():
 
     builder.add_edge(START, "plan")
     builder.add_conditional_edges("plan", _route_to_assigned, SPECIALIST_NAMES)
-    builder.add_conditional_edges("review", _route_after_review, [*SPECIALIST_NAMES, "critique"])
+    builder.add_conditional_edges(
+        "review", _route_after_review, [*SPECIALIST_NAMES, "critique", "synthesis"]
+    )
     builder.add_edge("critique", "resolve")
     builder.add_conditional_edges("resolve", _route_after_resolve, [*SPECIALIST_NAMES, "synthesis"])
     builder.add_edge("synthesis", END)
-    return builder.compile()
+    return builder.compile(checkpointer=MemorySaver())

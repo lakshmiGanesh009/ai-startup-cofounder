@@ -18,7 +18,7 @@ CONFLICT = Conflict(
 )
 
 
-def test_conflict_is_flagged_resolved_and_reaches_the_specialist(fake_llm):
+def test_conflict_is_flagged_resolved_and_reaches_the_specialist(fake_llm, thread):
     fake_llm.plan = PLAN
     fake_llm.critique = SpecialistCritique(conflicts=[CONFLICT])
     fake_llm.resolution = Resolution(
@@ -28,7 +28,7 @@ def test_conflict_is_flagged_resolved_and_reaches_the_specialist(fake_llm):
     )
     graph = build_graph()
 
-    result = graph.invoke({"request": "Premium pricing on a very small budget."})
+    result = graph.invoke({"request": "Premium pricing on a very small budget."}, thread)
 
     # The conflict was resolved and recorded.
     assert len(result["resolutions"]) == 1
@@ -41,12 +41,12 @@ def test_conflict_is_flagged_resolved_and_reaches_the_specialist(fake_llm):
     assert result["final_strategy"]
 
 
-def test_no_conflicts_means_no_extra_round(fake_llm):
+def test_no_conflicts_means_no_extra_round(fake_llm, thread):
     fake_llm.plan = PLAN
     # Default critique raises nothing.
     graph = build_graph()
 
-    result = graph.invoke({"request": "Premium pricing on a very small budget."})
+    result = graph.invoke({"request": "Premium pricing on a very small budget."}, thread)
 
     assert result.get("resolutions", []) == []
     assert fake_llm.specialist_calls["marketing"] == 1

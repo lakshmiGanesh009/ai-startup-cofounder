@@ -64,6 +64,7 @@ class FakeModel:
         self.resolution: Resolution | None = None
         self.synthesis_calls = 0
         self.specialist_calls: dict[str, int] = {}
+        self.fail: set[str] = set()  # specialist names whose call should raise
 
     def _review_for(self, report: str) -> ReviewResult:
         for name, review in self.reviews.items():
@@ -80,6 +81,8 @@ class FakeModel:
             for title, name in SPECIALIST_TITLES.items():
                 if title in system:
                     self.specialist_calls[name] = self.specialist_calls.get(name, 0) + 1
+                    if name in self.fail:
+                        raise RuntimeError(f"{name} specialist call failed")
         return AIMessage(f"[role: {system}]\n{human}")
 
     def _critique_for(self, prompt: str) -> SpecialistCritique:
@@ -150,3 +153,11 @@ def fake_llm(monkeypatch):
     monkeypatch.setattr("agents.specialist.get_llm", lambda: model)
     monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
     return model
+
+
+@pytest.fixture
+def thread():
+    """A fresh session config for invoking the checkpointer-backed graph."""
+    import uuid
+
+    return {"configurable": {"thread_id": str(uuid.uuid4())}}

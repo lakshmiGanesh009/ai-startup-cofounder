@@ -9,8 +9,10 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.roles import SPECIALISTS
+from agents.specialist import GAP_PREFIX
 from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
 from llm import get_llm
+from metrics import track
 from state import (
     DelegationPlan,
     Resolution,
@@ -23,6 +25,16 @@ logger = logging.getLogger(__name__)
 
 SPECIALIST_NAMES = [role.name for role in SPECIALISTS]
 
+
+def structured_invoke(schema, messages):
+    """Invoke the model for a structured `schema`, retrying once if the first
+    reply does not parse into the schema."""
+    model = get_llm().with_structured_output(schema)
+    try:
+        return model.invoke(messages)
+    except Exception:  # malformed structured output: one more try
+        return model.invoke(messages)
+
 _PLANNER_PROMPT = (
     "You are the Chief of Staff of a startup founding team. Read the founder's "
     "request and decide which specialists it needs. The specialists are: "
@@ -31,7 +43,7 @@ _PLANNER_PROMPT = (
 )
 
 
-def _build_prompt(state: WorkflowState) -> list:
+def _build_prompt(state: WorkflowState, prior: dict[str, str]) -> list:
     request = state["request"]
     context = state.get("context")
     context_text = context.as_prompt() if context else ""
@@ -39,14 +51,39 @@ def _build_prompt(state: WorkflowState) -> list:
     human = f"Founder request:\n{request}"
     if context_text:
         human += f"\n\n{context_text}"
+    if prior:
+        human += (
+            "\n\nThis is a follow-up. These specialists already reported: "
+            f"{', '.join(prior)}. Assign only the ones this follow-up affects; "
+            "the rest keep their earlier report."
+        )
 
     return [SystemMessage(_PLANNER_PROMPT), HumanMessage(human)]
 
 
+# Fields from a previous request that must not leak into a new one.
+_RESET = {
+    "reviews": {},
+    "revisions": {},
+    "iteration": 0,
+    "conflicts": [],
+    "resolutions": [],
+    "critique_revisions": {},
+    "critique_round": 0,
+}
+
+
 def plan_node(state: WorkflowState) -> dict:
-    """Produce the delegation plan and resolve who gets which task."""
-    model = get_llm().with_structured_output(DelegationPlan)
-    plan: DelegationPlan = model.invoke(_build_prompt(state))
+    """Produce the delegation plan and resolve who gets which task.
+
+    On a follow-up, only the specialists the request affects are reassigned; the
+    others keep the report they already gave.
+    """
+    prior = state.get("analyses", {})
+    metrics: dict = {}
+    with track("plan", metrics) as t:
+        plan: DelegationPlan = structured_invoke(DelegationPlan, _build_prompt(state, prior))
+        t.record(plan)
 
     assignments = {
         name: task
@@ -58,7 +95,7 @@ def plan_node(state: WorkflowState) -> dict:
         assignments = {name: state["request"] for name in SPECIALIST_NAMES}
 
     logger.debug("Delegating to: %s", ", ".join(assignments))
-    return {"plan": plan, "assignments": assignments}
+    return {"plan": plan, "assignments": assignments, "metrics": metrics, **_RESET}
 
 
 _REVIEW_PROMPT = (
@@ -74,18 +111,25 @@ def review_node(state: WorkflowState) -> dict:
     On a later round only the just-revised reports are reviewed; reports already
     approved are kept, so an approved report never costs a second review call.
     """
-    model = get_llm().with_structured_output(ReviewResult)
     assignments = state["assignments"]
     previous = state.get("reviews", {})
-    to_review = state.get("revisions") or {name: "" for name in state["analyses"]}
+    # First round reviews the specialists assigned this request; a later round
+    # reviews only the just-revised reports.
+    to_review = state.get("revisions") or {name: "" for name in assignments}
 
     reviews: dict[str, ReviewResult] = dict(previous)
-    for name in to_review:
-        human = (
-            f"Task: {assignments.get(name, state['request'])}\n\n"
-            f"Report:\n{state['analyses'][name]}"
-        )
-        reviews[name] = model.invoke([SystemMessage(_REVIEW_PROMPT), HumanMessage(human)])
+    metrics: dict = {}
+    with track("review", metrics) as t:
+        for name in to_review:
+            report = state["analyses"][name]
+            if report.startswith(GAP_PREFIX):  # nothing to review for a gap
+                reviews[name] = ReviewResult(approved=True, score=1, feedback="")
+                continue
+            human = f"Task: {assignments.get(name, state['request'])}\n\nReport:\n{report}"
+            reviews[name] = structured_invoke(
+                ReviewResult, [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
+            )
+            t.record(reviews[name])
 
     iteration = state.get("iteration", 0) + 1
     revisions = (
@@ -100,6 +144,7 @@ def review_node(state: WorkflowState) -> dict:
         "revisions": revisions,
         "iteration": iteration,
         "review_history": [reviews],
+        "metrics": metrics,
     }
 
 
@@ -112,25 +157,29 @@ _CRITIQUE_PROMPT = (
 
 def critique_node(state: WorkflowState) -> dict:
     """Each assigned specialist flags conflicts with the others' reports."""
-    model = get_llm().with_structured_output(SpecialistCritique)
     analyses = state["analyses"]
 
     conflicts = []
-    for name in analyses:
-        others = {other: text for other, text in analyses.items() if other != name}
-        if not others:
-            continue
-        human = (
-            f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
-            f"The other reports:\n\n{_reports_text(others)}"
-        )
-        critique: SpecialistCritique = model.invoke(
-            [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
-        )
-        conflicts.extend(critique.conflicts)
+    metrics: dict = {}
+    with track("critique", metrics) as t:
+        for name in analyses:
+            if analyses[name].startswith(GAP_PREFIX):  # a gap cannot critique
+                continue
+            others = {o: text for o, text in analyses.items() if o != name}
+            if not others:
+                continue
+            human = (
+                f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
+                f"The other reports:\n\n{_reports_text(others)}"
+            )
+            critique: SpecialistCritique = structured_invoke(
+                SpecialistCritique, [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
+            )
+            t.record(critique)
+            conflicts.extend(critique.conflicts)
 
     logger.debug("Critique round: %d conflicts raised", len(conflicts))
-    return {"conflicts": conflicts}
+    return {"conflicts": conflicts, "metrics": metrics}
 
 
 _RESOLVE_PROMPT = (
@@ -142,20 +191,22 @@ _RESOLVE_PROMPT = (
 
 def resolve_node(state: WorkflowState) -> dict:
     """Resolve each conflict and decide which specialists must revise."""
-    model = get_llm().with_structured_output(Resolution)
     assigned = set(state["assignments"])
     round_no = state.get("critique_round", 0) + 1
 
     resolutions = []
-    for conflict in state.get("conflicts", []):
-        human = (
-            f"Conflict raised by {conflict.raised_by} about {conflict.about}:\n"
-            f"{conflict.issue}"
-        )
-        resolution: Resolution = model.invoke(
-            [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
-        )
-        resolutions.append(resolution)
+    metrics: dict = {}
+    with track("resolve", metrics) as t:
+        for conflict in state.get("conflicts", []):
+            human = (
+                f"Conflict raised by {conflict.raised_by} about {conflict.about}:\n"
+                f"{conflict.issue}"
+            )
+            resolution: Resolution = structured_invoke(
+                Resolution, [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
+            )
+            t.record(resolution)
+            resolutions.append(resolution)
 
     revisions = {}
     if round_no <= MAX_CRITIQUE_ROUNDS:
@@ -168,6 +219,7 @@ def resolve_node(state: WorkflowState) -> dict:
         "resolutions": resolutions,
         "critique_revisions": revisions,
         "critique_round": round_no,
+        "metrics": metrics,
     }
 
 
@@ -175,7 +227,9 @@ _SYNTHESIS_PROMPT = (
     "You are the Chief of Staff of a startup founding team. Merge the specialist "
     "reports below into one launch strategy. Give a clear recommendation, the "
     "reasoning behind it, where the specialists pull in different directions, and "
-    "prioritised next steps. Use only what the specialists reported; add nothing new."
+    "prioritised next steps. Use only what the specialists reported; add nothing new. "
+    "If a report is marked unavailable, name that gap in the strategy and proceed "
+    "with the reports you do have."
 )
 
 
@@ -190,5 +244,8 @@ def synthesis_node(state: WorkflowState) -> dict:
         f"Objective: {state['plan'].objective}\n\n"
         f"Specialist reports:\n\n{_reports_text(state['analyses'])}"
     )
-    reply = get_llm().invoke([SystemMessage(_SYNTHESIS_PROMPT), HumanMessage(human)])
-    return {"final_strategy": reply.content}
+    metrics: dict = {}
+    with track("synthesis", metrics) as t:
+        reply = get_llm().invoke([SystemMessage(_SYNTHESIS_PROMPT), HumanMessage(human)])
+        t.record(reply)
+    return {"final_strategy": reply.content, "metrics": metrics}

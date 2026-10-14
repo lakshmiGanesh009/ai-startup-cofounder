@@ -10,9 +10,13 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.roles import Role
 from llm import get_llm
+from metrics import track
 from state import WorkflowState
 
 logger = logging.getLogger(__name__)
+
+# Marks a report a specialist could not produce, so synthesis can name the gap.
+GAP_PREFIX = "[unavailable]"
 
 
 def _build_prompt(role: Role, state: WorkflowState) -> list:
@@ -52,7 +56,17 @@ def specialist_node(role: Role):
     def node(state: WorkflowState) -> dict:
         action = "revising" if _is_revising(role, state) else "analysing"
         logger.debug("%s specialist %s", role.name, action)
-        reply = get_llm().invoke(_build_prompt(role, state))
-        return {"analyses": {role.name: reply.content}}
+
+        metrics: dict = {}
+        with track(role.name, metrics) as t:
+            try:
+                reply = get_llm().invoke(_build_prompt(role, state))
+                t.record(reply)
+                analysis = reply.content
+            except Exception as error:  # a failed specialist must not sink the run
+                logger.warning("%s specialist failed: %s", role.name, error)
+                analysis = f"{GAP_PREFIX} The {role.name} analysis could not be produced."
+
+        return {"analyses": {role.name: analysis}, "metrics": metrics}
 
     return node

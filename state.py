@@ -37,6 +37,21 @@ class DelegationPlan(BaseModel):
         return merged
 
 
+class NodeMetric(BaseModel):
+    """What one node cost: LLM calls, wall-clock seconds, and tokens."""
+
+    calls: int = 0
+    seconds: float = 0.0
+    tokens: int = 0
+
+    def add(self, other: "NodeMetric") -> "NodeMetric":
+        return NodeMetric(
+            calls=self.calls + other.calls,
+            seconds=round(self.seconds + other.seconds, 3),
+            tokens=self.tokens + other.tokens,
+        )
+
+
 class ReviewResult(BaseModel):
     """The Chief of Staff's verdict on one specialist report."""
 
@@ -95,6 +110,14 @@ def _append_review(current: list, update: list) -> list:
     return current + update
 
 
+def _merge_metrics(current: dict, update: dict) -> dict:
+    """Sum each node's metrics as the nodes report them."""
+    merged = dict(current)
+    for node, metric in update.items():
+        merged[node] = merged[node].add(metric) if node in merged else metric
+    return merged
+
+
 class WorkflowState(TypedDict, total=False):
     """The state that flows through the graph."""
 
@@ -111,4 +134,5 @@ class WorkflowState(TypedDict, total=False):
     resolutions: list[Resolution]
     critique_revisions: dict[str, str]
     critique_round: int
+    metrics: Annotated[dict[str, NodeMetric], _merge_metrics]
     final_strategy: str

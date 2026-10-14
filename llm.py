@@ -7,6 +7,8 @@ is created on first use, so the app and the tests start without credentials.
 
 import os
 
+from config import LLM_MAX_RETRIES, LLM_TIMEOUT
+
 
 def _missing(names):
     """Return the names from `names` that are unset or empty in the environment."""
@@ -27,6 +29,8 @@ def _azure_llm():
         "azure_endpoint": os.environ["AZURE_OPENAI_ENDPOINT"],
         "azure_deployment": os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
         "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
+        "timeout": LLM_TIMEOUT,
+        "max_retries": LLM_MAX_RETRIES,
     }
     effort = os.getenv("AZURE_OPENAI_REASONING_EFFORT")
     if effort:
@@ -44,6 +48,8 @@ def _openai_llm():
     return ChatOpenAI(
         api_key=os.environ["OPENAI_API_KEY"],
         model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
+        timeout=LLM_TIMEOUT,
+        max_retries=LLM_MAX_RETRIES,
     )
 
 

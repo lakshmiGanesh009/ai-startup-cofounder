@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** the project scaffold is in place (Step 0) and no agent logic exists yet. Step 1 starts once the four decisions below are confirmed.
+**Where we are:** all steps are done. The full workflow is built, tested with a fake model, and documented. The remaining live checks (real-model runs and the performance numbers in `docs/performance.md`) need a filled-in `.env`.
 
 ## How we work
 
@@ -73,10 +73,10 @@ graph TD
 | 5 | Chief of Staff: synthesis | Synthesis into a unified launch strategy | To do |
 | 6 | Review and refine loop | Plan--Act--Check loop, reflection and critique cycles | To do |
 | 7 | Cross-specialist critique | Back-and-forth between agents, conflict resolution | Done |
-| 8 | Follow-up requests | Stateful system, iterative refinement | Next |
-| 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | To do |
-| 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | To do |
-| 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | To do |
+| 8 | Follow-up requests | Stateful system, iterative refinement | Done |
+| 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | Done |
+| 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | Done |
+| 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | Done |
 
 ## Steps
 

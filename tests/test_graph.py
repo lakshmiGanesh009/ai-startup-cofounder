@@ -4,20 +4,20 @@ from graph import build_graph
 from state import RequestContext
 
 
-def test_graph_returns_all_four_analyses(fake_llm):
+def test_graph_returns_all_four_analyses(fake_llm, thread):
     graph = build_graph()
 
-    result = graph.invoke({"request": "Evaluate an AI healthcare scheduling tool."})
+    result = graph.invoke({"request": "Evaluate an AI healthcare scheduling tool."}, thread)
 
     assert set(result["analyses"]) == {"marketing", "finance", "technical", "risk"}
     for analysis in result["analyses"].values():
         assert "AI healthcare scheduling tool" in analysis
 
 
-def test_each_analysis_is_produced_under_its_own_role(fake_llm):
+def test_each_analysis_is_produced_under_its_own_role(fake_llm, thread):
     graph = build_graph()
 
-    result = graph.invoke({"request": "Evaluate an AI healthcare scheduling tool."})
+    result = graph.invoke({"request": "Evaluate an AI healthcare scheduling tool."}, thread)
 
     assert "Marketing Strategy Agent" in result["analyses"]["marketing"]
     assert "Financial Planning Agent" in result["analyses"]["finance"]
@@ -25,14 +25,15 @@ def test_each_analysis_is_produced_under_its_own_role(fake_llm):
     assert "Risk & Compliance Agent" in result["analyses"]["risk"]
 
 
-def test_context_fields_reach_the_analysis(fake_llm):
+def test_context_fields_reach_the_analysis(fake_llm, thread):
     graph = build_graph()
 
     result = graph.invoke(
         {
             "request": "Evaluate an AI healthcare scheduling tool.",
             "context": RequestContext(target_market="clinics", constraints="small budget"),
-        }
+        },
+        thread,
     )
 
     analysis = result["analyses"]["marketing"]

@@ -1,0 +1,9 @@
+{
+  "prompt": "Evaluate this startup idea in the AI healthcare space: an assistant that drafts and schedules patient follow-up appointments from clinical notes.",
+  "context": {
+    "target_market": "Small outpatient clinics in the US",
+    "constraints": "Solo founder, under $15k to first launch, six-month runway",
+    "competitive_landscape": "Incumbent EHR vendors with scheduling add-ons; a few point tools for reminders"
+  },
+  "follow_up": "Refine the pricing strategy after financial review."
+}
