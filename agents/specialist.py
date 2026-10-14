@@ -17,10 +17,13 @@ logger = logging.getLogger(__name__)
 
 def _build_prompt(role: Role, state: WorkflowState) -> list:
     request = state["request"]
+    task = state.get("assignments", {}).get(role.name)
     context = state.get("context")
     context_text = context.as_prompt() if context else ""
 
     human = f"Startup request:\n{request}"
+    if task:
+        human += f"\n\nYour assignment:\n{task}"
     if context_text:
         human += f"\n\n{context_text}"
 

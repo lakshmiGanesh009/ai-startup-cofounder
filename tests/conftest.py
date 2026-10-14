@@ -26,20 +26,49 @@ def strip_credentials(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+from state import DelegationPlan, Task
+
+SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
+
+
 class FakeModel:
-    """A chat model stand-in whose reply echoes the prompt it was given."""
+    """A chat model stand-in.
+
+    Specialist calls get an echoed reply. The Chief of Staff's planning call
+    uses `with_structured_output`, which returns `plan` (all four specialists by
+    default; tests can set a narrower plan).
+    """
+
+    def __init__(self):
+        self.plan = DelegationPlan(
+            objective="Evaluate the request.",
+            tasks=[Task(specialist=name, task=f"Handle {name}.") for name in SPECIALIST_NAMES],
+        )
 
     def invoke(self, messages):
-        system = next(
-            (m.content for m in messages if isinstance(m, SystemMessage)), ""
-        )
+        system = next((m.content for m in messages if isinstance(m, SystemMessage)), "")
         human = messages[-1].content
         return AIMessage(f"[role: {system}]\n{human}")
+
+    def with_structured_output(self, schema):
+        plan = self.plan
+        return _StructuredModel(plan)
+
+
+class _StructuredModel:
+    """What `with_structured_output` returns: invoke yields the fixed plan."""
+
+    def __init__(self, plan):
+        self._plan = plan
+
+    def invoke(self, messages):
+        return self._plan
 
 
 @pytest.fixture
 def fake_llm(monkeypatch):
-    """Make every get_llm() call return the FakeModel."""
+    """Make every get_llm() call return the FakeModel (shared by plan and specialists)."""
     model = FakeModel()
     monkeypatch.setattr("agents.specialist.get_llm", lambda: model)
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
     return model

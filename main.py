@@ -30,6 +30,8 @@ class EvaluateRequest(BaseModel):
 
 
 class EvaluateResponse(BaseModel):
+    objective: str
+    assignments: dict[str, str]
     analyses: dict[str, str]
 
 
@@ -51,7 +53,11 @@ async def evaluate(request: EvaluateRequest):
     except RuntimeError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
-    return EvaluateResponse(analyses=result["analyses"])
+    return EvaluateResponse(
+        objective=result["plan"].objective,
+        assignments=result["assignments"],
+        analyses=result["analyses"],
+    )
 
 
 if __name__ == "__main__":

@@ -19,8 +19,10 @@ def test_evaluate_returns_marketing_analysis(fake_llm):
     )
 
     assert response.status_code == 200
-    analyses = response.json()["analyses"]
-    assert "AI healthcare scheduling tool" in analyses["marketing"]
+    body = response.json()
+    assert body["objective"]
+    assert "marketing" in body["assignments"]
+    assert "AI healthcare scheduling tool" in body["analyses"]["marketing"]
 
 
 def test_evaluate_with_context(fake_llm):
