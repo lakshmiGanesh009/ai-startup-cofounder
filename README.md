@@ -4,7 +4,7 @@
 
 Early-stage startups require coordinated decision-making across product strategy, market positioning, technical feasibility, financial planning, and risk assessment. Founders must evaluate incomplete information, debate trade-offs, and align on execution plans---often under uncertainty and resource constraints.
 
-Traditional AI systems generate isolated outputs, but real startup success depends on structured collaboration and eadership-driven synthesis.
+Traditional AI systems generate isolated outputs, but real startup success depends on structured collaboration and leadership-driven synthesis.
 
 ## 🌍 Context
 

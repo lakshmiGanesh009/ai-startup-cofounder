@@ -1,9 +1,12 @@
 import logging
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
 
 from config import DEBUG_MODE
+from graph import build_graph
+from state import RequestContext
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
 
@@ -18,11 +21,37 @@ app = FastAPI(
     version="0.1.0",
 )
 
+graph = build_graph()
+
+
+class EvaluateRequest(BaseModel):
+    prompt: str
+    context: RequestContext | None = None
+
+
+class EvaluateResponse(BaseModel):
+    analyses: dict[str, str]
+
 
 @app.get("/health")
 async def health():
     """Health check endpoint."""
     return {"status": "healthy", "service": SERVICE_NAME}
+
+
+@app.post("/evaluate", response_model=EvaluateResponse)
+async def evaluate(request: EvaluateRequest):
+    """Run the founding team against a startup request and return the analyses."""
+    state = {"request": request.prompt}
+    if request.context:
+        state["context"] = request.context
+
+    try:
+        result = graph.invoke(state)
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    return EvaluateResponse(analyses=result["analyses"])
 
 
 if __name__ == "__main__":
