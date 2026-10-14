@@ -37,6 +37,14 @@ class DelegationPlan(BaseModel):
         return merged
 
 
+class ReviewResult(BaseModel):
+    """The Chief of Staff's verdict on one specialist report."""
+
+    approved: bool = Field(description="True if the report is good enough to keep.")
+    score: int = Field(description="Quality from 1 (poor) to 5 (excellent).")
+    feedback: str = Field(description="What to improve; empty when approved.")
+
+
 class RequestContext(BaseModel):
     """Optional detail that sharpens a founder's request."""
 
@@ -60,6 +68,11 @@ def _merge_analyses(current: dict, update: dict) -> dict:
     return {**current, **update}
 
 
+def _append_review(current: list, update: list) -> list:
+    """Append each review round to the history."""
+    return current + update
+
+
 class WorkflowState(TypedDict, total=False):
     """The state that flows through the graph."""
 
@@ -68,3 +81,8 @@ class WorkflowState(TypedDict, total=False):
     plan: DelegationPlan
     assignments: dict[str, str]
     analyses: Annotated[dict[str, str], _merge_analyses]
+    reviews: dict[str, ReviewResult]
+    revisions: dict[str, str]
+    iteration: int
+    review_history: Annotated[list[dict[str, ReviewResult]], _append_review]
+    final_strategy: str

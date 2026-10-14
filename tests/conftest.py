@@ -8,6 +8,8 @@ graph and API tests are deterministic and need no credentials.
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
+from state import DelegationPlan, ReviewResult, Task
+
 PROVIDER_VARS = [
     "AZURE_OPENAI_API_KEY",
     "AZURE_OPENAI_ENDPOINT",
@@ -18,6 +20,8 @@ PROVIDER_VARS = [
     "MODEL_NAME",
 ]
 
+SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
+
 
 @pytest.fixture(autouse=True)
 def strip_credentials(monkeypatch):
@@ -26,17 +30,13 @@ def strip_credentials(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
-from state import DelegationPlan, Task
-
-SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
-
-
 class FakeModel:
     """A chat model stand-in.
 
-    Specialist calls get an echoed reply. The Chief of Staff's planning call
-    uses `with_structured_output`, which returns `plan` (all four specialists by
-    default; tests can set a narrower plan).
+    Specialist and synthesis calls get an echoed reply. Structured calls return
+    a `DelegationPlan` (planning) or a `ReviewResult` (review). Tests can set a
+    narrower `plan` and per-specialist `reviews`; reports default to approved.
+    `synthesis_calls` and `specialist_calls` record how often each ran.
     """
 
     def __init__(self):
@@ -44,25 +44,55 @@ class FakeModel:
             objective="Evaluate the request.",
             tasks=[Task(specialist=name, task=f"Handle {name}.") for name in SPECIALIST_NAMES],
         )
+        self.reviews: dict[str, ReviewResult] = {}
+        self.synthesis_calls = 0
+        self.specialist_calls: dict[str, int] = {}
+
+    def _review_for(self, report: str) -> ReviewResult:
+        for name, review in self.reviews.items():
+            if name in report:
+                return review
+        return ReviewResult(approved=True, score=5, feedback="")
 
     def invoke(self, messages):
         system = next((m.content for m in messages if isinstance(m, SystemMessage)), "")
         human = messages[-1].content
+        if "launch strategy" in system:
+            self.synthesis_calls += 1
+        else:
+            for name in SPECIALIST_NAMES:
+                if name in system.lower():
+                    self.specialist_calls[name] = self.specialist_calls.get(name, 0) + 1
         return AIMessage(f"[role: {system}]\n{human}")
 
     def with_structured_output(self, schema):
-        plan = self.plan
-        return _StructuredModel(plan)
+        if schema is ReviewResult:
+            return _ReviewModel(self._review_for)
+        return _StructuredModel(self.plan)
 
 
 class _StructuredModel:
-    """What `with_structured_output` returns: invoke yields the fixed plan."""
+    """What `with_structured_output(DelegationPlan)` returns."""
 
     def __init__(self, plan):
         self._plan = plan
 
     def invoke(self, messages):
         return self._plan
+
+
+class _ReviewModel:
+    """What `with_structured_output(ReviewResult)` returns.
+
+    The verdict depends on the report text in the prompt, so a report can be
+    rejected on the first pass and approved after it is revised.
+    """
+
+    def __init__(self, review_for):
+        self._review_for = review_for
+
+    def invoke(self, messages):
+        return self._review_for(messages[-1].content)
 
 
 @pytest.fixture

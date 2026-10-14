@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 from config import DEBUG_MODE
 from graph import build_graph
-from state import RequestContext
+from state import RequestContext, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
 
@@ -33,6 +33,8 @@ class EvaluateResponse(BaseModel):
     objective: str
     assignments: dict[str, str]
     analyses: dict[str, str]
+    review_history: list[dict[str, ReviewResult]]
+    final_strategy: str
 
 
 @app.get("/health")
@@ -57,6 +59,8 @@ async def evaluate(request: EvaluateRequest):
         objective=result["plan"].objective,
         assignments=result["assignments"],
         analyses=result["analyses"],
+        review_history=result["review_history"],
+        final_strategy=result["final_strategy"],
     )
 
 

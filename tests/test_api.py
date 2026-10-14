@@ -23,6 +23,7 @@ def test_evaluate_returns_marketing_analysis(fake_llm):
     assert body["objective"]
     assert "marketing" in body["assignments"]
     assert "AI healthcare scheduling tool" in body["analyses"]["marketing"]
+    assert body["final_strategy"]
 
 
 def test_evaluate_with_context(fake_llm):

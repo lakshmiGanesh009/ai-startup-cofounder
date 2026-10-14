@@ -27,14 +27,23 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     if context_text:
         human += f"\n\n{context_text}"
 
+    feedback = state.get("revisions", {}).get(role.name)
+    if feedback:
+        previous = state["analyses"][role.name]
+        human += (
+            f"\n\nYour previous report:\n{previous}"
+            f"\n\nThe Chief of Staff asks you to revise it:\n{feedback}"
+        )
+
     return [SystemMessage(role.system_prompt), HumanMessage(human)]
 
 
 def specialist_node(role: Role):
-    """Build a graph node that answers from `role`'s point of view."""
+    """Build a graph node that answers from `role`'s point of view, or revises it."""
 
     def node(state: WorkflowState) -> dict:
-        logger.debug("%s specialist analysing the request", role.name)
+        revising = role.name in state.get("revisions", {})
+        logger.debug("%s specialist %s", role.name, "revising" if revising else "analysing")
         reply = get_llm().invoke(_build_prompt(role, state))
         return {"analyses": {role.name: reply.content}}
 
