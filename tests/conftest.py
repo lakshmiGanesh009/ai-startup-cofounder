@@ -8,7 +8,13 @@ graph and API tests are deterministic and need no credentials.
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
-from state import DelegationPlan, ReviewResult, Task
+from state import (
+    DelegationPlan,
+    Resolution,
+    ReviewResult,
+    SpecialistCritique,
+    Task,
+)
 
 PROVIDER_VARS = [
     "AZURE_OPENAI_API_KEY",
@@ -21,6 +27,15 @@ PROVIDER_VARS = [
 ]
 
 SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
+
+# The unique agent title in each role's system prompt, used to attribute a
+# specialist call to the right role (role prompts mention each other by name).
+SPECIALIST_TITLES = {
+    "Marketing Strategy Agent": "marketing",
+    "Financial Planning Agent": "finance",
+    "Technical Feasibility Agent": "technical",
+    "Risk & Compliance Agent": "risk",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +60,8 @@ class FakeModel:
             tasks=[Task(specialist=name, task=f"Handle {name}.") for name in SPECIALIST_NAMES],
         )
         self.reviews: dict[str, ReviewResult] = {}
+        self.critique = SpecialistCritique()
+        self.resolution: Resolution | None = None
         self.synthesis_calls = 0
         self.specialist_calls: dict[str, int] = {}
 
@@ -60,14 +77,25 @@ class FakeModel:
         if "launch strategy" in system:
             self.synthesis_calls += 1
         else:
-            for name in SPECIALIST_NAMES:
-                if name in system.lower():
+            for title, name in SPECIALIST_TITLES.items():
+                if title in system:
                     self.specialist_calls[name] = self.specialist_calls.get(name, 0) + 1
         return AIMessage(f"[role: {system}]\n{human}")
+
+    def _critique_for(self, prompt: str) -> SpecialistCritique:
+        # Only the specialist that raises the conflict reports it, so the same
+        # conflict is not counted once per specialist.
+        raisers = {c.raised_by for c in self.critique.conflicts}
+        mine = [c for c in self.critique.conflicts if f"the {c.raised_by} specialist" in prompt]
+        return SpecialistCritique(conflicts=mine) if raisers else SpecialistCritique()
 
     def with_structured_output(self, schema):
         if schema is ReviewResult:
             return _ReviewModel(self._review_for)
+        if schema is SpecialistCritique:
+            return _CritiqueModel(self._critique_for)
+        if schema is Resolution:
+            return _ResolutionModel(lambda: self.resolution)
         return _StructuredModel(self.plan)
 
 
@@ -93,6 +121,26 @@ class _ReviewModel:
 
     def invoke(self, messages):
         return self._review_for(messages[-1].content)
+
+
+class _CritiqueModel:
+    """What `with_structured_output(SpecialistCritique)` returns."""
+
+    def __init__(self, critique_for):
+        self._critique_for = critique_for
+
+    def invoke(self, messages):
+        return self._critique_for(messages[-1].content)
+
+
+class _ResolutionModel:
+    """What `with_structured_output(Resolution)` returns."""
+
+    def __init__(self, resolution):
+        self._resolution = resolution
+
+    def invoke(self, messages):
+        return self._resolution()
 
 
 @pytest.fixture

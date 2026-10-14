@@ -45,6 +45,28 @@ class ReviewResult(BaseModel):
     feedback: str = Field(description="What to improve; empty when approved.")
 
 
+class Conflict(BaseModel):
+    """A clash one specialist sees between its area and another's report."""
+
+    raised_by: str = Field(description="The specialist flagging the conflict.")
+    about: str = Field(description="The specialist whose report it clashes with.")
+    issue: str = Field(description="The clash, in one sentence.")
+
+
+class SpecialistCritique(BaseModel):
+    """One specialist's conflicts with the others; empty when it sees none."""
+
+    conflicts: list[Conflict] = Field(default_factory=list)
+
+
+class Resolution(BaseModel):
+    """The Chief of Staff's decision on one conflict."""
+
+    conflict: Conflict
+    decision: str = Field(description="How the clash is settled.")
+    revise: str = Field(description="The specialist to revise, or empty if none.")
+
+
 class RequestContext(BaseModel):
     """Optional detail that sharpens a founder's request."""
 
@@ -85,4 +107,8 @@ class WorkflowState(TypedDict, total=False):
     revisions: dict[str, str]
     iteration: int
     review_history: Annotated[list[dict[str, ReviewResult]], _append_review]
+    conflicts: list[Conflict]
+    resolutions: list[Resolution]
+    critique_revisions: dict[str, str]
+    critique_round: int
     final_strategy: str

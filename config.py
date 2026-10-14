@@ -9,3 +9,6 @@ DEBUG_MODE = os.getenv("DEBUG_MODE", "false").strip().lower() in {"1", "true", "
 
 # How many times a rejected report may be revised. 1 in the initial version.
 MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "1"))
+
+# How many cross-critique rounds are allowed. 1 in the initial version.
+MAX_CRITIQUE_ROUNDS = int(os.getenv("MAX_CRITIQUE_ROUNDS", "1"))

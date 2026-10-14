@@ -69,11 +69,11 @@ graph TD
 | 1 | LLM connection | LLM API access, environment variables | Done |
 | 2 | First specialist, end to end | Role-based agent, state machine, backend API | Done |
 | 3 | All four specialists in parallel | Marketing, Financial, Technical and Risk & Compliance agents | Done |
-| 4 | Chief of Staff: plan and delegate | Manager-led delegation, structured outputs | Done |
-| 5 | Chief of Staff: synthesis | Synthesis into a unified launch strategy | Done |
-| 6 | Review and refine loop | Plan--Act--Check loop, reflection and critique cycles | Done |
-| 7 | Cross-specialist critique | Back-and-forth between agents, conflict resolution | Next |
-| 8 | Follow-up requests | Stateful system, iterative refinement | To do |
+| 4 | Chief of Staff: plan and delegate | Manager-led delegation, structured outputs | Next |
+| 5 | Chief of Staff: synthesis | Synthesis into a unified launch strategy | To do |
+| 6 | Review and refine loop | Plan--Act--Check loop, reflection and critique cycles | To do |
+| 7 | Cross-specialist critique | Back-and-forth between agents, conflict resolution | Done |
+| 8 | Follow-up requests | Stateful system, iterative refinement | Next |
 | 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | To do |
 | 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | To do |
 | 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | To do |

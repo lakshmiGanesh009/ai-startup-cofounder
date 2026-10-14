@@ -9,9 +9,15 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.roles import SPECIALISTS
-from config import MAX_ITERATIONS
+from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
 from llm import get_llm
-from state import DelegationPlan, ReviewResult, WorkflowState
+from state import (
+    DelegationPlan,
+    Resolution,
+    ReviewResult,
+    SpecialistCritique,
+    WorkflowState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +100,74 @@ def review_node(state: WorkflowState) -> dict:
         "revisions": revisions,
         "iteration": iteration,
         "review_history": [reviews],
+    }
+
+
+_CRITIQUE_PROMPT = (
+    "You are a specialist on a startup founding team. Read the other specialists' "
+    "reports and flag only genuine conflicts between their claims and your own area. "
+    "If you see none, return an empty list."
+)
+
+
+def critique_node(state: WorkflowState) -> dict:
+    """Each assigned specialist flags conflicts with the others' reports."""
+    model = get_llm().with_structured_output(SpecialistCritique)
+    analyses = state["analyses"]
+
+    conflicts = []
+    for name in analyses:
+        others = {other: text for other, text in analyses.items() if other != name}
+        if not others:
+            continue
+        human = (
+            f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
+            f"The other reports:\n\n{_reports_text(others)}"
+        )
+        critique: SpecialistCritique = model.invoke(
+            [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
+        )
+        conflicts.extend(critique.conflicts)
+
+    logger.debug("Critique round: %d conflicts raised", len(conflicts))
+    return {"conflicts": conflicts}
+
+
+_RESOLVE_PROMPT = (
+    "You are the Chief of Staff. Settle this conflict between two specialists with a "
+    "clear decision, and name the one specialist (if any) who should revise their "
+    "report to match the decision."
+)
+
+
+def resolve_node(state: WorkflowState) -> dict:
+    """Resolve each conflict and decide which specialists must revise."""
+    model = get_llm().with_structured_output(Resolution)
+    assigned = set(state["assignments"])
+    round_no = state.get("critique_round", 0) + 1
+
+    resolutions = []
+    for conflict in state.get("conflicts", []):
+        human = (
+            f"Conflict raised by {conflict.raised_by} about {conflict.about}:\n"
+            f"{conflict.issue}"
+        )
+        resolution: Resolution = model.invoke(
+            [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
+        )
+        resolutions.append(resolution)
+
+    revisions = {}
+    if round_no <= MAX_CRITIQUE_ROUNDS:
+        for resolution in resolutions:
+            if resolution.revise in assigned:
+                revisions[resolution.revise] = resolution.decision
+
+    logger.debug("Resolved %d conflicts; %d to revise", len(resolutions), len(revisions))
+    return {
+        "resolutions": resolutions,
+        "critique_revisions": revisions,
+        "critique_round": round_no,
     }
 
 
