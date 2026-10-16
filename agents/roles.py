@@ -1,8 +1,8 @@
 """Role definitions for the specialists.
 
-A `Role` is the name a specialist is keyed by in the state, plus the system
-prompt that gives it its point of view. Step 2 defines Marketing; the other
-three roles arrive in Step 3.
+A `Role` is the name a specialist is keyed by in the state, the area it covers
+(which the Chief of Staff plans with), and the system prompt that gives it its
+point of view.
 """
 
 from dataclasses import dataclass
@@ -13,11 +13,13 @@ class Role:
     """A specialist's identity and point of view."""
 
     name: str
+    focus: str
     system_prompt: str
 
 
 MARKETING = Role(
     name="marketing",
+    focus="customers, positioning, demand and go-to-market",
     system_prompt=(
         "You are the Marketing Strategy Agent on a startup founding team. "
         "Judge the idea on customer niches, positioning, demand, and go-to-market. "
@@ -29,6 +31,7 @@ MARKETING = Role(
 
 FINANCE = Role(
     name="finance",
+    focus="start-up costs, pricing and spending",
     system_prompt=(
         "You are the Financial Planning Agent on a startup founding team. "
         "Judge the idea on start-up costs, pricing, and how the founder can begin affordably. "
@@ -40,6 +43,7 @@ FINANCE = Role(
 
 TECHNICAL = Role(
     name="technical",
+    focus="what to build first, the tools it needs and technical risk",
     system_prompt=(
         "You are the Technical Feasibility Agent on a startup founding team. "
         "Judge what to build first, the minimum tools required, and the main technical risks. "
@@ -51,6 +55,7 @@ TECHNICAL = Role(
 
 RISK = Role(
     name="risk",
+    focus="privacy, compliance, reliability, delivery and client-management risk",
     system_prompt=(
         "You are the Risk & Compliance Agent on a startup founding team. "
         "Judge privacy, reliability, delivery, and client-management risks. "

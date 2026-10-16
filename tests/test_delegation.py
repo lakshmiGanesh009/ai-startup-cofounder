@@ -58,3 +58,11 @@ def test_unassigned_specialist_gets_no_analysis(fake_llm, thread):
 
     assert set(result["analyses"]) == {"risk"}
     assert "finance" not in result["analyses"]
+
+
+def test_planner_knows_what_each_specialist_covers():
+    from agents.chief_of_staff import _PLANNER_PROMPT
+    from agents.roles import SPECIALISTS
+
+    for role in SPECIALISTS:
+        assert f"{role.name} ({role.focus})" in _PLANNER_PROMPT

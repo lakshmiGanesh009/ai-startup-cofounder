@@ -10,6 +10,7 @@ requests and a follow-up can reuse the reports that still stand.
 """
 
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
 
 from agents.chief_of_staff import (
@@ -22,7 +23,33 @@ from agents.chief_of_staff import (
 )
 from agents.roles import SPECIALISTS
 from agents.specialist import specialist_node
-from state import WorkflowState
+from config import DEBUG_MODE, MAX_CRITIQUE_ROUNDS
+from state import (
+    Conflict,
+    DelegationPlan,
+    NodeMetric,
+    RequestContext,
+    Resolution,
+    ReviewResult,
+    Task,
+    WorkflowState,
+)
+
+# The state models the checkpointer stores between requests. LangGraph warns
+# when it loads a type that is not registered, and will block it in a future
+# version, which would break follow-ups, so they are registered explicitly.
+_CHECKPOINT_TYPES = [
+    (model.__module__, model.__name__)
+    for model in (
+        RequestContext,
+        DelegationPlan,
+        Task,
+        ReviewResult,
+        Conflict,
+        Resolution,
+        NodeMetric,
+    )
+]
 
 
 def _route_to_assigned(state: WorkflowState) -> list[str]:
@@ -43,10 +70,17 @@ def _route_after_review(state: WorkflowState) -> list[str] | str:
 
 
 def _route_after_specialist(role_name: str):
-    """A revised specialist returns to critique; a fresh report goes to review."""
+    """A fresh report goes to review. A report revised after critique goes back to
+    critique while another round is allowed, otherwise straight to synthesis, so
+    no critique call is spent on a round that could not change anything.
+    """
 
     def route(state: WorkflowState) -> str:
-        return "critique" if role_name in state.get("critique_revisions", {}) else "review"
+        if role_name not in state.get("critique_revisions", {}):
+            return "review"
+        if state.get("critique_round", 0) < MAX_CRITIQUE_ROUNDS:
+            return "critique"
+        return "synthesis"
 
     return route
 
@@ -68,7 +102,7 @@ def build_graph():
     for role in SPECIALISTS:
         builder.add_node(role.name, specialist_node(role))
         builder.add_conditional_edges(
-            role.name, _route_after_specialist(role.name), ["review", "critique"]
+            role.name, _route_after_specialist(role.name), ["review", "critique", "synthesis"]
         )
 
     builder.add_edge(START, "plan")
@@ -79,4 +113,6 @@ def build_graph():
     builder.add_edge("critique", "resolve")
     builder.add_conditional_edges("resolve", _route_after_resolve, [*SPECIALIST_NAMES, "synthesis"])
     builder.add_edge("synthesis", END)
-    return builder.compile(checkpointer=MemorySaver())
+    serde = JsonPlusSerializer(allowed_msgpack_modules=_CHECKPOINT_TYPES)
+    # With DEBUG_MODE on, LangGraph prints every step and the state it writes.
+    return builder.compile(checkpointer=MemorySaver(serde=serde), debug=DEBUG_MODE)

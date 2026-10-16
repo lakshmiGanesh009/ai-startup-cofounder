@@ -21,11 +21,14 @@ GAP_PREFIX = "[unavailable]"
 
 def _build_prompt(role: Role, state: WorkflowState) -> list:
     request = state["request"]
+    venture = state.get("venture") or request
     task = state.get("assignments", {}).get(role.name)
     context = state.get("context")
     context_text = context.as_prompt() if context else ""
 
-    human = f"Startup request:\n{request}"
+    human = f"Startup request:\n{venture}"
+    if venture != request:
+        human += f"\n\nFollow-up request:\n{request}"
     if task:
         human += f"\n\nYour assignment:\n{task}"
     if context_text:
@@ -34,12 +37,14 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     feedback = state.get("revisions", {}).get(role.name) or state.get(
         "critique_revisions", {}
     ).get(role.name)
+    previous = state.get("analyses", {}).get(role.name)
     if feedback:
-        previous = state["analyses"][role.name]
         human += (
             f"\n\nYour previous report:\n{previous}"
             f"\n\nThe Chief of Staff asks you to revise it:\n{feedback}"
         )
+    elif previous:  # a follow-up: refine the earlier report, don't start over
+        human += f"\n\nYour earlier report:\n{previous}\n\nBuild on it for the follow-up."
 
     return [SystemMessage(role.system_prompt), HumanMessage(human)]
 

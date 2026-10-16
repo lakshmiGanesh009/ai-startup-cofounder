@@ -1,8 +1,9 @@
 """Shared state passed between the nodes of the workflow.
 
 `RequestContext` is the optional detail a founder can attach to a request.
-`WorkflowState` is what flows through the graph: the request, that context, and
-the analyses the specialists produce, keyed by specialist name.
+`WorkflowState` is what flows through the graph: the request, that context, the
+delegation plan, the analyses the specialists produce (keyed by specialist
+name), the reviews, conflicts and resolutions, and per-node metrics.
 """
 
 from typing import Annotated, TypedDict
@@ -63,8 +64,13 @@ class ReviewResult(BaseModel):
 class Conflict(BaseModel):
     """A clash one specialist sees between its area and another's report."""
 
-    raised_by: str = Field(description="The specialist flagging the conflict.")
-    about: str = Field(description="The specialist whose report it clashes with.")
+    raised_by: str = Field(
+        description="The specialist flagging the conflict: marketing, finance, technical or risk."
+    )
+    about: str = Field(
+        description="The specialist whose report it clashes with: marketing, finance, "
+        "technical or risk."
+    )
     issue: str = Field(description="The clash, in one sentence.")
 
 
@@ -79,7 +85,10 @@ class Resolution(BaseModel):
 
     conflict: Conflict
     decision: str = Field(description="How the clash is settled.")
-    revise: str = Field(description="The specialist to revise, or empty if none.")
+    revise: str = Field(
+        description="The specialist to revise (marketing, finance, technical or risk), "
+        "or empty if none."
+    )
 
 
 class RequestContext(BaseModel):
@@ -105,8 +114,8 @@ def _merge_analyses(current: dict, update: dict) -> dict:
     return {**current, **update}
 
 
-def _append_review(current: list, update: list) -> list:
-    """Append each review round to the history."""
+def _append(current: list, update: list) -> list:
+    """Append each round's entries, so earlier rounds of a request are kept."""
     return current + update
 
 
@@ -122,6 +131,8 @@ class WorkflowState(TypedDict, total=False):
     """The state that flows through the graph."""
 
     request: str
+    # The session's first request, kept so a follow-up knows what it refines.
+    venture: str
     context: RequestContext
     plan: DelegationPlan
     assignments: dict[str, str]
@@ -129,9 +140,9 @@ class WorkflowState(TypedDict, total=False):
     reviews: dict[str, ReviewResult]
     revisions: dict[str, str]
     iteration: int
-    review_history: Annotated[list[dict[str, ReviewResult]], _append_review]
+    review_history: Annotated[list[dict[str, ReviewResult]], _append]
     conflicts: list[Conflict]
-    resolutions: list[Resolution]
+    resolutions: Annotated[list[Resolution], _append]
     critique_revisions: dict[str, str]
     critique_round: int
     metrics: Annotated[dict[str, NodeMetric], _merge_metrics]

@@ -1,12 +1,15 @@
-"""Chief of Staff (manager agent): plans, delegates and synthesises.
+"""Chief of Staff (manager agent): plans, delegates, reviews, resolves and synthesises.
 
 The planning node decides which specialists a request needs and gives each one
-a task. The synthesis node merges their reports into one launch strategy.
+a task. The review node checks each report against its task, the critique and
+resolve nodes surface and settle conflicts between specialists, and the
+synthesis node merges their reports into one launch strategy.
 """
 
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.types import Overwrite
 
 from agents.roles import SPECIALISTS
 from agents.specialist import GAP_PREFIX
@@ -38,17 +41,24 @@ def structured_invoke(schema, messages):
 _PLANNER_PROMPT = (
     "You are the Chief of Staff of a startup founding team. Read the founder's "
     "request and decide which specialists it needs. The specialists are: "
-    f"{', '.join(SPECIALIST_NAMES)}. State the objective, and give a task only to "
-    "the specialists the request actually needs. Leave the rest out."
+    + "; ".join(f"{role.name} ({role.focus})" for role in SPECIALISTS)
+    + ". Evaluating a startup idea as a whole needs all four. A narrower request "
+    "needs every specialist whose area it touches, including the one who owns the "
+    "plan or decision it asks about. State the objective, and give a task only to "
+    "the specialists the request needs. Leave the rest out. Keep each task to one "
+    "or two sentences; the specialists know their own area."
 )
 
 
-def _build_prompt(state: WorkflowState, prior: dict[str, str]) -> list:
+def _build_prompt(state: WorkflowState, prior: dict[str, str], venture: str) -> list:
     request = state["request"]
     context = state.get("context")
     context_text = context.as_prompt() if context else ""
 
-    human = f"Founder request:\n{request}"
+    if prior:
+        human = f"Original request:\n{venture}\n\nFollow-up request:\n{request}"
+    else:
+        human = f"Founder request:\n{request}"
     if context_text:
         human += f"\n\n{context_text}"
     if prior:
@@ -67,7 +77,6 @@ _RESET = {
     "revisions": {},
     "iteration": 0,
     "conflicts": [],
-    "resolutions": [],
     "critique_revisions": {},
     "critique_round": 0,
 }
@@ -80,9 +89,12 @@ def plan_node(state: WorkflowState) -> dict:
     others keep the report they already gave.
     """
     prior = state.get("analyses", {})
+    venture = state.get("venture") or state["request"]
     metrics: dict = {}
     with track("plan", metrics) as t:
-        plan: DelegationPlan = structured_invoke(DelegationPlan, _build_prompt(state, prior))
+        plan: DelegationPlan = structured_invoke(
+            DelegationPlan, _build_prompt(state, prior, venture)
+        )
         t.record(plan)
 
     assignments = {
@@ -95,7 +107,17 @@ def plan_node(state: WorkflowState) -> dict:
         assignments = {name: state["request"] for name in SPECIALIST_NAMES}
 
     logger.debug("Delegating to: %s", ", ".join(assignments))
-    return {"plan": plan, "assignments": assignments, "metrics": metrics, **_RESET}
+    # The accumulating fields restart too. Overwrite bypasses their reducers, so a
+    # follow-up reports only its own reviews, resolutions and cost.
+    return {
+        "plan": plan,
+        "assignments": assignments,
+        "venture": venture,
+        "metrics": Overwrite(metrics),
+        "review_history": Overwrite([]),
+        "resolutions": Overwrite([]),
+        **_RESET,
+    }
 
 
 _REVIEW_PROMPT = (
@@ -149,20 +171,28 @@ def review_node(state: WorkflowState) -> dict:
 
 
 _CRITIQUE_PROMPT = (
-    "You are a specialist on a startup founding team. Read the other specialists' "
-    "reports and flag only genuine conflicts between their claims and your own area. "
-    "If you see none, return an empty list."
+    "You are a specialist on a startup founding team. Compare the other specialists' "
+    "reports with your own. Flag a disagreement only when another specialist "
+    "recommends something different from you on a question inside your own area, "
+    "such as a price, a budget, a timeline or the scope of the first offer, so that "
+    "the founder could not follow both. Ignore differences in emphasis or detail. "
+    "Flag at most two, the most important first. If there are none, return an "
+    "empty list."
 )
 
 
 def critique_node(state: WorkflowState) -> dict:
-    """Each assigned specialist flags conflicts with the others' reports."""
+    """Each assigned specialist flags conflicts with the others' reports.
+
+    On a follow-up only the reassigned specialists critique, each reading every
+    other report; the unchanged reports were already cross-checked.
+    """
     analyses = state["analyses"]
 
     conflicts = []
     metrics: dict = {}
     with track("critique", metrics) as t:
-        for name in analyses:
+        for name in state["assignments"]:
             if analyses[name].startswith(GAP_PREFIX):  # a gap cannot critique
                 continue
             others = {o: text for o, text in analyses.items() if o != name}
@@ -189,6 +219,12 @@ _RESOLVE_PROMPT = (
 )
 
 
+def _specialist_key(name: str) -> str:
+    """Map a name as the model writes it, e.g. "Finance specialist", to its key."""
+    lowered = name.lower()
+    return next((key for key in SPECIALIST_NAMES if key in lowered), "")
+
+
 def resolve_node(state: WorkflowState) -> dict:
     """Resolve each conflict and decide which specialists must revise."""
     assigned = set(state["assignments"])
@@ -211,8 +247,12 @@ def resolve_node(state: WorkflowState) -> dict:
     revisions = {}
     if round_no <= MAX_CRITIQUE_ROUNDS:
         for resolution in resolutions:
-            if resolution.revise in assigned:
-                revisions[resolution.revise] = resolution.decision
+            target = _specialist_key(resolution.revise)
+            if target in assigned:  # one specialist may have several decisions to apply
+                earlier = revisions.get(target)
+                revisions[target] = (
+                    f"{earlier}\n{resolution.decision}" if earlier else resolution.decision
+                )
 
     logger.debug("Resolved %d conflicts; %d to revise", len(resolutions), len(revisions))
     return {
@@ -228,6 +268,8 @@ _SYNTHESIS_PROMPT = (
     "reports below into one launch strategy. Give a clear recommendation, the "
     "reasoning behind it, where the specialists pull in different directions, and "
     "prioritised next steps. Use only what the specialists reported; add nothing new. "
+    "Where you have already settled a disagreement, follow your decision and say "
+    "how it was settled. "
     "If a report is marked unavailable, name that gap in the strategy and proceed "
     "with the reports you do have."
 )
@@ -237,13 +279,24 @@ def _reports_text(analyses: dict[str, str]) -> str:
     return "\n\n".join(f"## {name}\n{report}" for name, report in analyses.items())
 
 
+def _decisions_text(resolutions: list[Resolution]) -> str:
+    return "\n".join(
+        f"- {r.conflict.raised_by} vs {r.conflict.about}: {r.conflict.issue} "
+        f"Decision: {r.decision}"
+        for r in resolutions
+    )
+
+
 def synthesis_node(state: WorkflowState) -> dict:
-    """Merge the specialist reports into one unified launch strategy."""
+    """Merge the specialist reports, and any conflict decisions, into one strategy."""
     logger.debug("Synthesising %d reports", len(state["analyses"]))
     human = (
         f"Objective: {state['plan'].objective}\n\n"
         f"Specialist reports:\n\n{_reports_text(state['analyses'])}"
     )
+    resolutions = state.get("resolutions", [])
+    if resolutions:
+        human += f"\n\nDisagreements you settled:\n{_decisions_text(resolutions)}"
     metrics: dict = {}
     with track("synthesis", metrics) as t:
         reply = get_llm().invoke([SystemMessage(_SYNTHESIS_PROMPT), HumanMessage(human)])
