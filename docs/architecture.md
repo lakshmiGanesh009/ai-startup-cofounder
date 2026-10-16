@@ -151,11 +151,43 @@ connection pool.
 
 Two clients use the API:
 
-- **Streamlit UI** (`streamlit_app.py`), the working UI for now. It posts to
-  `/evaluate` from the server side, so it needs no CORS.
+- **Streamlit UI** (`streamlit_app.py` and `ui/`), the working UI for now, with
+  an Evaluate page and a Reports page. It calls the API from the server side, so
+  it needs no CORS.
 - **Next.js frontend** (`frontend/`), a scaffold that will replace it. It calls
   the API from the browser, so the API allows the origins in `CORS_ORIGINS`
   (`http://localhost:3000` by default).
+
+## Reports
+
+Each session has a written report: the founder's document, separate from the
+workflow's state, so editing it never changes what the agents produced.
+
+- **Recorded after every evaluation.** `/evaluate` hands the session's latest
+  results to the report store (`reports.py`). The report is one markdown section
+  each for the strategy, every specialist's report and the decisions on
+  conflicts. A follow-up rebuilds a report nobody has touched; an edited or
+  detailed report is kept, so no work is lost, and marked `outdated` until the
+  founder resets it.
+- **Edited section by section.** Every change raises the report's `version`. A
+  save names the version it was made to, and a save made to an older version is
+  refused (409), so two open editors cannot silently overwrite each other.
+- **Detailed on demand.** Evaluations keep reports short so they stay fast.
+  `POST /reports/{session_id}/detailed` (`agents/report_writer.py`) has each
+  specialist expand its section from the text as it now stands, edits included,
+  all at the same time, and then the Chief of Staff rewrites the strategy from
+  the expanded sections: five LLM calls, about a minute. A section whose call
+  fails keeps its text and is named in the response.
+- **Rendered as a PDF.** `report_pdf.py` turns each section's markdown into HTML
+  with markdown-it and lays it out with fpdf2, in the bundled DejaVu Sans font
+  (`assets/fonts/`): the PDF core fonts cannot show ≈, ≤, → or curly quotes,
+  which the agents use all the time. Raw HTML is printed as text and images are
+  not loaded, so a report cannot make the server fetch anything. A render takes
+  about 0.1 s, so the Reports page redraws its preview after every saved edit.
+  The page shows the PDF's pages as images (drawn with pypdfium2), because a PDF
+  viewer draws A4 pages at a fixed width and cuts them off in a narrow column.
+
+Reports are kept in memory, like sessions, and are lost when the API restarts.
 
 ## A request, end to end
 
@@ -230,6 +262,12 @@ break follow-ups.
   time instead of one after another. The calls and tokens are unchanged; the
   price is bursts of up to four simultaneous calls, which reach a provider's
   rate limit sooner.
+- **Detailed reports only on request.** Writing every report in full would make
+  each evaluation about twice as slow. The short version is kept for the
+  workflow, and the detailed one costs five more calls only when asked for.
+- **Reports in memory.** Like sessions, reports are lost when the API restarts.
+  Keeping them in a database would survive restarts, at the cost of a storage
+  dependency the project does not otherwise need.
 - **Provider by credentials.** Azure OpenAI or OpenAI is chosen by which
   credentials are set, so switching providers needs no code change.
 

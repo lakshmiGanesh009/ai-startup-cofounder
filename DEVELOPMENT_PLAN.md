@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, and Step 13 added a Streamlit UI and scaffolded the Next.js frontend. Next is Step 14, the Next.js UI.
+**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, and Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand. Next is Step 14, the Next.js UI.
 
 ## How we work
 
@@ -89,6 +89,7 @@ graph TD
 | 12 | Faster API | Improved latency, reduction of redundant reasoning calls | Done |
 | 13 | Streamlit UI and Next.js scaffold | Live walkthrough, backend service for a frontend | Done |
 | 14 | Next.js UI | Live walkthrough; replaces the Streamlit UI | Next |
+| 15 | Reports: editor, detailed version and PDF | Synthesis into a cohesive strategy document | Done |
 
 ## Live verification
 
@@ -109,6 +110,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 11 | The diagram matches `draw_mermaid()` | Pass: 30 of 30 edges. |
 | 12 | The scenarios rerun as in [docs/performance.md](docs/performance.md) | Pass: first requests take 41–59% less time (108–116 s down to 44–64 s) and follow-ups 42–44% less, with the same calls and no rise in rejected reports. Reports run about 450 words and strategies about 570; a healthcare report and strategy read as specific and complete. |
 | 13 | The API, the Streamlit UI and the Next.js app together | Pass: `/health` answered in under 2 ms during a 62 s evaluation. A follow-up sent through the Streamlit UI reran Finance and Marketing in the same session (14 calls). Headless Chrome loaded the Next.js app and showed "Connected", and "Can't reach" with the API stopped. The CORS preflight is allowed for `http://localhost:3000` only. |
+| 15 | A scenario's report on the Reports page, in headless Chrome against Azure OpenAI | Pass: the report and a 6–10 page preview appear after the evaluation. An edit typed in the browser is saved (version 2), shown in the preview and kept by the detailed version, which took 29–34 s and grew the sections from about 330–640 words to about 970–1,340 (13–15 pages). No errors on the page. |
 
 ### Fixed during live verification
 
@@ -431,16 +433,39 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 **Build:**
 
 - `frontend/`: the request form with context, a progress state while the team works, the results (strategy, plan, reports, reviews, conflicts, metrics), and follow-ups in the same session.
+- `frontend/`: the Reports section from Step 15, over the same `/reports` endpoints.
 - Optionally, a streaming endpoint (LangGraph's `astream`) so the UI can show each stage as it finishes instead of one long wait.
 
 **Done when:**
 
 - Everything the Streamlit UI shows is in the Next.js UI, and the Streamlit UI and its `ui` dependency group are removed.
 
+### Step 15 - Reports: editor, detailed version and PDF (Done)
+
+**Goal:** each session's result becomes a document the founder can edit, expand and hand out as a PDF. Built before Step 14 because the team asked for it first; the numbering stays, so earlier references to Step 14 still hold.
+
+**Built:**
+
+- `reports.py`: each session's report, recorded by `/evaluate`: a markdown section each for the strategy, the specialists' reports and the decisions on conflicts. Kept in memory with a version number; a save made to an older version is refused.
+- `agents/report_writer.py`: on request, each specialist expands its section from its current text, all at once, then the Chief of Staff rewrites the strategy from the expanded sections.
+- `report_pdf.py`, `assets/fonts/`: the report as a PDF, laid out by fpdf2 in the bundled DejaVu Sans font.
+- `main.py`: `GET /reports`, `GET`/`PUT /reports/{session_id}`, `POST .../detailed`, `POST .../reset` and `GET .../pdf`.
+- `ui/reports_page.py`: a Reports page in the Streamlit UI with the sections in editable boxes beside the PDF preview, and buttons for the detailed version, reset and download. The Streamlit UI is split into pages under `ui/`.
+
+**Check:**
+
+- Automated: a report is recorded and refreshed by evaluations; edits are saved and a stale save is refused; the detailed version expands each section from its current text and a failed section keeps its text; the PDF renders characters the core fonts lack; the Reports page saves edits, reloads after a detailed version or a conflicting edit.
+- Live: run a scenario, open its report, edit a section, then write the detailed version, and read the PDF.
+
+**Done when:**
+
+- An edit appears in the PDF preview after it is saved.
+- The detailed version keeps the edits and every recommendation, and the PDF reads as one document.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward
@@ -449,10 +474,14 @@ metrics.py                 Per-node run metrics               Step 10
 agents/roles.py            Specialist role definitions        Steps 2-3
 agents/specialist.py       Specialist node                    Steps 2, 4, 6
 agents/chief_of_staff.py   Plan, delegate, review, synthesise Steps 4-8
+agents/report_writer.py    Detailed version of a report       Step 15
+reports.py                 Written reports and their store    Step 15
+report_pdf.py              Report as a PDF                    Step 15
+assets/fonts/              The PDF's font                     Step 15
 tests/                     Automated tests                    every step
 scenarios/                 Startup scenarios                  Step 9
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-streamlit_app.py           Streamlit UI                       Step 13
+streamlit_app.py, ui/      Streamlit UI and its pages         Steps 13, 15
 frontend/                  Next.js frontend                   Steps 13-14
 ```

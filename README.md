@@ -223,6 +223,15 @@ curl -X POST http://localhost:8000/evaluate \
 
 Send a follow-up by passing the `session_id` from the first response; only the specialists the follow-up affects rerun, and each builds on its earlier report. The follow-up's response reports only its own reviews, resolutions and metrics.
 
+Each session also has a written report, kept by the API (in memory, like the sessions):
+
+- `GET /reports` — every session's report, newest first.
+- `GET /reports/{session_id}` — the report: a markdown section each for the strategy, the specialists' reports and the decisions on conflicts, with a `version`.
+- `PUT /reports/{session_id}` — save edited sections. Send the `version` you edited; if the report changed since, the save is refused with 409.
+- `POST /reports/{session_id}/detailed` — each specialist expands its section and the Chief of Staff the strategy (about a minute).
+- `POST /reports/{session_id}/reset` — rebuild the report from the session's latest results, dropping edits.
+- `GET /reports/{session_id}/pdf` — the report as a PDF.
+
 ### Run the UI
 
 With the API running, start the Streamlit UI, the working UI for now:
@@ -231,7 +240,10 @@ With the API running, start the Streamlit UI, the working UI for now:
 uv run --group ui streamlit run streamlit_app.py
 ```
 
-It opens on http://localhost:8501. Pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session. It finds the API at `API_URL` (http://localhost:8000 by default).
+It opens on http://localhost:8501, with two pages in the sidebar. It finds the API at `API_URL` (http://localhost:8000 by default).
+
+- **Evaluate** — pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session.
+- **Reports** — each session's written report. Edit its sections on the left while the PDF preview on the right follows (a change is saved when you click out of its box). **Write the detailed version** has the agents expand their short reports into full sections, **Reset to the latest results** starts again from the evaluation, and **Download PDF** saves it.
 
 The Next.js frontend in [frontend/](frontend/) is a scaffold that will replace the Streamlit UI: it is wired to the API but has no evaluation UI yet. See [frontend/README.md](frontend/README.md) to run it.
 
@@ -259,7 +271,7 @@ Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and Lang
 ### Project structure
 
 ```
-main.py                    FastAPI app: GET /health, POST /evaluate
+main.py                    FastAPI app: /health, /evaluate, /reports
 config.py                  Environment settings and loop/LLM limits
 llm.py                     Chat model client (Azure OpenAI or OpenAI)
 state.py                   Shared workflow state and structured models
@@ -268,9 +280,14 @@ metrics.py                 Per-node run metrics
 agents/roles.py            The four specialist role definitions
 agents/specialist.py       Shared specialist node
 agents/chief_of_staff.py   Plan, delegate, review, critique, synthesise
+agents/report_writer.py    Detailed version of a report, on demand
+reports.py                 Each session's written report, and their store
+report_pdf.py              Renders a report as a PDF
+assets/fonts/              DejaVu Sans, the PDF's font
 scenarios/                 Startup scenarios for the demo and tests
 demo.py                    Scenario walkthrough script
-streamlit_app.py           Streamlit UI over the API
+streamlit_app.py           Streamlit UI: navigation and sidebar
+ui/                        Streamlit pages (Evaluate, Reports) and API client
 frontend/                  Next.js frontend (scaffold)
 tests/                     Automated tests
 docs/                      Architecture and performance docs
