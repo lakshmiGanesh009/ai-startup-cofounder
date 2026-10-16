@@ -28,7 +28,7 @@ def _azure_llm():
         "api_key": os.environ["AZURE_OPENAI_API_KEY"],
         "azure_endpoint": os.environ["AZURE_OPENAI_ENDPOINT"],
         "azure_deployment": os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
-        "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
+        "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview"),
         "timeout": LLM_TIMEOUT,
         "max_retries": LLM_MAX_RETRIES,
     }
