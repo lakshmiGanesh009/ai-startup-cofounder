@@ -91,6 +91,15 @@ class Resolution(BaseModel):
     )
 
 
+class Resolutions(BaseModel):
+    """The Chief of Staff's decisions on one critique round's conflicts."""
+
+    resolutions: list[Resolution] = Field(
+        default_factory=list,
+        description="One decision per distinct conflict; a clash raised twice is one conflict.",
+    )
+
+
 class RequestContext(BaseModel):
     """Optional detail that sharpens a founder's request."""
 

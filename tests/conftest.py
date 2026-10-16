@@ -11,6 +11,7 @@ from langchain_core.messages import AIMessage, SystemMessage
 from state import (
     DelegationPlan,
     Resolution,
+    Resolutions,
     ReviewResult,
     SpecialistCritique,
     Task,
@@ -97,7 +98,7 @@ class FakeModel:
             return _ReviewModel(self._review_for)
         if schema is SpecialistCritique:
             return _CritiqueModel(self._critique_for)
-        if schema is Resolution:
+        if schema is Resolutions:
             return _ResolutionModel(lambda: self.resolution)
         return _StructuredModel(self.plan)
 
@@ -137,13 +138,15 @@ class _CritiqueModel:
 
 
 class _ResolutionModel:
-    """What `with_structured_output(Resolution)` returns."""
+    """What `with_structured_output(Resolutions)` returns: the test's one
+    resolution, or none."""
 
     def __init__(self, resolution):
         self._resolution = resolution
 
     def invoke(self, messages):
-        return self._resolution()
+        resolution = self._resolution()
+        return Resolutions(resolutions=[resolution] if resolution else [])
 
 
 @pytest.fixture

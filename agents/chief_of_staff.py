@@ -19,6 +19,7 @@ from metrics import track
 from state import (
     DelegationPlan,
     Resolution,
+    Resolutions,
     ReviewResult,
     SpecialistCritique,
     WorkflowState,
@@ -43,10 +44,11 @@ _PLANNER_PROMPT = (
     "request and decide which specialists it needs. The specialists are: "
     + "; ".join(f"{role.name} ({role.focus})" for role in SPECIALISTS)
     + ". Evaluating a startup idea as a whole needs all four. A narrower request "
-    "needs every specialist whose area it touches, including the one who owns the "
-    "plan or decision it asks about. State the objective, and give a task only to "
-    "the specialists the request needs. Leave the rest out. Keep each task to one "
-    "or two sentences; the specialists know their own area."
+    "needs only the specialist whose area it asks about, plus the one who owns the "
+    "plan or decision it refers to; leave out the rest even if their area is "
+    "loosely related. State the objective, and give a task only to the specialists "
+    "the request needs. Keep each task to one or two sentences; the specialists "
+    "know their own area."
 )
 
 
@@ -64,8 +66,11 @@ def _build_prompt(state: WorkflowState, prior: dict[str, str], venture: str) -> 
     if prior:
         human += (
             "\n\nThis is a follow-up. These specialists already reported: "
-            f"{', '.join(prior)}. Assign only the ones this follow-up affects; "
-            "the rest keep their earlier report."
+            f"{', '.join(prior)}. Assign only the specialists who own what the "
+            "follow-up asks to change, usually one or two; the rest keep their "
+            "earlier report, and cross-critique checks the changed reports against "
+            "them. The rule that a whole evaluation needs all four does not apply "
+            "to a follow-up."
         )
 
     return [SystemMessage(_PLANNER_PROMPT), HumanMessage(human)]
@@ -213,9 +218,10 @@ def critique_node(state: WorkflowState) -> dict:
 
 
 _RESOLVE_PROMPT = (
-    "You are the Chief of Staff. Settle this conflict between two specialists with a "
-    "clear decision, and name the one specialist (if any) who should revise their "
-    "report to match the decision."
+    "You are the Chief of Staff. Settle the conflicts your specialists raised. Treat "
+    "the same clash raised by more than one specialist as one conflict. For each, "
+    "give a clear decision and name the one specialist (if any) who should revise "
+    "their report to match it. Keep the decisions consistent with each other."
 )
 
 
@@ -226,23 +232,27 @@ def _specialist_key(name: str) -> str:
 
 
 def resolve_node(state: WorkflowState) -> dict:
-    """Resolve each conflict and decide which specialists must revise."""
+    """Settle the round's conflicts and decide which specialists must revise.
+
+    All conflicts go to the Chief of Staff in one call, so a clash raised from
+    both sides is decided once and the decisions stay consistent.
+    """
     assigned = set(state["assignments"])
     round_no = state.get("critique_round", 0) + 1
+    conflicts = state.get("conflicts", [])
 
-    resolutions = []
+    resolutions: list[Resolution] = []
     metrics: dict = {}
     with track("resolve", metrics) as t:
-        for conflict in state.get("conflicts", []):
-            human = (
-                f"Conflict raised by {conflict.raised_by} about {conflict.about}:\n"
-                f"{conflict.issue}"
+        if conflicts:
+            human = "Conflicts raised:\n" + "\n".join(
+                f"- {c.raised_by} about {c.about}: {c.issue}" for c in conflicts
             )
-            resolution: Resolution = structured_invoke(
-                Resolution, [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
+            decided: Resolutions = structured_invoke(
+                Resolutions, [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
             )
-            t.record(resolution)
-            resolutions.append(resolution)
+            t.record(decided)
+            resolutions = decided.resolutions
 
     revisions = {}
     if round_no <= MAX_CRITIQUE_ROUNDS:

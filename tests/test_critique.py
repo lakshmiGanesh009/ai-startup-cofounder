@@ -3,7 +3,14 @@
 from types import SimpleNamespace
 
 from graph import build_graph
-from state import Conflict, DelegationPlan, Resolution, SpecialistCritique, Task
+from state import (
+    Conflict,
+    DelegationPlan,
+    Resolution,
+    Resolutions,
+    SpecialistCritique,
+    Task,
+)
 
 PLAN = DelegationPlan(
     objective="Launch on a small budget.",
@@ -87,22 +94,26 @@ def test_every_decision_for_one_specialist_reaches_it(fake_llm, thread):
     second = Conflict(raised_by="risk", about="marketing", issue="The pilot is too long.")
     fake_llm.plan = PLAN
     fake_llm.critique = SpecialistCritique(conflicts=[CONFLICT, second])
-    decisions = iter(
-        [
+    decisions = Resolutions(
+        resolutions=[
             Resolution(conflict=CONFLICT, decision="Lower the pilot price.", revise="marketing"),
             Resolution(conflict=second, decision="Shorten the pilot.", revise="marketing"),
         ]
     )
+    resolve_prompts = []
     structured = fake_llm.with_structured_output
     fake_llm.with_structured_output = lambda schema: (
-        SimpleNamespace(invoke=lambda messages: next(decisions))
-        if schema is Resolution
+        SimpleNamespace(invoke=lambda messages: resolve_prompts.append(messages) or decisions)
+        if schema is Resolutions
         else structured(schema)
     )
     graph = build_graph()
 
     result = graph.invoke({"request": "Premium pricing on a very small budget."}, thread)
 
+    # Both conflicts were settled together, in one call.
+    assert len(resolve_prompts) == 1
+    assert "The pilot is too long." in resolve_prompts[0][-1].content
     revised = result["analyses"]["marketing"]
     assert "Lower the pilot price." in revised
     assert "Shorten the pilot." in revised
