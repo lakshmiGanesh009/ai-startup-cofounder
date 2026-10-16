@@ -87,17 +87,55 @@ first request, because every report was critiqued again.
 - **Single-specialist skip.** A lone report gets no cross-check, but there is
   nothing to cross-check it against.
 
+## Faster responses (Step 12)
+
+The optimisations above cut calls; these cut the time each request takes.
+
+- **Concurrent review and critique calls.** A round's review calls, and the
+  specialists' critique calls, are independent, so they now run at the same
+  time instead of one after another. The calls and tokens are unchanged.
+- **One reused model client.** The chat model is built once, so every call
+  shares one connection pool instead of opening a new connection.
+- **Shorter reports and strategy.** The roles asked for "a few short, concrete
+  points", but reports ran 650–1,840 words (median 1,190) and strategies
+  1,340–2,070. Each role now asks for at most 250 words and the strategy for at
+  most 500. The model treats these as targets: reports came out at about 450
+  words and strategies about 570. Shorter reports also shrink every prompt that
+  carries them (review, critique, synthesis). Review is told to judge substance,
+  not length, so shorter reports are not sent back for it; rejections did not
+  rise.
+
+Measured as above, on 2026-10-16, two runs of each scenario. "Before" is the
+optimised version in the previous table.
+
+| Scenario | Request | LLM calls | Tokens | Seconds |
+| --- | --- | --- | --- | --- |
+| gtm_risk | first | 21 → 15.5 | 72.5k → 24.8k (−66%) | 108 → 44 (−59%) |
+| healthcare_scheduling | first | 19 → 20 | 74.2k → 37.1k (−50%) | 116 → 53 (−54%) |
+| healthcare_scheduling | follow-up | 11 → 13.5 | 49.0k → 28.8k (−41%) | 86 → 48 (−44%) |
+| premium_on_a_budget | first | 20 → 21.5 | 73.0k → 45.9k (−37%) | 109 → 64 (−41%) |
+| premium_on_a_budget | follow-up | 11 → 11 | 47.9k → 26.3k (−45%) | 82 → 47 (−42%) |
+
+The call counts move with the model's choices (how many reports are rejected,
+how many conflicts are raised), not with these changes. In both `gtm_risk` runs
+the planner assigned three specialists instead of four, so that row overstates
+the gain; the other scenarios assigned the same specialists before and after.
+
+Trade-offs:
+
+- **Less detail per report.** Reports keep their recommendations and numbers
+  but drop the longer explanations. The caps are constants (`REPORT_WORDS` in
+  `agents/roles.py`, `STRATEGY_WORDS` in `agents/chief_of_staff.py`).
+- **Bursts of calls.** Up to four calls run at once, so a low provider rate limit
+  is reached sooner.
+
 ## Known gaps
 
-- **Token counts in the response are low.** Structured calls (plan, review,
-  critique, resolve) go through `with_structured_output`, which does not pass on
-  the provider's usage, so the `tokens` metric covers only the specialist and
-  synthesis calls: about 40–50% of the real total in these runs. Calls and
-  seconds are complete. Requesting the raw reply (`include_raw=True`) would fix
-  it.
-- **Calls inside a node run one after another.** Review and critique loop over
-  the reports sequentially; running those calls concurrently would cut latency
-  further without changing the number of calls.
 - **Two runs per version.** Model output varies between runs (how many reports
   are rejected, how many conflicts are raised), so treat the percentages as
   approximate.
+
+Fixed since the first measurements: the `tokens` metric now includes the
+structured calls (plan, review, critique, resolve), which it used to leave out,
+and the calls inside a node no longer run one after another. The token columns
+above come from a LangChain callback, so they were complete all along.

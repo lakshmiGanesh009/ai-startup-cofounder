@@ -72,6 +72,9 @@ code.
 - **Risk & Compliance Agent** — privacy, reliability, delivery, and
   client-management risks; recommends the safeguards and limits for v1.
 
+Every role answers in a few short, concrete points, at most `REPORT_WORDS` (250)
+words.
+
 The Chief of Staff (`agents/chief_of_staff.py`) is the manager: it plans,
 reviews, resolves conflicts, and synthesises. It is not a specialist and holds
 no area of its own.
@@ -84,9 +87,10 @@ no area of its own.
    specialist covers. Evaluating a whole idea goes to all four; a narrower
    request goes only to the specialist whose area it asks about, plus the owner
    of the plan or decision it refers to (risks in a go-to-market plan: Risk and
-   Marketing). Tasks are kept to one or two sentences. Only valid
-   specialist names are kept. If the plan names none, all four are assigned, so
-   a request is never dropped.
+   Marketing). Tasks are kept to one or two sentences. The plan's schema allows
+   only the four specialist names (`SpecialistName`), so the model cannot name
+   one another way. If the plan names none, all four are assigned, so a request
+   is never dropped.
 2. **Route.** A conditional edge sends the plan to only the assigned
    specialists; the rest make no LLM call.
 3. **Analyse.** Each assigned specialist answers its task, grounded in the
@@ -101,12 +105,13 @@ loops are bounded so the workflow always terminates.
   task. A rejected report goes back to its specialist with feedback; the
   specialist revises it. Bounded by `MAX_ITERATIONS` (1 in the initial version),
   so a weak report is revised at most once. Only rejected reports cost another
-  call.
+  call. A round's reports are reviewed at the same time.
 - **Cross-critique.** Each specialist reads the others' reports and flags where
   another specialist recommends something different on a question inside its
   own area (a price, a budget, a timeline, the scope of the first offer) so that
-  the founder could not follow both; at most two each. The Chief of Staff
-  settles all of the round's conflicts in one call, treating a clash raised from
+  the founder could not follow both; at most two each. The specialists critique
+  at the same time. The Chief of Staff settles all of the round's conflicts in
+  one call, treating a clash raised from
   both sides as one, records each decision, and sends the affected specialist
   back to revise with every decision that applies to it. Bounded by
   `MAX_CRITIQUE_ROUNDS` (1): after the last allowed round, a revised report goes
@@ -115,9 +120,42 @@ loops are bounded so the workflow always terminates.
   there is no one to critique against.
 - **Synthesis.** The Chief of Staff merges the approved reports into one launch
   strategy: a recommendation, the reasoning, where specialists differ, and
-  prioritised next steps. It uses only what the specialists reported, and is
-  given its own conflict decisions so the strategy follows them and says how
-  each disagreement was settled.
+  prioritised next steps, in at most `STRATEGY_WORDS` (500) words. It uses only
+  what the specialists reported, and is given its own conflict decisions so the
+  strategy follows them and says how each disagreement was settled.
+
+## Error handling
+
+No failed LLM call produces a 500. Each failure is handled where it happens:
+
+- **Every call** has a timeout (`LLM_TIMEOUT`), and the client retries API
+  errors (`LLM_MAX_RETRIES`).
+- **A structured reply that does not parse** is retried once. API errors are not
+  retried again on top of the client's retries.
+- **A failed specialist** becomes a named gap (`[unavailable]`): review and
+  critique skip it, and the strategy names the gap.
+- **A failed review, critique or resolve call** is logged and skipped: that
+  report goes unreviewed, that specialist raises no conflicts, or that round's
+  conflicts go unresolved. These checks refine reports that already exist, so
+  losing one does not sink the run.
+- **A failed plan or synthesis call** ends the request with 502 and the reason;
+  without a plan there is nothing to run, and without synthesis there is no
+  strategy. Missing credentials return 503.
+
+## Serving
+
+`POST /evaluate` awaits `graph.ainvoke`, which runs the nodes in worker threads,
+so a request that takes a minute or more does not block the server. The model
+client is built once and reused (`get_llm` is cached), so every call shares one
+connection pool.
+
+Two clients use the API:
+
+- **Streamlit UI** (`streamlit_app.py`), the working UI for now. It posts to
+  `/evaluate` from the server side, so it needs no CORS.
+- **Next.js frontend** (`frontend/`), a scaffold that will replace it. It calls
+  the API from the browser, so the API allows the origins in `CORS_ORIGINS`
+  (`http://localhost:3000` by default).
 
 ## A request, end to end
 
@@ -180,9 +218,18 @@ break follow-ups.
   decisions consistent; the price is one larger prompt. Minor disagreements
   beyond each specialist's first two go unresolved, and synthesis still names
   where the specialists differ.
-- **A failed specialist is non-fatal.** Its report becomes a named gap and the
-  strategy proceeds, trading completeness for resilience, so one failed call
-  never produces a 500.
+- **A failed call is non-fatal where it can be.** A failed specialist becomes a
+  named gap, and a failed review, critique or resolve call is skipped, trading
+  completeness for resilience (see [Error handling](#error-handling)).
+- **Word limits on reports and the strategy.** Reports ran 650 to 1,800 words
+  although each role asked for a few short points, and every later prompt
+  carries them. Capping them at 250 words, and the strategy at 500, makes every
+  call faster and cheaper, at the cost of detail; the caps are constants in
+  `agents/roles.py` and `agents/chief_of_staff.py`.
+- **Concurrent review and critique calls.** A round's calls run at the same
+  time instead of one after another. The calls and tokens are unchanged; the
+  price is bursts of up to four simultaneous calls, which reach a provider's
+  rate limit sooner.
 - **Provider by credentials.** Azure OpenAI or OpenAI is chosen by which
   credentials are set, so switching providers needs no code change.
 

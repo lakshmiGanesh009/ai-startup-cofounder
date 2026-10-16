@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** all steps are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test.
+**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, and Step 13 added a Streamlit UI and scaffolded the Next.js frontend. Next is Step 14, the Next.js UI.
 
 ## How we work
 
@@ -86,6 +86,9 @@ graph TD
 | 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | Done |
 | 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | Done |
 | 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | Done |
+| 12 | Faster API | Improved latency, reduction of redundant reasoning calls | Done |
+| 13 | Streamlit UI and Next.js scaffold | Live walkthrough, backend service for a frontend | Done |
+| 14 | Next.js UI | Live walkthrough; replaces the Streamlit UI | Next |
 
 ## Live verification
 
@@ -104,6 +107,8 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 9 | `uv run python demo.py scenarios/premium_on_a_budget.json` | Pass: plan, reports, two review rounds, resolutions and strategy, then the follow-up. |
 | 10 | Performance numbers | Pass: first requests take 32–39% fewer calls and follow-ups 58–64% fewer (see [docs/performance.md](docs/performance.md)). Error handling is covered by the automated tests; no failure was injected live. |
 | 11 | The diagram matches `draw_mermaid()` | Pass: 30 of 30 edges. |
+| 12 | The scenarios rerun as in [docs/performance.md](docs/performance.md) | Pass: first requests take 41–59% less time (108–116 s down to 44–64 s) and follow-ups 42–44% less, with the same calls and no rise in rejected reports. Reports run about 450 words and strategies about 570; a healthcare report and strategy read as specific and complete. |
+| 13 | The API, the Streamlit UI and the Next.js app together | Pass: `/health` answered in under 2 ms during a 62 s evaluation. A follow-up sent through the Streamlit UI reran Finance and Marketing in the same session (14 calls). Headless Chrome loaded the Next.js app and showed "Connected", and "Can't reach" with the API stopped. The CORS preflight is allowed for `http://localhost:3000` only. |
 
 ### Fixed during live verification
 
@@ -113,6 +118,14 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 - **Follow-ups (Step 8).** The original request was lost and reassigned specialists started from scratch; both now see the original request and their earlier report. Metrics, review history and resolutions piled up across requests in a session; they now cover the current request only. Every report was critiqued again; now only the reassigned ones are. The planner reassigned three or four specialists; it now reassigns those who own what the follow-up changes.
 - **Checkpointer.** LangGraph warned that it would block the unregistered state models in a future version, which would break follow-ups. They are now registered.
 - **Debugging (Step 2).** `DEBUG_MODE` did not turn on LangGraph's step traces; it does now.
+
+A code review after the live runs found more, also fixed with tests:
+
+- **Blocked server (Step 2).** `POST /evaluate` ran the blocking `graph.invoke` inside an async endpoint, so one evaluation froze the whole server, `/health` included. It now awaits `graph.ainvoke`.
+- **500 on an LLM failure (Step 10).** Any failed Chief of Staff call returned 500. A failed review, critique or resolve call is now skipped; a failed plan or synthesis call returns 502 with the reason.
+- **Stacked retries (Step 10).** A structured call retried every error once on top of the client's own retries, so one timeout could cost six 60-second attempts. It now retries only a reply that does not parse.
+- **Token metrics (Step 10).** The `tokens` metric left out every structured call, about half the real total. It now includes them.
+- **Specialist names (Steps 4 and 7).** The fix for names written as "Finance specialist" covered only the resolve step, and missed "financial". The structured outputs now allow only the four names.
 
 ## Steps
 
@@ -371,14 +384,68 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 
 - Every item under "Documentation" and "Architecture & Workflow Design" in the brief has a section.
 
+### Step 12 - Faster API (Done)
+
+**Goal:** a request takes about half as long, with no fewer checks.
+
+**Built:**
+
+- `agents/chief_of_staff.py`: a round's review calls, and the specialists' critique calls, run at the same time; a failed call is still skipped on its own.
+- `llm.py`: the chat model is built once and reused, so every call shares one connection pool.
+- `agents/roles.py`, `agents/chief_of_staff.py`: reports are asked to keep to 250 words and the strategy to 500, and review judges substance, not length.
+
+**Check:**
+
+- Automated: review and critique calls overlap in time; the model is built once; the word limits are in the prompts.
+- Live: rerun the scenarios as in [docs/performance.md](docs/performance.md) and compare the seconds.
+
+**Done when:**
+
+- Requests take markedly less time than before, with no rise in rejected reports.
+- A reviewer has read a strategy and a report from the live runs and finds them still specific and complete.
+
+### Step 13 - Streamlit UI and Next.js scaffold (Done)
+
+**Goal:** the founding team can be run from a browser, and the Next.js frontend that will replace the Streamlit UI is set up.
+
+**Built:**
+
+- `streamlit_app.py`: a Streamlit UI over `POST /evaluate`: scenario prefill, request and context, follow-ups in the same session, and the plan, reports, reviews, conflicts, metrics and strategy. Streamlit is in the optional `ui` dependency group.
+- `main.py`, `config.py`: CORS for browser frontends, from `CORS_ORIGINS` (default `http://localhost:3000`).
+- `frontend/`: a Next.js 16 app (TypeScript, App Router, Tailwind, ESLint) with a typed API client and a home page that checks it can reach the backend.
+
+**Check:**
+
+- Automated: `uv run --group ui pytest` drives the Streamlit UI against canned API responses; the CORS preflight is allowed for the frontend's origin only; `npm run lint` and `npm run build` pass in `frontend/`.
+- Live: run the API and the Streamlit UI, evaluate a scenario, then send a follow-up; open the Next.js app and see "Connected".
+
+**Done when:**
+
+- A full evaluation and a follow-up work end to end in the Streamlit UI.
+- The Next.js app reaches the backend from the browser.
+
+### Step 14 - Next.js UI (Next)
+
+**Goal:** the Next.js frontend does everything the Streamlit UI does, so the Streamlit UI can be retired.
+
+**Build:**
+
+- `frontend/`: the request form with context, a progress state while the team works, the results (strategy, plan, reports, reviews, conflicts, metrics), and follow-ups in the same session.
+- Optionally, a streaming endpoint (LangGraph's `astream`) so the UI can show each stage as it finishes instead of one long wait.
+
+**Done when:**
+
+- Everything the Streamlit UI shows is in the Next.js UI, and the Streamlit UI and its `ui` dependency group are removed.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward
 graph.py                   LangGraph state machine            Step 2 onward
+metrics.py                 Per-node run metrics               Step 10
 agents/roles.py            Specialist role definitions        Steps 2-3
 agents/specialist.py       Specialist node                    Steps 2, 4, 6
 agents/chief_of_staff.py   Plan, delegate, review, synthesise Steps 4-8
@@ -386,4 +453,6 @@ tests/                     Automated tests                    every step
 scenarios/                 Startup scenarios                  Step 9
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
+streamlit_app.py           Streamlit UI                       Step 13
+frontend/                  Next.js frontend                   Steps 13-14
 ```

@@ -185,7 +185,7 @@ business plan.
 
 ## Implementation
 
-A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine; [docs/architecture.md](docs/architecture.md) explains it in full, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
+A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine served by a FastAPI backend, with a Streamlit UI on top and a Next.js frontend scaffolded to replace it. [docs/architecture.md](docs/architecture.md) explains it in full, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
 
 ### Setup
 
@@ -198,7 +198,13 @@ cp .env.example .env
 
 Fill in `.env` with Azure OpenAI or OpenAI credentials. The provider is chosen by which credentials are set.
 
-### Run
+For the Streamlit UI, also install the optional `ui` group:
+
+```bash
+uv sync --group ui
+```
+
+### Run the API
 
 ```bash
 uv run python main.py
@@ -207,7 +213,7 @@ uv run python main.py
 The API listens on http://localhost:8000, with interactive docs at http://localhost:8000/docs.
 
 - `GET /health` — health check.
-- `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), and optional `session_id` for a follow-up. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. Missing credentials return 503.
+- `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), and optional `session_id` for a follow-up. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. A full evaluation takes about a minute. Missing credentials return 503, and an LLM call that still fails after its retries returns 502.
 
 ```bash
 curl -X POST http://localhost:8000/evaluate \
@@ -216,6 +222,18 @@ curl -X POST http://localhost:8000/evaluate \
 ```
 
 Send a follow-up by passing the `session_id` from the first response; only the specialists the follow-up affects rerun, and each builds on its earlier report. The follow-up's response reports only its own reviews, resolutions and metrics.
+
+### Run the UI
+
+With the API running, start the Streamlit UI, the working UI for now:
+
+```bash
+uv run --group ui streamlit run streamlit_app.py
+```
+
+It opens on http://localhost:8501. Pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session. It finds the API at `API_URL` (http://localhost:8000 by default).
+
+The Next.js frontend in [frontend/](frontend/) is a scaffold that will replace the Streamlit UI: it is wired to the API but has no evaluation UI yet. See [frontend/README.md](frontend/README.md) to run it.
 
 ### Demo
 
@@ -228,14 +246,15 @@ uv run python demo.py scenarios/healthcare_scheduling.json
 ### Test
 
 ```bash
-uv run pytest
+uv run pytest              # backend
+uv run --group ui pytest   # backend and the Streamlit UI
 ```
 
-Tests use a fake model, so they need no credentials and make no LLM calls.
+Tests use a fake model, so they need no credentials and make no LLM calls. Without the `ui` group the Streamlit UI tests are skipped.
 
 ### Configuration
 
-Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call.
+Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default), and `API_URL` tells the Streamlit UI where the API is.
 
 ### Project structure
 
@@ -251,6 +270,8 @@ agents/specialist.py       Shared specialist node
 agents/chief_of_staff.py   Plan, delegate, review, critique, synthesise
 scenarios/                 Startup scenarios for the demo and tests
 demo.py                    Scenario walkthrough script
+streamlit_app.py           Streamlit UI over the API
+frontend/                  Next.js frontend (scaffold)
 tests/                     Automated tests
 docs/                      Architecture and performance docs
 DEVELOPMENT_PLAN.md        Build sequence and status
