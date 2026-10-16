@@ -7,6 +7,8 @@ graph and API tests are deterministic and need no credentials.
 
 import time
 
+import httpx
+import openai
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
@@ -112,8 +114,10 @@ class FakeModel:
             for title, name in SPECIALIST_TITLES.items():
                 if title in system:
                     self.specialist_calls[name] = self.specialist_calls.get(name, 0) + 1
-                    if name in self.fail:
-                        raise RuntimeError(f"{name} specialist call failed")
+                    if name in self.fail:  # as the provider fails, after its retries
+                        raise openai.APIConnectionError(
+                            request=httpx.Request("POST", "https://llm.example")
+                        )
         return AIMessage(f"[role: {system}]\n{human}", usage_metadata=self.USAGE)
 
     def with_structured_output(self, schema, include_raw=False):
@@ -154,6 +158,7 @@ def fake_llm(monkeypatch):
     model = FakeModel()
     monkeypatch.setattr("agents.specialist.get_llm", lambda: model)
     monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
+    monkeypatch.setattr("agents.report_writer.get_llm", lambda: model)
     return model
 
 
