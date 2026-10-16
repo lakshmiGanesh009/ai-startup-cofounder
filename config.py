@@ -6,3 +6,13 @@ load_dotenv()
 
 # Workflow debugging flag: DEBUG logging plus LangGraph step-by-step traces.
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+# How many times a rejected report may be revised. 1 in the initial version.
+MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "1"))
+
+# How many cross-critique rounds are allowed. 1 in the initial version.
+MAX_CRITIQUE_ROUNDS = int(os.getenv("MAX_CRITIQUE_ROUNDS", "1"))
+
+# Per-call LLM timeout in seconds, and how many times to retry a failed call.
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))

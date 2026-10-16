@@ -4,7 +4,7 @@
 
 Early-stage startups require coordinated decision-making across product strategy, market positioning, technical feasibility, financial planning, and risk assessment. Founders must evaluate incomplete information, debate trade-offs, and align on execution plans---often under uncertainty and resource constraints.
 
-Traditional AI systems generate isolated outputs, but real startup success depends on structured collaboration and eadership-driven synthesis.
+Traditional AI systems generate isolated outputs, but real startup success depends on structured collaboration and leadership-driven synthesis.
 
 ## 🌍 Context
 
@@ -185,9 +185,7 @@ business plan.
 
 ## Implementation
 
-The project is built in small steps. [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) lists them in order, with how to check each one and which are done.
-
-So far only the project scaffold exists. There are no agents yet.
+A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine; [docs/architecture.md](docs/architecture.md) explains it in full, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
 
 ### Setup
 
@@ -198,13 +196,34 @@ uv sync
 cp .env.example .env
 ```
 
+Fill in `.env` with Azure OpenAI or OpenAI credentials. The provider is chosen by which credentials are set.
+
 ### Run
 
 ```bash
 uv run python main.py
 ```
 
-The API listens on http://localhost:8000. `GET /health` is the only endpoint for now, and the interactive docs are at http://localhost:8000/docs.
+The API listens on http://localhost:8000, with interactive docs at http://localhost:8000/docs.
+
+- `GET /health` — health check.
+- `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), and optional `session_id` for a follow-up. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. Missing credentials return 503.
+
+```bash
+curl -X POST http://localhost:8000/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Evaluate this startup idea in the AI healthcare space."}'
+```
+
+Send a follow-up by passing the `session_id` from the first response; only the specialists the follow-up affects rerun.
+
+### Demo
+
+Walk through a scenario end to end, printing each stage:
+
+```bash
+uv run python demo.py scenarios/healthcare_scheduling.json
+```
 
 ### Test
 
@@ -212,17 +231,27 @@ The API listens on http://localhost:8000. `GET /health` is the only endpoint for
 uv run pytest
 ```
 
+Tests use a fake model, so they need no credentials and make no LLM calls.
+
+### Configuration
+
+Set in `.env`. `DEBUG_MODE` turns on step logging; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call.
+
 ### Project structure
 
 ```
-main.py                    FastAPI app: GET /health
-config.py                  DEBUG_MODE flag
-llm.py                     Placeholder: chat model client
-state.py                   Placeholder: shared workflow state
-graph.py                   Placeholder: LangGraph state machine
-agents/roles.py            Placeholder: specialist role definitions
-agents/specialist.py       Placeholder: specialist node
-agents/chief_of_staff.py   Placeholder: Chief of Staff
+main.py                    FastAPI app: GET /health, POST /evaluate
+config.py                  Environment settings and loop/LLM limits
+llm.py                     Chat model client (Azure OpenAI or OpenAI)
+state.py                   Shared workflow state and structured models
+graph.py                   LangGraph state machine
+metrics.py                 Per-node run metrics
+agents/roles.py            The four specialist role definitions
+agents/specialist.py       Shared specialist node
+agents/chief_of_staff.py   Plan, delegate, review, critique, synthesise
+scenarios/                 Startup scenarios for the demo and tests
+demo.py                    Scenario walkthrough script
 tests/                     Automated tests
+docs/                      Architecture and performance docs
 DEVELOPMENT_PLAN.md        Build sequence and status
 ```

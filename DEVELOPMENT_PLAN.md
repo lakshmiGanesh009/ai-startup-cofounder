@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** the project scaffold is in place (Step 0) and no agent logic exists yet. Step 1 starts once the four decisions below are confirmed.
+**Where we are:** all steps are done. The full workflow is built, tested with a fake model, and documented. The remaining live checks (real-model runs and the performance numbers in `docs/performance.md`) need a filled-in `.env`.
 
 ## How we work
 
@@ -66,17 +66,17 @@ graph TD
 | Step | Feature | Brief requirement it covers | Status |
 | --- | --- | --- | --- |
 | 0 | Project scaffold | Python environment, backend service, environment configuration | Done |
-| 1 | LLM connection | LLM API access, environment variables | Next |
-| 2 | First specialist, end to end | Role-based agent, state machine, backend API | To do |
-| 3 | All four specialists in parallel | Marketing, Financial, Technical and Risk & Compliance agents | To do |
-| 4 | Chief of Staff: plan and delegate | Manager-led delegation, structured outputs | To do |
+| 1 | LLM connection | LLM API access, environment variables | Done |
+| 2 | First specialist, end to end | Role-based agent, state machine, backend API | Done |
+| 3 | All four specialists in parallel | Marketing, Financial, Technical and Risk & Compliance agents | Done |
+| 4 | Chief of Staff: plan and delegate | Manager-led delegation, structured outputs | Next |
 | 5 | Chief of Staff: synthesis | Synthesis into a unified launch strategy | To do |
 | 6 | Review and refine loop | Plan--Act--Check loop, reflection and critique cycles | To do |
-| 7 | Cross-specialist critique | Back-and-forth between agents, conflict resolution | To do |
-| 8 | Follow-up requests | Stateful system, iterative refinement | To do |
-| 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | To do |
-| 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | To do |
-| 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | To do |
+| 7 | Cross-specialist critique | Back-and-forth between agents, conflict resolution | Done |
+| 8 | Follow-up requests | Stateful system, iterative refinement | Done |
+| 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | Done |
+| 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | Done |
+| 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | Done |
 
 ## Steps
 
@@ -218,11 +218,13 @@ uv run python main.py    # then open http://localhost:8000/health
 
 **Goal:** weak reports are caught and improved before they reach the strategy. This closes the Plan-Act-Check loop (see D1).
 
+The initial version bounds refinement to a single revision (`max_iterations = 1`), matching the minimal example: a report is reviewed, revised at most once, then accepted. The cap is configurable so later rounds can be allowed without code changes.
+
 **Build:**
 
 - `state.py`: a review result per report (approved or not, score, feedback), an iteration count and the review history.
 - `agents/chief_of_staff.py`: a review node that checks each report against its task.
-- `graph.py`: reports that need work go back to their specialist with the feedback. The loop ends when every report is approved or `max_iterations` is reached.
+- `graph.py`: reports that need work go back to their specialist with the feedback. The loop ends when every report is approved or `max_iterations` is reached (1 in the initial version).
 - `agents/specialist.py`: revises its previous report using the feedback.
 
 **Check:**

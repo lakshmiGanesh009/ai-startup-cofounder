@@ -1,0 +1,9 @@
+{
+  "prompt": "Evaluate a premium, white-glove AI brand-design studio aimed at enterprises, built by one founder on a very small budget.",
+  "context": {
+    "target_market": "Enterprise marketing teams paying for high-touch design",
+    "constraints": "Solo founder, almost no marketing budget, needs revenue within three months",
+    "competitive_landscape": "Boutique agencies at premium rates and cheap self-serve design tools"
+  },
+  "follow_up": "Refine the pricing strategy after financial review."
+}
