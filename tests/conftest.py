@@ -10,6 +10,7 @@ import time
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
+import llm
 from state import (
     DelegationPlan,
     Resolution,
@@ -43,9 +44,11 @@ SPECIALIST_TITLES = {
 
 @pytest.fixture(autouse=True)
 def strip_credentials(monkeypatch):
-    """Remove every provider variable so tests never hit a real LLM."""
+    """Remove every provider variable, and any model already built from them, so
+    tests never hit a real LLM."""
     for name in PROVIDER_VARS:
         monkeypatch.delenv(name, raising=False)
+    llm.get_llm.cache_clear()
 
 
 class FakeModel:

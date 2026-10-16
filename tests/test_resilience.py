@@ -1,11 +1,12 @@
-"""Tests for metrics and graceful failure (Step 10)."""
+"""Tests for metrics, speed and graceful failure (Step 10)."""
 
 import httpx
 import openai
 import pytest
 from langchain_core.messages import AIMessage
 
-from agents.chief_of_staff import structured_invoke
+from agents.chief_of_staff import _SYNTHESIS_PROMPT, STRATEGY_WORDS, structured_invoke
+from agents.roles import REPORT_WORDS, SPECIALISTS
 from agents.specialist import GAP_PREFIX
 from graph import build_graph
 from llm import LLMReplyError
@@ -63,6 +64,24 @@ def test_structured_calls_count_their_tokens(fake_llm, thread):
     assert result["metrics"]["plan"].tokens == per_call
     # One review call for each of the four reports.
     assert result["metrics"]["review"].tokens == 4 * per_call
+
+
+def test_review_and_critique_calls_run_at_the_same_time(fake_llm, thread):
+    fake_llm.delay = 0.25
+    graph = build_graph()
+
+    result = graph.invoke({"request": "Evaluate an AI tool."}, thread)
+
+    # Four calls in each node, yet each node took about as long as one call.
+    for node in ("review", "critique"):
+        assert result["metrics"][node].calls == 4
+        assert result["metrics"][node].seconds < 2 * fake_llm.delay
+
+
+def test_reports_and_the_strategy_have_a_word_limit():
+    for role in SPECIALISTS:
+        assert f"at most {REPORT_WORDS} words" in role.system_prompt
+    assert f"at most {STRATEGY_WORDS} words" in _SYNTHESIS_PROMPT
 
 
 def test_an_unusable_reply_is_retried_once(monkeypatch):

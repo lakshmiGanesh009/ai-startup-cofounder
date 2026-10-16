@@ -7,6 +7,16 @@ point of view.
 
 from dataclasses import dataclass
 
+# The length each report is asked to keep to; the model treats it as a target
+# rather than a hard cap. Long reports were the main cost of a run: the
+# specialist writes each one, and review, critique and synthesis all read them.
+REPORT_WORDS = 250
+
+_BREVITY = (
+    "Be specific to the request. Answer in a few short, concrete points, "
+    f"at most {REPORT_WORDS} words in all."
+)
+
 
 @dataclass(frozen=True)
 class Role:
@@ -25,7 +35,7 @@ MARKETING = Role(
         "Judge the idea on customer niches, positioning, demand, and go-to-market. "
         "Recommend one niche to test first and the next step to validate demand. "
         "Stay within marketing; leave finance, technical build, and risk to the others. "
-        "Be specific to the request. Answer in a few short, concrete points."
+        + _BREVITY
     ),
 )
 
@@ -37,7 +47,7 @@ FINANCE = Role(
         "Judge the idea on start-up costs, pricing, and how the founder can begin affordably. "
         "Recommend a simple pricing model and a spending limit for the first phase. "
         "Stay within finance; leave marketing, technical build, and risk to the others. "
-        "Be specific to the request. Answer in a few short, concrete points."
+        + _BREVITY
     ),
 )
 
@@ -49,7 +59,7 @@ TECHNICAL = Role(
         "Judge what to build first, the minimum tools required, and the main technical risks. "
         "Recommend a first demo to build and how to prove it before using real data. "
         "Stay within technical feasibility; leave marketing, finance, and compliance to the others. "
-        "Be specific to the request. Answer in a few short, concrete points."
+        + _BREVITY
     ),
 )
 
@@ -61,7 +71,7 @@ RISK = Role(
         "Judge privacy, reliability, delivery, and client-management risks. "
         "Recommend the safeguards and the limits the first version should set. "
         "Stay within risk and compliance; leave marketing, finance, and the build to the others. "
-        "Be specific to the request. Answer in a few short, concrete points."
+        + _BREVITY
     ),
 )
 

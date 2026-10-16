@@ -57,6 +57,13 @@ def test_selects_openai_when_only_openai_credentials_set(monkeypatch, capture_mo
     assert model.kwargs["model"] == "gpt-4o-mini"
 
 
+def test_the_model_is_built_once_and_reused(monkeypatch, capture_models):
+    # One model means one HTTP connection pool for every call of a run.
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+
+    assert llm.get_llm() is llm.get_llm()
+
+
 def test_error_when_no_provider_configured(capture_models):
     with pytest.raises(RuntimeError) as exc:
         llm.get_llm()

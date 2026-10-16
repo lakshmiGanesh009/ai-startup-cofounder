@@ -9,6 +9,7 @@ synthesis node merges their reports into one launch strategy.
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables.config import ContextThreadPoolExecutor
 from langgraph.types import Overwrite
 
 from agents.roles import SPECIALISTS
@@ -28,6 +29,10 @@ from state import (
 logger = logging.getLogger(__name__)
 
 SPECIALIST_NAMES = [role.name for role in SPECIALISTS]
+
+# The longest the final strategy may be; it is written last, so its length adds
+# straight to the response time.
+STRATEGY_WORDS = 500
 
 
 def structured_invoke(schema, messages, tracker):
@@ -56,6 +61,27 @@ def _attempt(call, what: str):
     except LLM_ERRORS as error:
         logger.warning("%s failed and was skipped: %s", what, error)
         return None
+
+
+def _ask_each(schema, prompts: dict[str, list], tracker, what: str) -> dict:
+    """Ask for a structured `schema` reply to every prompt at the same time.
+
+    The calls are independent, so they run in parallel rather than one after
+    another. Returns the replies keyed and ordered like `prompts`, leaving out
+    any call that failed. The pool copies the context into each thread, so
+    LangChain callbacks and tracing still see every call.
+    """
+    if not prompts:
+        return {}
+
+    def ask(key):
+        return _attempt(
+            lambda: structured_invoke(schema, prompts[key], tracker), f"{what} {key}"
+        )
+
+    with ContextThreadPoolExecutor(max_workers=len(prompts)) as pool:
+        replies = dict(zip(prompts, pool.map(ask, list(prompts))))
+    return {key: reply for key, reply in replies.items() if reply is not None}
 
 
 _PLANNER_PROMPT = (
@@ -142,7 +168,8 @@ def plan_node(state: WorkflowState) -> dict:
 _REVIEW_PROMPT = (
     "You are the Chief of Staff reviewing a specialist's report against its task. "
     "Approve it if it is specific, on-task, and useful. Otherwise reject it and say "
-    "what to improve. Give a score from 1 to 5."
+    "what to improve. Reports are kept short on purpose, so judge substance, not "
+    "length. Give a score from 1 to 5."
 )
 
 
@@ -151,6 +178,7 @@ def review_node(state: WorkflowState) -> dict:
 
     On a later round only the just-revised reports are reviewed; reports already
     approved are kept, so an approved report never costs a second review call.
+    The reports of one round are reviewed at the same time.
     """
     assignments = state["assignments"]
     previous = state.get("reviews", {})
@@ -159,22 +187,23 @@ def review_node(state: WorkflowState) -> dict:
     to_review = state.get("revisions") or {name: "" for name in assignments}
 
     reviews: dict[str, ReviewResult] = dict(previous)
+    prompts = {}
+    for name in to_review:
+        report = state["analyses"][name]
+        if report.startswith(GAP_PREFIX):  # nothing to review for a gap
+            reviews[name] = ReviewResult(approved=True, score=1, feedback="")
+            continue
+        human = f"Task: {assignments.get(name, state['request'])}\n\nReport:\n{report}"
+        prompts[name] = [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
+
     metrics: dict = {}
     with track("review", metrics) as t:
-        for name in to_review:
-            report = state["analyses"][name]
-            if report.startswith(GAP_PREFIX):  # nothing to review for a gap
-                reviews[name] = ReviewResult(approved=True, score=1, feedback="")
-                continue
-            human = f"Task: {assignments.get(name, state['request'])}\n\nReport:\n{report}"
-            messages = [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
-            review = _attempt(
-                lambda: structured_invoke(ReviewResult, messages, t), f"Review of {name}"
-            )
-            if review is None:  # a failed review leaves the report unreviewed
-                reviews.pop(name, None)
-            else:
-                reviews[name] = review
+        replies = _ask_each(ReviewResult, prompts, t, "Review of")
+    for name in prompts:
+        if name in replies:
+            reviews[name] = replies[name]
+        else:  # a failed review leaves the report unreviewed
+            reviews.pop(name, None)
 
     iteration = state.get("iteration", 0) + 1
     revisions = (
@@ -208,35 +237,33 @@ def critique_node(state: WorkflowState) -> dict:
     """Each assigned specialist flags conflicts with the others' reports.
 
     On a follow-up only the reassigned specialists critique, each reading every
-    other report; the unchanged reports were already cross-checked.
+    other report; the unchanged reports were already cross-checked. The
+    specialists critique at the same time.
     """
     analyses = state["analyses"]
 
-    conflicts = []
+    prompts = {}
+    for name in state["assignments"]:
+        if analyses[name].startswith(GAP_PREFIX):  # a gap cannot critique
+            continue
+        # Nor can a gap be critiqued: it makes no claims to disagree with.
+        others = {
+            other: text
+            for other, text in analyses.items()
+            if other != name and not text.startswith(GAP_PREFIX)
+        }
+        if not others:
+            continue
+        human = (
+            f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
+            f"The other reports:\n\n{_reports_text(others)}"
+        )
+        prompts[name] = [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
+
     metrics: dict = {}
     with track("critique", metrics) as t:
-        for name in state["assignments"]:
-            if analyses[name].startswith(GAP_PREFIX):  # a gap cannot critique
-                continue
-            # Nor can a gap be critiqued: it makes no claims to disagree with.
-            others = {
-                other: text
-                for other, text in analyses.items()
-                if other != name and not text.startswith(GAP_PREFIX)
-            }
-            if not others:
-                continue
-            human = (
-                f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
-                f"The other reports:\n\n{_reports_text(others)}"
-            )
-            messages = [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
-            critique = _attempt(
-                lambda: structured_invoke(SpecialistCritique, messages, t),
-                f"Critique by {name}",
-            )
-            if critique is not None:
-                conflicts.extend(critique.conflicts)
+        critiques = _ask_each(SpecialistCritique, prompts, t, "Critique by")
+    conflicts = [conflict for critique in critiques.values() for conflict in critique.conflicts]
 
     logger.debug("Critique round: %d conflicts raised", len(conflicts))
     return {"conflicts": conflicts, "metrics": metrics}
@@ -301,7 +328,7 @@ _SYNTHESIS_PROMPT = (
     "Where you have already settled a disagreement, follow your decision and say "
     "how it was settled. "
     "If a report is marked unavailable, name that gap in the strategy and proceed "
-    "with the reports you do have."
+    f"with the reports you do have. Keep the strategy to at most {STRATEGY_WORDS} words."
 )
 
 

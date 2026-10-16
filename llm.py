@@ -6,6 +6,7 @@ is created on first use, so the app and the tests start without credentials.
 """
 
 import os
+from functools import cache
 
 import openai
 
@@ -67,12 +68,17 @@ def _openai_llm():
     )
 
 
+@cache
 def get_llm():
     """Return the chat model for the provider whose credentials are set.
 
     Azure OpenAI takes precedence when its variables are present; otherwise
     OpenAI is used. Raises LLMNotConfigured, naming the missing variables, when
     no provider is configured.
+
+    The model is built once and then reused, so every call shares one HTTP
+    connection pool instead of opening a new connection. A failure is not
+    cached, so the next call checks the environment again.
     """
     if os.getenv("AZURE_OPENAI_API_KEY"):
         return _azure_llm()

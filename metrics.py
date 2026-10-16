@@ -6,6 +6,7 @@ response. The context manager returns a dict ready to merge into the state's
 `metrics` field.
 """
 
+import threading
 import time
 from contextlib import contextmanager
 
@@ -16,13 +17,16 @@ class _Tracker:
     def __init__(self):
         self.calls = 0
         self.tokens = 0
+        # A node's calls can run at the same time and record concurrently.
+        self._lock = threading.Lock()
 
     def record(self, reply) -> None:
         """Count one LLM call, adding its tokens when the reply reports them."""
-        self.calls += 1
         usage = getattr(reply, "usage_metadata", None)
-        if usage:
-            self.tokens += usage.get("total_tokens", 0)
+        with self._lock:
+            self.calls += 1
+            if usage:
+                self.tokens += usage.get("total_tokens", 0)
 
 
 @contextmanager
