@@ -74,6 +74,15 @@ def start_new_session() -> None:
         st.session_state.pop(key, None)
 
 
+def literal(text: str) -> str:
+    """Escape `$` so Streamlit shows it rather than starting a LaTeX formula.
+
+    Reports and strategies are full of prices; unescaped, the text between two
+    dollar signs ("$7k vs $12k") is rendered as a formula.
+    """
+    return text.replace("$", "\\$")
+
+
 def run(prompt: str, context: dict) -> bool:
     """Send one request in the current session and keep its result.
 
@@ -94,19 +103,21 @@ def show_result(result: dict) -> None:
     metrics = result["metrics"]
     calls = sum(metric["calls"] for metric in metrics.values())
     tokens = sum(metric["tokens"] for metric in metrics.values())
-    st.caption(f"Objective: {result['objective']} · {calls} LLM calls · {tokens:,} tokens")
-    st.markdown(result["final_strategy"])
+    st.caption(
+        f"Objective: {literal(result['objective'])} · {calls} LLM calls · {tokens:,} tokens"
+    )
+    st.markdown(literal(result["final_strategy"]))
 
     plan, reports, reviews, conflicts, cost = st.tabs(
         ["Plan", "Reports", "Reviews", "Conflicts", "Metrics"]
     )
     with plan:
         for name, task in result["assignments"].items():
-            st.markdown(f"**{name.title()}:** {task}")
+            st.markdown(f"**{name.title()}:** {literal(task)}")
     with reports:
         for name, report in result["analyses"].items():
             with st.expander(name.title()):
-                st.markdown(report)
+                st.markdown(literal(report))
     with reviews:
         for round_no, verdicts in enumerate(result["review_history"], start=1):
             st.markdown(f"**Round {round_no}**")
@@ -116,7 +127,7 @@ def show_result(result: dict) -> None:
                         "specialist": name,
                         "approved": verdict["approved"],
                         "score": verdict["score"],
-                        "feedback": verdict["feedback"],
+                        "feedback": literal(verdict["feedback"]),
                     }
                     for name, verdict in verdicts.items()
                 ]
@@ -128,8 +139,8 @@ def show_result(result: dict) -> None:
             conflict = resolution["conflict"]
             st.markdown(
                 f"**{conflict['raised_by'].title()} vs {conflict['about'].title()}:** "
-                f"{conflict['issue']}\n\n"
-                f"Decision: {resolution['decision']} "
+                f"{literal(conflict['issue'])}\n\n"
+                f"Decision: {literal(resolution['decision'])} "
                 f"(revises: {resolution['revise'] or 'no one'})"
             )
     with cost:
@@ -174,9 +185,9 @@ if not runs:
 else:
     # Earlier requests stay available but collapsed; the latest is shown in full.
     for number, past in enumerate(runs[:-1], start=1):
-        with st.expander(f"Request {number}: {past['prompt']}"):
+        with st.expander(f"Request {number}: {literal(past['prompt'])}"):
             show_result(past["result"])
-    st.subheader(f"Request {len(runs)}: {runs[-1]['prompt']}")
+    st.subheader(f"Request {len(runs)}: {literal(runs[-1]['prompt'])}")
     show_result(runs[-1]["result"])
 
     st.divider()

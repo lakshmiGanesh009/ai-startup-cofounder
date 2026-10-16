@@ -24,7 +24,7 @@ RESULT = {
     "review_history": [{"finance": {"approved": True, "score": 5, "feedback": ""}}],
     "resolutions": [],
     "metrics": {"plan": {"calls": 1, "seconds": 1.0, "tokens": 500}},
-    "final_strategy": "Launch a paid pilot with three clinics.",
+    "final_strategy": "Launch a paid pilot with three clinics at $99 a month, capped at $5k.",
 }
 
 
@@ -61,7 +61,10 @@ def test_an_evaluation_shows_the_strategy_and_a_follow_up_reuses_the_session(bac
         "context": {"target_market": "Small clinics"},
         "session_id": None,
     }
-    assert any("Launch a paid pilot" in block.value for block in app.markdown)
+    # Dollar signs are escaped, or Streamlit would render "$99 ... $5k" as a formula.
+    assert any(
+        "at \\$99 a month, capped at \\$5k" in block.value for block in app.markdown
+    )
 
     app.text_input(key="follow_up").input("Refine the pricing.")
     _button(app, "Send follow-up").click().run()
