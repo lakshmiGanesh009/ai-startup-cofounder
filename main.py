@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from config import DEBUG_MODE
 from graph import build_graph
+from llm import LLM_ERRORS, LLMNotConfigured
 from state import NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
@@ -15,6 +16,7 @@ logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title=SERVICE_NAME,
@@ -50,7 +52,11 @@ async def health():
 
 @app.post("/evaluate", response_model=EvaluateResponse)
 async def evaluate(request: EvaluateRequest):
-    """Run the founding team against a startup request and return the analyses."""
+    """Run the founding team against a startup request and return the analyses.
+
+    Missing credentials return 503. An LLM call that still fails after its
+    retries returns 502, so a provider problem never shows up as a 500.
+    """
     session_id = request.session_id or str(uuid.uuid4())
     state = {"request": request.prompt}
     if request.context:
@@ -58,9 +64,14 @@ async def evaluate(request: EvaluateRequest):
 
     config = {"configurable": {"thread_id": session_id}}
     try:
-        result = graph.invoke(state, config)
-    except RuntimeError as error:
+        # ainvoke runs the nodes in worker threads, so a run that takes minutes
+        # does not block the event loop, and other requests are still served.
+        result = await graph.ainvoke(state, config)
+    except LLMNotConfigured as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except LLM_ERRORS as error:
+        logger.warning("Evaluation failed on an LLM call: %s", error)
+        raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
 
     return EvaluateResponse(
         session_id=session_id,

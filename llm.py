@@ -7,7 +7,21 @@ is created on first use, so the app and the tests start without credentials.
 
 import os
 
+import openai
+
 from config import LLM_MAX_RETRIES, LLM_TIMEOUT
+
+
+class LLMNotConfigured(RuntimeError):
+    """No LLM provider is configured, or its settings are incomplete."""
+
+
+class LLMReplyError(Exception):
+    """The model replied, but not in a form the workflow can use."""
+
+
+# What an LLM call raises when it still fails after the client's own retries.
+LLM_ERRORS = (openai.OpenAIError, LLMReplyError)
 
 
 def _missing(names):
@@ -22,7 +36,7 @@ def _azure_llm():
         ["AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT_NAME"]
     )
     if missing:
-        raise RuntimeError(f"Azure OpenAI is missing: {', '.join(missing)}")
+        raise LLMNotConfigured(f"Azure OpenAI is missing: {', '.join(missing)}")
 
     kwargs = {
         "api_key": os.environ["AZURE_OPENAI_API_KEY"],
@@ -43,7 +57,7 @@ def _openai_llm():
 
     missing = _missing(["OPENAI_API_KEY"])
     if missing:
-        raise RuntimeError(f"OpenAI is missing: {', '.join(missing)}")
+        raise LLMNotConfigured(f"OpenAI is missing: {', '.join(missing)}")
 
     return ChatOpenAI(
         api_key=os.environ["OPENAI_API_KEY"],
@@ -57,14 +71,14 @@ def get_llm():
     """Return the chat model for the provider whose credentials are set.
 
     Azure OpenAI takes precedence when its variables are present; otherwise
-    OpenAI is used. Raises a RuntimeError that names the missing variables when
+    OpenAI is used. Raises LLMNotConfigured, naming the missing variables, when
     no provider is configured.
     """
     if os.getenv("AZURE_OPENAI_API_KEY"):
         return _azure_llm()
     if os.getenv("OPENAI_API_KEY"):
         return _openai_llm()
-    raise RuntimeError(
+    raise LLMNotConfigured(
         "No LLM provider configured. Set AZURE_OPENAI_API_KEY (with "
         "AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT_NAME) or OPENAI_API_KEY."
     )

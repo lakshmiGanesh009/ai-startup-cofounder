@@ -6,15 +6,19 @@ delegation plan, the analyses the specialists produce (keyed by specialist
 name), the reviews, conflicts and resolutions, and per-node metrics.
 """
 
-from typing import Annotated, TypedDict
+from typing import Annotated, Literal, TypedDict
 
 from pydantic import BaseModel, Field
+
+# The specialists' keys, as in agents/roles.py. Structured outputs that name a
+# specialist use this type, so the model can only name one of the four.
+SpecialistName = Literal["marketing", "finance", "technical", "risk"]
 
 
 class Task(BaseModel):
     """One specialist's assignment within a delegation plan."""
 
-    specialist: str = Field(description="The specialist's name, e.g. marketing.")
+    specialist: SpecialistName = Field(description="The specialist to assign.")
     task: str = Field(description="What that specialist should work on.")
 
 
@@ -64,13 +68,8 @@ class ReviewResult(BaseModel):
 class Conflict(BaseModel):
     """A clash one specialist sees between its area and another's report."""
 
-    raised_by: str = Field(
-        description="The specialist flagging the conflict: marketing, finance, technical or risk."
-    )
-    about: str = Field(
-        description="The specialist whose report it clashes with: marketing, finance, "
-        "technical or risk."
-    )
+    raised_by: SpecialistName = Field(description="The specialist flagging the conflict.")
+    about: SpecialistName = Field(description="The specialist whose report it clashes with.")
     issue: str = Field(description="The clash, in one sentence.")
 
 
@@ -85,9 +84,8 @@ class Resolution(BaseModel):
 
     conflict: Conflict
     decision: str = Field(description="How the clash is settled.")
-    revise: str = Field(
-        description="The specialist to revise (marketing, finance, technical or risk), "
-        "or empty if none."
+    revise: Literal[SpecialistName, ""] = Field(
+        description="The specialist who should revise their report, or empty if none."
     )
 
 

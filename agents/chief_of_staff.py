@@ -14,7 +14,7 @@ from langgraph.types import Overwrite
 from agents.roles import SPECIALISTS
 from agents.specialist import GAP_PREFIX
 from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
-from llm import get_llm
+from llm import LLM_ERRORS, LLMReplyError, get_llm
 from metrics import track
 from state import (
     DelegationPlan,
@@ -30,14 +30,33 @@ logger = logging.getLogger(__name__)
 SPECIALIST_NAMES = [role.name for role in SPECIALISTS]
 
 
-def structured_invoke(schema, messages):
-    """Invoke the model for a structured `schema`, retrying once if the first
-    reply does not parse into the schema."""
-    model = get_llm().with_structured_output(schema)
+def structured_invoke(schema, messages, tracker):
+    """Invoke the model for a structured `schema`, counting each call on `tracker`.
+
+    A reply that does not parse into the schema is retried once. API errors are
+    not retried here: the client has already retried them (LLM_MAX_RETRIES).
+    """
+    model = get_llm().with_structured_output(schema, include_raw=True)
+    for _ in range(2):
+        reply = model.invoke(messages)
+        tracker.record(reply["raw"])  # the raw reply carries the token usage
+        if reply["parsed"] is not None:
+            return reply["parsed"]
+    raise LLMReplyError(f"No usable {schema.__name__} reply: {reply['parsing_error']}")
+
+
+def _attempt(call, what: str):
+    """Make one review, critique or resolve call; if it fails, log it and return None.
+
+    These checks refine reports that already exist, so a failed one is skipped
+    rather than failing the whole run.
+    """
     try:
-        return model.invoke(messages)
-    except Exception:  # malformed structured output: one more try
-        return model.invoke(messages)
+        return call()
+    except LLM_ERRORS as error:
+        logger.warning("%s failed and was skipped: %s", what, error)
+        return None
+
 
 _PLANNER_PROMPT = (
     "You are the Chief of Staff of a startup founding team. Read the founder's "
@@ -98,15 +117,10 @@ def plan_node(state: WorkflowState) -> dict:
     metrics: dict = {}
     with track("plan", metrics) as t:
         plan: DelegationPlan = structured_invoke(
-            DelegationPlan, _build_prompt(state, prior, venture)
+            DelegationPlan, _build_prompt(state, prior, venture), t
         )
-        t.record(plan)
 
-    assignments = {
-        name: task
-        for name, task in plan.assignments().items()
-        if name in SPECIALIST_NAMES
-    }
+    assignments = plan.assignments()
     if not assignments:
         logger.debug("Empty plan; assigning all specialists")
         assignments = {name: state["request"] for name in SPECIALIST_NAMES}
@@ -153,10 +167,14 @@ def review_node(state: WorkflowState) -> dict:
                 reviews[name] = ReviewResult(approved=True, score=1, feedback="")
                 continue
             human = f"Task: {assignments.get(name, state['request'])}\n\nReport:\n{report}"
-            reviews[name] = structured_invoke(
-                ReviewResult, [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
+            messages = [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
+            review = _attempt(
+                lambda: structured_invoke(ReviewResult, messages, t), f"Review of {name}"
             )
-            t.record(reviews[name])
+            if review is None:  # a failed review leaves the report unreviewed
+                reviews.pop(name, None)
+            else:
+                reviews[name] = review
 
     iteration = state.get("iteration", 0) + 1
     revisions = (
@@ -200,18 +218,25 @@ def critique_node(state: WorkflowState) -> dict:
         for name in state["assignments"]:
             if analyses[name].startswith(GAP_PREFIX):  # a gap cannot critique
                 continue
-            others = {o: text for o, text in analyses.items() if o != name}
+            # Nor can a gap be critiqued: it makes no claims to disagree with.
+            others = {
+                other: text
+                for other, text in analyses.items()
+                if other != name and not text.startswith(GAP_PREFIX)
+            }
             if not others:
                 continue
             human = (
                 f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
                 f"The other reports:\n\n{_reports_text(others)}"
             )
-            critique: SpecialistCritique = structured_invoke(
-                SpecialistCritique, [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
+            messages = [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
+            critique = _attempt(
+                lambda: structured_invoke(SpecialistCritique, messages, t),
+                f"Critique by {name}",
             )
-            t.record(critique)
-            conflicts.extend(critique.conflicts)
+            if critique is not None:
+                conflicts.extend(critique.conflicts)
 
     logger.debug("Critique round: %d conflicts raised", len(conflicts))
     return {"conflicts": conflicts, "metrics": metrics}
@@ -223,12 +248,6 @@ _RESOLVE_PROMPT = (
     "give a clear decision and name the one specialist (if any) who should revise "
     "their report to match it. Keep the decisions consistent with each other."
 )
-
-
-def _specialist_key(name: str) -> str:
-    """Map a name as the model writes it, e.g. "Finance specialist", to its key."""
-    lowered = name.lower()
-    return next((key for key in SPECIALIST_NAMES if key in lowered), "")
 
 
 def resolve_node(state: WorkflowState) -> dict:
@@ -248,16 +267,17 @@ def resolve_node(state: WorkflowState) -> dict:
             human = "Conflicts raised:\n" + "\n".join(
                 f"- {c.raised_by} about {c.about}: {c.issue}" for c in conflicts
             )
-            decided: Resolutions = structured_invoke(
-                Resolutions, [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
+            messages = [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
+            decided: Resolutions | None = _attempt(
+                lambda: structured_invoke(Resolutions, messages, t), "Resolving the conflicts"
             )
-            t.record(decided)
-            resolutions = decided.resolutions
+            if decided is not None:
+                resolutions = decided.resolutions
 
     revisions = {}
     if round_no <= MAX_CRITIQUE_ROUNDS:
         for resolution in resolutions:
-            target = _specialist_key(resolution.revise)
+            target = resolution.revise
             if target in assigned:  # one specialist may have several decisions to apply
                 earlier = revisions.get(target)
                 revisions[target] = (

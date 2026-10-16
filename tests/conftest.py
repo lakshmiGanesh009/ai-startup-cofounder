@@ -5,6 +5,8 @@
 graph and API tests are deterministic and need no credentials.
 """
 
+import time
+
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
@@ -49,11 +51,19 @@ def strip_credentials(monkeypatch):
 class FakeModel:
     """A chat model stand-in.
 
-    Specialist and synthesis calls get an echoed reply. Structured calls return
-    a `DelegationPlan` (planning) or a `ReviewResult` (review). Tests can set a
-    narrower `plan` and per-specialist `reviews`; reports default to approved.
-    `synthesis_calls` and `specialist_calls` record how often each ran.
+    Specialist and synthesis calls get an echoed reply. Each structured call
+    gets its reply from a `_*_for(prompt)` method, which a test can replace:
+    `_plan_for` (planning), `_review_for` (review), `_critique_for` (critique)
+    and `_resolutions_for` (resolve). By default those return `plan`, an
+    approval unless `reviews` names the report, the `critique`'s conflicts, and
+    the one `resolution` if set. Every reply reports `USAGE` tokens.
+
+    `synthesis_calls` and `specialist_calls` record how often each ran, `fail`
+    names specialists whose call raises, and `delay` makes every call take that
+    many seconds.
     """
+
+    USAGE = {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}
 
     def __init__(self):
         self.plan = DelegationPlan(
@@ -66,14 +76,31 @@ class FakeModel:
         self.synthesis_calls = 0
         self.specialist_calls: dict[str, int] = {}
         self.fail: set[str] = set()  # specialist names whose call should raise
+        self.delay = 0.0
+
+    def _plan_for(self, prompt: str) -> DelegationPlan:
+        return self.plan
 
     def _review_for(self, report: str) -> ReviewResult:
+        # The verdict depends on the report text in the prompt, so a report can be
+        # rejected on the first pass and approved after it is revised.
         for name, review in self.reviews.items():
             if name in report:
                 return review
         return ReviewResult(approved=True, score=5, feedback="")
 
+    def _critique_for(self, prompt: str) -> SpecialistCritique:
+        # Only the specialist that raises the conflict reports it, so the same
+        # conflict is not counted once per specialist.
+        raisers = {c.raised_by for c in self.critique.conflicts}
+        mine = [c for c in self.critique.conflicts if f"the {c.raised_by} specialist" in prompt]
+        return SpecialistCritique(conflicts=mine) if raisers else SpecialistCritique()
+
+    def _resolutions_for(self, prompt: str) -> Resolutions:
+        return Resolutions(resolutions=[self.resolution] if self.resolution else [])
+
     def invoke(self, messages):
+        time.sleep(self.delay)
         system = next((m.content for m in messages if isinstance(m, SystemMessage)), "")
         human = messages[-1].content
         if "launch strategy" in system:
@@ -84,69 +111,38 @@ class FakeModel:
                     self.specialist_calls[name] = self.specialist_calls.get(name, 0) + 1
                     if name in self.fail:
                         raise RuntimeError(f"{name} specialist call failed")
-        return AIMessage(f"[role: {system}]\n{human}")
+        return AIMessage(f"[role: {system}]\n{human}", usage_metadata=self.USAGE)
 
-    def _critique_for(self, prompt: str) -> SpecialistCritique:
-        # Only the specialist that raises the conflict reports it, so the same
-        # conflict is not counted once per specialist.
-        raisers = {c.raised_by for c in self.critique.conflicts}
-        mine = [c for c in self.critique.conflicts if f"the {c.raised_by} specialist" in prompt]
-        return SpecialistCritique(conflicts=mine) if raisers else SpecialistCritique()
-
-    def with_structured_output(self, schema):
-        if schema is ReviewResult:
-            return _ReviewModel(self._review_for)
-        if schema is SpecialistCritique:
-            return _CritiqueModel(self._critique_for)
-        if schema is Resolutions:
-            return _ResolutionModel(lambda: self.resolution)
-        return _StructuredModel(self.plan)
+    def with_structured_output(self, schema, include_raw=False):
+        produce = {
+            DelegationPlan: self._plan_for,
+            ReviewResult: self._review_for,
+            SpecialistCritique: self._critique_for,
+            Resolutions: self._resolutions_for,
+        }[schema]
+        return _StructuredModel(self, produce, include_raw)
 
 
 class _StructuredModel:
-    """What `with_structured_output(DelegationPlan)` returns."""
+    """What `with_structured_output(schema)` returns.
 
-    def __init__(self, plan):
-        self._plan = plan
-
-    def invoke(self, messages):
-        return self._plan
-
-
-class _ReviewModel:
-    """What `with_structured_output(ReviewResult)` returns.
-
-    The verdict depends on the report text in the prompt, so a report can be
-    rejected on the first pass and approved after it is revised.
+    The reply is produced from the prompt. With `include_raw` it is wrapped as
+    LangChain wraps it: the raw message (with its token usage), the parsed
+    object, and no parsing error.
     """
 
-    def __init__(self, review_for):
-        self._review_for = review_for
+    def __init__(self, fake, produce, include_raw):
+        self._fake = fake
+        self._produce = produce
+        self._include_raw = include_raw
 
     def invoke(self, messages):
-        return self._review_for(messages[-1].content)
-
-
-class _CritiqueModel:
-    """What `with_structured_output(SpecialistCritique)` returns."""
-
-    def __init__(self, critique_for):
-        self._critique_for = critique_for
-
-    def invoke(self, messages):
-        return self._critique_for(messages[-1].content)
-
-
-class _ResolutionModel:
-    """What `with_structured_output(Resolutions)` returns: the test's one
-    resolution, or none."""
-
-    def __init__(self, resolution):
-        self._resolution = resolution
-
-    def invoke(self, messages):
-        resolution = self._resolution()
-        return Resolutions(resolutions=[resolution] if resolution else [])
+        time.sleep(self._fake.delay)
+        parsed = self._produce(messages[-1].content)
+        if not self._include_raw:
+            return parsed
+        raw = AIMessage("", usage_metadata=self._fake.USAGE)
+        return {"raw": raw, "parsed": parsed, "parsing_error": None}
 
 
 @pytest.fixture
