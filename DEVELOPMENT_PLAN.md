@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** all steps are done. The full workflow is built, tested with a fake model, and documented. The remaining live checks (real-model runs and the performance numbers in `docs/performance.md`) need a filled-in `.env`.
+**Where we are:** all steps are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test.
 
 ## How we work
 
@@ -78,14 +78,41 @@ graph TD
 | 1 | LLM connection | LLM API access, environment variables | Done |
 | 2 | First specialist, end to end | Role-based agent, state machine, backend API | Done |
 | 3 | All four specialists in parallel | Marketing, Financial, Technical and Risk & Compliance agents | Done |
-| 4 | Chief of Staff: plan and delegate | Manager-led delegation, structured outputs | Next |
-| 5 | Chief of Staff: synthesis | Synthesis into a unified launch strategy | To do |
-| 6 | Review and refine loop | Plan--Act--Check loop, reflection and critique cycles | To do |
+| 4 | Chief of Staff: plan and delegate | Manager-led delegation, structured outputs | Done |
+| 5 | Chief of Staff: synthesis | Synthesis into a unified launch strategy | Done |
+| 6 | Review and refine loop | Plan--Act--Check loop, reflection and critique cycles | Done |
 | 7 | Cross-specialist critique | Back-and-forth between agents, conflict resolution | Done |
 | 8 | Follow-up requests | Stateful system, iterative refinement | Done |
 | 9 | Scenarios and demo | Testing with multiple scenarios, live walkthrough | Done |
 | 10 | Optimization and error handling | Fewer redundant calls, latency, error handling strategy | Done |
 | 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | Done |
+
+## Live verification
+
+Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`): the API with `DEBUG_MODE=true`, `demo.py`, and two runs of each scenario for [docs/performance.md](docs/performance.md). "As merged" is the code before this verification.
+
+| Step | Live check | Result |
+| --- | --- | --- |
+| 1 | `uv run python llm.py` | Pass: the deployment replied. |
+| 2 | `POST /evaluate` with the healthcare prompt | Pass: four healthcare-specific analyses. Context fields (the $15k budget, EHR incumbents, bookkeepers) appear in the scenario analyses. The log shows LangGraph's step traces and each node. |
+| 3 | The four specialists run in parallel | Pass: in every run the specialists' combined time exceeds the time left after the sequential nodes (for example 88 s of specialist work in 38 s). |
+| 4 | "Identify risks in our go-to-market plan." against the Step 2 prompt | Pass after fix: Risk and Marketing against all four, and no call for an unassigned specialist. As merged, the planner assigned a single specialist in 3 of 6 first requests, including "Evaluate…" requests. |
+| 5 | The Step 2 request returns one strategy | Pass. |
+| 6 | Review history, and a report improving between rounds | Pass: for example Risk 4 → 5 and Finance 4 → 5, both approved after revision. |
+| 7 | Premium pricing on a small budget shows a conflict and its resolution | Pass after fix: for example Marketing's $15k–$30k four-to-six-week pilot against Finance's $8k one-week pilot, settled, revised and reflected in the strategy. As merged, no conflict was flagged in 10 runs. |
+| 8 | "Refine the pricing strategy after financial review." with the same `session_id` | Pass after fix: Finance and Marketing rerun, 13 calls against 21 for the first request. As merged, a follow-up could cost more than the first request, and the follow-up lost the original idea. |
+| 9 | `uv run python demo.py scenarios/premium_on_a_budget.json` | Pass: plan, reports, two review rounds, resolutions and strategy, then the follow-up. |
+| 10 | Performance numbers | Pass: first requests take 32–39% fewer calls and follow-ups 58–64% fewer (see [docs/performance.md](docs/performance.md)). Error handling is covered by the automated tests; no failure was injected live. |
+| 11 | The diagram matches `draw_mermaid()` | Pass: 30 of 30 edges. |
+
+### Fixed during live verification
+
+- **Delegation (Step 4).** The planner saw only the specialists' names. It now sees what each covers (`focus` in `agents/roles.py`), is told that evaluating a whole idea needs all four, and keeps tasks to one or two sentences.
+- **Cross-critique (Step 7).** The prompt asked for "genuine conflicts" and the model never found one, even for a $8k against $15k pilot price. Specialists now flag up to two concrete disagreements in their own area. All of a round's conflicts are settled in one call. Several decisions for one specialist used to overwrite each other, and names written as "Finance specialist" were ignored; both are fixed. Synthesis now receives the decisions.
+- **Critique loop (Steps 7 and 10).** A critique revision always triggered a second critique and resolve pass, although no further revision was allowed, and it replaced the first round's resolutions in the response. The revised report now goes straight to synthesis.
+- **Follow-ups (Step 8).** The original request was lost and reassigned specialists started from scratch; both now see the original request and their earlier report. Metrics, review history and resolutions piled up across requests in a session; they now cover the current request only. Every report was critiqued again; now only the reassigned ones are. The planner reassigned three or four specialists; it now reassigns those who own what the follow-up changes.
+- **Checkpointer.** LangGraph warned that it would block the unregistered state models in a future version, which would break follow-ups. They are now registered.
+- **Debugging (Step 2).** `DEBUG_MODE` did not turn on LangGraph's step traces; it does now.
 
 ## Steps
 

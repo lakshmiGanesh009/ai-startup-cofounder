@@ -82,8 +82,9 @@ no area of its own.
    `DelegationPlan` (pydantic): an objective and one task per specialist the
    request needs. It plans from each role's `focus` line, so it knows what every
    specialist covers. Evaluating a whole idea goes to all four; a narrower
-   request goes to every specialist whose area it touches, including the owner
-   of the plan it asks about. Tasks are kept to one or two sentences. Only valid
+   request goes only to the specialist whose area it asks about, plus the owner
+   of the plan or decision it refers to (risks in a go-to-market plan: Risk and
+   Marketing). Tasks are kept to one or two sentences. Only valid
    specialist names are kept. If the plan names none, all four are assigned, so
    a request is never dropped.
 2. **Route.** A conditional edge sends the plan to only the assigned
@@ -105,8 +106,9 @@ loops are bounded so the workflow always terminates.
   another specialist recommends something different on a question inside its
   own area (a price, a budget, a timeline, the scope of the first offer) so that
   the founder could not follow both; at most two each. The Chief of Staff
-  resolves each conflict, records the decision, and sends the affected
-  specialist back to revise, with every decision that applies to it. Bounded by
+  settles all of the round's conflicts in one call, treating a clash raised from
+  both sides as one, records each decision, and sends the affected specialist
+  back to revise with every decision that applies to it. Bounded by
   `MAX_CRITIQUE_ROUNDS` (1): after the last allowed round, a revised report goes
   straight to synthesis instead of through another critique pass that could not
   change anything. Skipped entirely when only one specialist was assigned, since
@@ -147,9 +149,11 @@ follow-up reassigns only the specialists it affects (see
 The graph is compiled with a checkpointer keyed by `session_id`. The session's
 first request is kept as `venture`. On a follow-up, the plan step sees the
 original request, the follow-up and which specialists already reported, and
-reassigns only the specialists the follow-up affects; the rest keep their
-report. A reassigned specialist also sees the original request and its own
-earlier report, so it refines that report rather than starting over.
+reassigns only the specialists who own what the follow-up changes, usually one
+or two; the rest keep their report. A reassigned specialist also sees the
+original request and its own earlier report, so it refines that report rather
+than starting over. Only the reassigned specialists cross-critique, each
+against every other report; the unchanged reports were already cross-checked.
 
 Per-request state is reset at the plan step so a prior request does not leak
 into the new one: the loop counters, and the accumulating review history,
@@ -170,10 +174,12 @@ break follow-ups.
   The caps are configurable, so more rounds need no code change.
 - **Skip critique for a lone specialist.** Trades a cross-check that has nothing
   to check against for fewer calls and lower latency.
-- **At most two conflicts per specialist.** Each conflict costs a resolve call,
-  and without a limit the specialists flag the same clash many times over.
-  Minor disagreements beyond the first two go unresolved, and synthesis still
-  names where the specialists differ.
+- **At most two conflicts per specialist, settled in one call.** Without a limit
+  the specialists flag the same clash many times over. Settling a round's
+  conflicts together costs one call instead of one per conflict and keeps the
+  decisions consistent; the price is one larger prompt. Minor disagreements
+  beyond each specialist's first two go unresolved, and synthesis still names
+  where the specialists differ.
 - **A failed specialist is non-fatal.** Its report becomes a named gap and the
   strategy proceeds, trading completeness for resilience, so one failed call
   never produces a 500.
