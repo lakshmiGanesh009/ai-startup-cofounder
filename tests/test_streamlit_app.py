@@ -6,6 +6,7 @@ skipped without it.
 
 import httpx
 import pytest
+from fpdf import FPDF
 
 pytest.importorskip("streamlit")
 
@@ -86,3 +87,118 @@ def test_a_backend_error_is_shown(monkeypatch):
 
     assert not app.exception
     assert any("502: The LLM call failed" in error.value for error in app.error)
+
+
+class FakeReportsBackend:
+    """Answers the Reports page's calls like the API, and records what it sent."""
+
+    def __init__(self, reports=True):
+        self.report = {
+            "session_id": "session-1",
+            "title": "An AI scheduling tool",
+            "objective": "Evaluate it.",
+            "context": "",
+            "sections": [
+                {"key": "strategy", "title": "Launch Strategy", "body": "Launch a pilot."},
+                {"key": "finance", "title": "Financial Planning", "body": "Charge $99."},
+            ],
+            "version": 1,
+            "detailed": False,
+            "edited": False,
+            "outdated": False,
+            "updated_at": "2026-10-16T10:00:00+00:00",
+        }
+        self.has_reports = reports
+        self.saves = []
+        self.conflict = False
+
+    def get(self, url, timeout):
+        path = url.split("8000", 1)[1]
+        if path == "/health":
+            return httpx.Response(200, json={"status": "healthy", "service": "test"})
+        if path == "/reports":
+            summary = {k: v for k, v in self.report.items() if k not in ("objective", "context", "sections")}
+            return httpx.Response(200, json=[summary] if self.has_reports else [])
+        if path.endswith("/pdf"):
+            pdf = FPDF()
+            pdf.add_page()
+            return httpx.Response(200, content=bytes(pdf.output()))
+        return httpx.Response(200, json=self.report)
+
+    def put(self, url, json, timeout):
+        self.saves.append(json)
+        if self.conflict or json["version"] != self.report["version"]:
+            return httpx.Response(409, json={"detail": "The report changed."})
+        self.report = {**self.report, "sections": json["sections"], "edited": True,
+                       "version": self.report["version"] + 1}
+        return httpx.Response(200, json=self.report)
+
+    def post(self, url, json=None, timeout=None):
+        if url.endswith("/detailed"):
+            sections = [{**s, "body": f"Detailed: {s['body']}"} for s in self.report["sections"]]
+            self.report = {**self.report, "sections": sections, "detailed": True,
+                           "version": self.report["version"] + 1}
+            return httpx.Response(200, json={"report": self.report, "failed": ["Financial Planning"]})
+        return httpx.Response(404, json={"detail": "Not found"})
+
+
+@pytest.fixture
+def reports_backend(monkeypatch):
+    backend = FakeReportsBackend()
+    monkeypatch.setattr(httpx, "get", backend.get)
+    monkeypatch.setattr(httpx, "put", backend.put)
+    monkeypatch.setattr(httpx, "post", backend.post)
+    return backend
+
+
+def _reports_page():
+    app = AppTest.from_file(APP, default_timeout=TIMEOUT)
+    app.session_state["session_id"] = "session-1"
+    return app.switch_page("ui/reports_page.py").run()
+
+
+def test_the_reports_page_saves_an_edit(reports_backend):
+    app = _reports_page()
+    assert not app.exception
+    assert [box.label for box in app.text_area] == ["Launch Strategy", "Financial Planning"]
+    assert any(caption.value == "Preview · 1 page" for caption in app.caption)
+
+    app.text_area(key="report:session-1:1:strategy").input("Launch a paid pilot.").run()
+
+    assert not app.exception
+    assert reports_backend.saves[-1]["version"] == 1
+    assert reports_backend.saves[-1]["sections"][0]["body"] == "Launch a paid pilot."
+    assert reports_backend.saves[-1]["sections"][1]["body"] == "Charge $99."
+    # A second edit is saved against the version the first one produced.
+    app.text_area(key="report:session-1:1:finance").input("Charge $149.").run()
+    assert reports_backend.saves[-1]["version"] == 2
+    assert not app.warning
+
+
+def test_the_detailed_version_refills_the_editor(reports_backend):
+    app = _reports_page()
+
+    _button(app, "Write the detailed version").click().run()
+
+    assert not app.exception
+    assert app.text_area(key="report:session-1:2:strategy").value == "Detailed: Launch a pilot."
+    assert any("Could not expand: Financial Planning" in w.value for w in app.warning)
+
+
+def test_a_save_after_the_report_changed_elsewhere_reloads_it(reports_backend):
+    app = _reports_page()
+    reports_backend.conflict = True
+
+    app.text_area(key="report:session-1:1:strategy").input("My edit.").run()
+
+    assert any("changed elsewhere" in w.value for w in app.warning)
+
+
+def test_the_reports_page_explains_when_there_are_none(monkeypatch):
+    backend = FakeReportsBackend(reports=False)
+    monkeypatch.setattr(httpx, "get", backend.get)
+
+    app = _reports_page()
+
+    assert not app.exception
+    assert any("No reports yet" in info.value for info in app.info)
