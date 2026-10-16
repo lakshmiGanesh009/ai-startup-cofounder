@@ -16,3 +16,11 @@ MAX_CRITIQUE_ROUNDS = int(os.getenv("MAX_CRITIQUE_ROUNDS", "1"))
 # Per-call LLM timeout in seconds, and how many times to retry a failed call.
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+
+# Browser origins allowed to call the API, comma-separated. The default is the
+# Next.js dev server; the Streamlit UI calls from its server, so it needs none.
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]

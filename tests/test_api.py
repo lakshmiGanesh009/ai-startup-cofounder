@@ -58,6 +58,27 @@ def test_evaluate_without_credentials_returns_503():
     assert response.status_code == 503
 
 
+def test_the_frontend_origin_may_call_the_api():
+    # The browser's preflight for the Next.js dev server's POST /evaluate.
+    response = client.options(
+        "/evaluate",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_other_origins_are_not_allowed():
+    response = client.get("/health", headers={"Origin": "https://elsewhere.example"})
+
+    assert "access-control-allow-origin" not in response.headers
+
+
 def test_a_failed_llm_call_returns_502_not_500(fake_llm):
     def unreachable(prompt):
         raise openai.APIConnectionError(request=httpx.Request("POST", "https://llm.example"))

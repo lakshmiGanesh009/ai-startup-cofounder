@@ -3,9 +3,10 @@ import uuid
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from config import DEBUG_MODE
+from config import CORS_ORIGINS, DEBUG_MODE
 from graph import build_graph
 from llm import LLM_ERRORS, LLMNotConfigured
 from state import NodeMetric, RequestContext, Resolution, ReviewResult
@@ -22,6 +23,13 @@ app = FastAPI(
     title=SERVICE_NAME,
     description="Multi-agent founding team that evaluates startup ideas",
     version="0.1.0",
+)
+# Lets a browser frontend on another origin (the Next.js app) call the API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
 
 graph = build_graph()
