@@ -215,7 +215,7 @@ curl -X POST http://localhost:8000/evaluate \
   -d '{"prompt": "Evaluate this startup idea in the AI healthcare space."}'
 ```
 
-Send a follow-up by passing the `session_id` from the first response; only the specialists the follow-up affects rerun.
+Send a follow-up by passing the `session_id` from the first response; only the specialists the follow-up affects rerun, and each builds on its earlier report. The follow-up's response reports only its own reviews, resolutions and metrics.
 
 ### Demo
 
@@ -235,7 +235,7 @@ Tests use a fake model, so they need no credentials and make no LLM calls.
 
 ### Configuration
 
-Set in `.env`. `DEBUG_MODE` turns on step logging; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call.
+Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call.
 
 ### Project structure
 

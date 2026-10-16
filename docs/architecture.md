@@ -27,8 +27,10 @@ graph TD;
 	critique --> resolve;
 	finance -.-> critique;
 	finance -.-> review;
+	finance -.-> synthesis;
 	marketing -.-> critique;
 	marketing -.-> review;
+	marketing -.-> synthesis;
 	plan -.-> finance;
 	plan -.-> marketing;
 	plan -.-> risk;
@@ -46,8 +48,10 @@ graph TD;
 	review -.-> technical;
 	risk -.-> critique;
 	risk -.-> review;
+	risk -.-> synthesis;
 	technical -.-> critique;
 	technical -.-> review;
+	technical -.-> synthesis;
 	synthesis --> __end__;
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc
@@ -76,8 +80,12 @@ no area of its own.
 
 1. **Plan.** The Chief of Staff reads the request and produces a structured
    `DelegationPlan` (pydantic): an objective and one task per specialist the
-   request needs. Only valid specialist names are kept. If the plan names none,
-   all four are assigned, so a request is never dropped.
+   request needs. It plans from each role's `focus` line, so it knows what every
+   specialist covers. Evaluating a whole idea goes to all four; a narrower
+   request goes to every specialist whose area it touches, including the owner
+   of the plan it asks about. Tasks are kept to one or two sentences. Only valid
+   specialist names are kept. If the plan names none, all four are assigned, so
+   a request is never dropped.
 2. **Route.** A conditional edge sends the plan to only the assigned
    specialists; the rest make no LLM call.
 3. **Analyse.** Each assigned specialist answers its task, grounded in the
@@ -93,14 +101,21 @@ loops are bounded so the workflow always terminates.
   specialist revises it. Bounded by `MAX_ITERATIONS` (1 in the initial version),
   so a weak report is revised at most once. Only rejected reports cost another
   call.
-- **Cross-critique.** Each specialist reads the others' reports and flags genuine
-  conflicts with its own area. The Chief of Staff resolves each conflict, records
-  the decision, and sends the affected specialist back to revise. Bounded by
-  `MAX_CRITIQUE_ROUNDS` (1). Skipped entirely when only one specialist was
-  assigned, since there is no one to critique against.
+- **Cross-critique.** Each specialist reads the others' reports and flags where
+  another specialist recommends something different on a question inside its
+  own area (a price, a budget, a timeline, the scope of the first offer) so that
+  the founder could not follow both; at most two each. The Chief of Staff
+  resolves each conflict, records the decision, and sends the affected
+  specialist back to revise, with every decision that applies to it. Bounded by
+  `MAX_CRITIQUE_ROUNDS` (1): after the last allowed round, a revised report goes
+  straight to synthesis instead of through another critique pass that could not
+  change anything. Skipped entirely when only one specialist was assigned, since
+  there is no one to critique against.
 - **Synthesis.** The Chief of Staff merges the approved reports into one launch
   strategy: a recommendation, the reasoning, where specialists differ, and
-  prioritised next steps. It uses only what the specialists reported.
+  prioritised next steps. It uses only what the specialists reported, and is
+  given its own conflict decisions so the strategy follows them and says how
+  each disagreement was settled.
 
 ## A request, end to end
 
@@ -112,10 +127,13 @@ For "Identify risks in our go-to-market plan.":
 3. **review** — each report is scored. A weak one returns to its specialist with
    feedback and is revised once; approved reports are untouched.
 4. **critique** — Marketing and Risk read each other's reports. If Risk flags a
-   conflict with Marketing's plan, it is recorded.
+   conflict with Marketing's plan, for example a launch date its safeguards
+   cannot meet, it is recorded.
 5. **resolve** — the Chief of Staff settles each conflict and, if needed, sends
-   one specialist back to revise, then returns to critique (capped).
-6. **synthesis** — the two reports become one strategy.
+   one specialist back to revise. With one critique round allowed, the revised
+   report then goes straight to synthesis; with more, it returns to critique.
+6. **synthesis** — the two reports, and the decision on the conflict, become one
+   strategy.
 
 The response carries the objective, the assignments, every report, the review
 history, the conflict resolutions, per-node metrics, and the final strategy.
@@ -126,10 +144,21 @@ follow-up reassigns only the specialists it affects (see
 
 ### Follow-ups
 
-The graph is compiled with a checkpointer keyed by `session_id`. On a follow-up,
-the plan step sees the earlier reports and reassigns only the specialists the
-follow-up affects; the rest keep their report. Per-request loop counters are
-reset so a prior round does not leak into the new one.
+The graph is compiled with a checkpointer keyed by `session_id`. The session's
+first request is kept as `venture`. On a follow-up, the plan step sees the
+original request, the follow-up and which specialists already reported, and
+reassigns only the specialists the follow-up affects; the rest keep their
+report. A reassigned specialist also sees the original request and its own
+earlier report, so it refines that report rather than starting over.
+
+Per-request state is reset at the plan step so a prior request does not leak
+into the new one: the loop counters, and the accumulating review history,
+resolutions and metrics (reset with LangGraph's `Overwrite`). A follow-up's
+response therefore reports only its own reviews and cost.
+
+The checkpointer's serializer lists the state models it may restore. LangGraph
+warns about unlisted types and will block them in a future version, which would
+break follow-ups.
 
 ## Design trade-offs
 
@@ -141,6 +170,10 @@ reset so a prior round does not leak into the new one.
   The caps are configurable, so more rounds need no code change.
 - **Skip critique for a lone specialist.** Trades a cross-check that has nothing
   to check against for fewer calls and lower latency.
+- **At most two conflicts per specialist.** Each conflict costs a resolve call,
+  and without a limit the specialists flag the same clash many times over.
+  Minor disagreements beyond the first two go unresolved, and synthesis still
+  names where the specialists differ.
 - **A failed specialist is non-fatal.** Its report becomes a named gap and the
   strategy proceeds, trading completeness for resilience, so one failed call
   never produces a 500.

@@ -15,9 +15,9 @@ We build one step at a time. Each step adds one feature, is small enough to revi
 
 Automated tests use a fake model, so they need no credentials and make no LLM calls. Live checks need a filled-in `.env`.
 
-## Decisions to confirm
+## Decisions
 
-The steps are written assuming the recommended option for each. Choosing another option changes the steps named in its heading.
+Each decision went with its recommended option A, and the steps were built that way. Choosing another option later changes the steps named in its heading.
 
 ### D1. Which reasoning loop? (affects Steps 6 and 7)
 
@@ -25,6 +25,8 @@ The brief asks for "ReAct or Plan--Act--Check loops".
 
 - **A (recommended): Plan-Act-Check across the team.** The Chief of Staff plans, the specialists act, and the Chief of Staff checks their reports and sends weak ones back with feedback. This is the hierarchical loop the brief describes, and it needs no external tools.
 - **B: also ReAct inside each specialist**, with tools such as web search for market data. The output is better grounded, but it adds a search dependency, more LLM calls and more to debug. It can be added after Step 8 if time allows.
+
+**Chosen: A.** No specialist uses external tools.
 
 ### D2. Which LLM providers? (affects Step 1)
 
@@ -34,6 +36,8 @@ The team has Azure OpenAI credentials. The brief's variable table lists `OPENAI_
 - **B: Azure OpenAI, OpenAI and Anthropic.** Matches the brief's full table, at the cost of one more dependency and a code path nobody on the team can test live.
 - **C: Azure OpenAI only.** Simplest, but ignores the brief's variables.
 
+**Chosen: A.** See `llm.py`.
+
 ### D3. Are follow-up requests in scope? (affects Step 8)
 
 The brief's third sample prompt, "Refine the pricing strategy after financial review.", only makes sense as a follow-up to an earlier run, and the demonstration deliverable asks for an "iterative refinement example".
@@ -41,23 +45,28 @@ The brief's third sample prompt, "Refine the pricing strategy after financial re
 - **A (recommended): yes.** A session keeps the earlier reports, and a follow-up reruns only the specialists it affects.
 - **B: no.** Every request is independent. Step 8 is dropped, and the refinement example is shown through the review loop of Step 6 alone.
 
+**Chosen: A.** Built in Step 8.
+
 ### D4. One specialist implementation or four? (affects Steps 2 and 3)
 
 - **A (recommended): one shared specialist node driven by four role definitions.** The four agents differ only in their role text, so this avoids four near-identical files.
 - **B: one module per agent.** More duplication, but easier to divide between pairs, and the better fit if D1 goes to option B and the agents get different tools.
 
-## Target workflow
+**Chosen: A.** See `agents/specialist.py` and `agents/roles.py`.
 
-Where the steps lead, assuming the recommended options. Each box names the step that builds it.
+## Workflow
+
+The workflow as built. Each box names the step that built it. Review comes before cross-critique, so specialists only critique reports that passed review. The exact state machine, generated from the code, is in [docs/architecture.md](docs/architecture.md).
 
 ```mermaid
 graph TD
     IN([Founder request]) --> PLAN["Chief of Staff: plan (Step 4)"]
     PLAN -.->|assigned specialists only| SPEC["Specialists in parallel (Steps 2-3)<br/>Marketing, Finance, Technical, Risk"]
-    SPEC --> CROSS["Cross-critique: specialists flag conflicts (Step 7)"]
-    CROSS --> REVIEW{"Chief of Staff: review (Step 6)"}
+    SPEC --> REVIEW{"Chief of Staff: review (Step 6)"}
     REVIEW -.->|needs work, with feedback| SPEC
-    REVIEW -->|approved| SYN["Chief of Staff: synthesis (Step 5)"]
+    REVIEW -->|approved| CROSS["Cross-critique, Chief of Staff resolves (Step 7)"]
+    CROSS -.->|revise to match a decision, once| SPEC
+    CROSS --> SYN["Chief of Staff: synthesis (Step 5)"]
     SYN --> OUT([Unified launch strategy])
 ```
 
@@ -100,7 +109,7 @@ uv run pytest            # 1 passed
 uv run python main.py    # then open http://localhost:8000/health
 ```
 
-### Step 1 - LLM connection
+### Step 1 - LLM connection (Done)
 
 **Goal:** every agent gets its chat model from one place, configured only through `.env`.
 
@@ -123,7 +132,7 @@ uv run python main.py    # then open http://localhost:8000/health
 - The live check works with real credentials.
 - `.env` is not tracked by git.
 
-### Step 2 - First specialist, end to end
+### Step 2 - First specialist, end to end (Done)
 
 **Goal:** prove the whole path once: API request, LangGraph, one agent, the LLM, and back.
 
@@ -153,7 +162,7 @@ uv run python main.py    # then open http://localhost:8000/health
 - Context fields, when sent, show up in the analysis.
 - `DEBUG_MODE=true` shows the graph steps in the server log.
 
-### Step 3 - All four specialists in parallel
+### Step 3 - All four specialists in parallel (Done)
 
 **Goal:** the full team of specialists answers the same request at the same time.
 
@@ -173,7 +182,7 @@ uv run python main.py    # then open http://localhost:8000/health
 - Each analysis stays inside its own area of responsibility.
 - The four role definitions read clearly enough to go into the documentation unchanged.
 
-### Step 4 - Chief of Staff: plan and delegate
+### Step 4 - Chief of Staff: plan and delegate (Done)
 
 **Goal:** a manager agent decides who works on what, instead of everyone answering everything.
 
@@ -194,7 +203,7 @@ uv run python main.py    # then open http://localhost:8000/health
 - The response shows the objective and who was given which task.
 - No LLM call is made for a specialist that was not assigned.
 
-### Step 5 - Chief of Staff: synthesis
+### Step 5 - Chief of Staff: synthesis (Done)
 
 **Goal:** the founder gets one strategy, not a pile of separate reports.
 
@@ -214,7 +223,7 @@ uv run python main.py    # then open http://localhost:8000/health
 - The strategy uses only what the specialists reported.
 - A request delegated to only two specialists still produces a strategy.
 
-### Step 6 - Review and refine loop
+### Step 6 - Review and refine loop (Done)
 
 **Goal:** weak reports are caught and improved before they reach the strategy. This closes the Plan-Act-Check loop (see D1).
 
@@ -237,7 +246,7 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - Only rejected reports cost another LLM call.
 - The loop always terminates.
 
-### Step 7 - Cross-specialist critique
+### Step 7 - Cross-specialist critique (Done)
 
 **Goal:** specialists challenge each other, and the Chief of Staff settles the disagreements.
 
@@ -257,7 +266,7 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - Every conflict in the response has a recorded resolution.
 - A request with no conflicts costs no more than it did after Step 6.
 
-### Step 8 - Follow-up requests
+### Step 8 - Follow-up requests (Done)
 
 **Goal:** the founder can come back to the same venture and refine one part of it (see D3).
 
@@ -277,7 +286,7 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - The follow-up changes the pricing part of the strategy and leaves unrelated parts intact.
 - The follow-up makes fewer LLM calls than a full evaluation.
 
-### Step 9 - Scenarios and demo
+### Step 9 - Scenarios and demo (Done)
 
 **Goal:** fixed scenarios that we test against, measure with, and present.
 
@@ -296,7 +305,7 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - Someone who has not seen the code can follow the walkthrough.
 - One scenario shows an iterative refinement from start to finish.
 
-### Step 10 - Optimization and error handling
+### Step 10 - Optimization and error handling (Done)
 
 **Goal:** the workflow is measurably cheaper and faster, and fails gracefully.
 
@@ -317,7 +326,7 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - `docs/performance.md` shows a measured improvement over the baseline, and what was given up for it.
 - No single failed LLM call produces a 500 response.
 
-### Step 11 - Documentation
+### Step 11 - Documentation (Done)
 
 **Goal:** the brief's documentation deliverables, written from the finished system.
 
