@@ -4,8 +4,12 @@ A thin client over the FastAPI backend, in two pages:
 
 - Evaluate (ui/evaluate_page.py): run the founding team on an idea and send
   follow-ups in the same session.
-- Reports (ui/reports_page.py): edit each session's written report beside a
-  live PDF preview, have the agents write a detailed version, and download it.
+- Reports (ui/reports_page.py): read and edit each session's report, have the
+  agents write it up as an investment proposal with charts, open the PDF and
+  ask the team to revise it, and download it.
+
+The sidebar sets how hard the specialists and the Chief of Staff reason for the
+requests both pages send.
 
 This is the working UI until the Next.js app in frontend/ is built.
 
@@ -15,7 +19,7 @@ Start the backend (uv run python main.py), then:
 
 import streamlit as st
 
-from ui import api
+from ui import api, reasoning
 
 
 def start_new_session() -> None:
@@ -33,12 +37,14 @@ page = st.navigation(
 
 with st.sidebar:
     st.subheader("Backend")
-    if api.backend_service():
+    health = api.health()
+    if health:
         st.success(f"Connected to {api.API_URL}")
     else:
         st.error(f"Can't reach {api.API_URL}. Start it with `uv run python main.py`.")
     if st.session_state.get("session_id"):
         st.caption(f"Session {st.session_state.session_id}")
         st.button("Start a new session", on_click=start_new_session)
+    reasoning.sidebar(health)
 
 page.run()

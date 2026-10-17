@@ -10,7 +10,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from ui import api
+from ui import api, reasoning
 
 SCENARIO_DIR = Path(__file__).resolve().parent.parent / "scenarios"
 NO_SCENARIO = "(none)"
@@ -47,9 +47,10 @@ def run(prompt: str, context: dict) -> bool:
 
     Returns False, with the reason shown, if the request failed.
     """
-    with st.spinner("The founding team is working. This takes a minute or two."):
+    with st.spinner(f"The founding team is working. {reasoning.wait('evaluation')}"):
         try:
-            result = api.evaluate(prompt, context, st.session_state.get("session_id"))
+            result = api.evaluate(prompt, context, st.session_state.get("session_id"),
+                                  reasoning.chosen())
         except api.ApiError as error:
             st.error(str(error))
             return False
@@ -137,7 +138,7 @@ else:
     show_result(runs[-1]["result"])
     st.page_link(
         "ui/reports_page.py",
-        label="Edit this session's report and download it as a PDF",
+        label="Open this session's report: edit it, write the investment proposal, get the PDF",
         icon=":material/description:",
     )
 
