@@ -63,31 +63,52 @@ One shared specialist node is driven by four role definitions
 (`agents/roles.py`), so the agents differ only in their point of view, not their
 code.
 
-- **Marketing Strategy Agent** — customer niches, positioning, demand, and
-  go-to-market; recommends one niche to test first.
-- **Financial Planning Agent** — start-up costs, pricing, and how to begin
-  affordably; recommends a pricing model and a spending limit.
-- **Technical Feasibility Agent** — what to build first, the minimum tools, and
-  the main technical risks; recommends a first demo and how to prove it.
-- **Risk & Compliance Agent** — privacy, reliability, delivery, and
-  client-management risks; recommends the safeguards and limits for v1.
+- **Marketing Strategy Agent** — a go-to-market lead: the beachhead niche, who
+  buys and why now, positioning against the alternatives, affordable channels,
+  and the cheapest experiment that validates demand, with its success threshold.
+- **Financial Planning Agent** — a startup CFO: a pricing model and price point,
+  the first-phase spending limit by line, gross margin per customer, the
+  customers needed to break even, and the runway.
+- **Technical Feasibility Agent** — a pragmatic CTO: the thinnest first demo,
+  build or buy for each part, an effort estimate, the riskiest technical
+  assumption and how to test it, and proof before real customer data.
+- **Risk & Compliance Agent** — a risk and compliance lead: the risks that could
+  stop the launch or harm customers, with likelihood and severity, a safeguard
+  for each, the limits for v1, and what the law requires versus good practice.
 
-Every role answers in a few short, concrete points, at most `REPORT_WORDS` (250)
-words.
+Every role leads with its recommendation, names concrete customers, prices,
+tools and dates, shows the arithmetic behind its numbers, marks assumptions, and
+keeps to at most `REPORT_WORDS` (250) words. A revised or follow-up report is
+rewritten whole, so it stands on its own.
 
 The Chief of Staff (`agents/chief_of_staff.py`) is the manager: it plans,
 reviews, resolves conflicts, and synthesises. It is not a specialist and holds
-no area of its own.
+no area of its own. Its calls are the team's decisions, so they run on their own
+model with a higher reasoning effort (`AZURE_OPENAI_CHIEF_REASONING_EFFORT`,
+`medium`) than the specialists' (`AZURE_OPENAI_REASONING_EFFORT`, `minimal`). It
+also sees the founder's request and constraints in every review, resolve and
+synthesis call, not only the reports.
+
+Those efforts are the defaults. A request can choose its own for either role
+(`reasoning` in the body of `/evaluate` and of the proposal requests), which is
+what the UI's two sliders send. `llm.reasoning()` holds the choice in a context
+variable for the length of the request; the graph's and the proposal writer's
+worker threads inherit it, so every call the request makes uses it. Only
+`minimal` to `high` can be chosen: the deployment accepts `xhigh` but then does
+no reasoning. Calls at `high` get a longer timeout (`LLM_TIMEOUT_HIGH`, 300 s).
 
 ## Delegation logic
 
 1. **Plan.** The Chief of Staff reads the request and produces a structured
    `DelegationPlan` (pydantic): an objective and one task per specialist the
-   request needs. It plans from each role's `focus` line, so it knows what every
-   specialist covers. Evaluating a whole idea goes to all four; a narrower
+   request needs. It first works out the decision at stake, the constraints that
+   bind it and what is uncertain, and states the objective as that decision. It
+   plans from each role's `focus` line, so it knows what every specialist
+   covers. Evaluating a whole idea goes to all four; a narrower
    request goes only to the specialist whose area it asks about, plus the owner
    of the plan or decision it refers to (risks in a go-to-market plan: Risk and
-   Marketing). Tasks are kept to one or two sentences. The plan's schema allows
+   Marketing). Each task is one or two sentences: the question to answer for
+   this venture and the constraint the answer must respect. The plan's schema allows
    only the four specialist names (`SpecialistName`), so the model cannot name
    one another way. If the plan names none, all four are assigned, so a request
    is never dropped.
@@ -101,8 +122,12 @@ no area of its own.
 The workflow closes a Plan-Act-Check loop and adds a cross-critique round. Both
 loops are bounded so the workflow always terminates.
 
-- **Review (Plan-Act-Check).** The Chief of Staff scores each report against its
-  task. A rejected report goes back to its specialist with feedback; the
+- **Review (Plan-Act-Check).** The Chief of Staff scores each report from 1 to 5
+  against a rubric: it answers its task, is specific to this venture, its
+  figures respect the constraints and agree with each other, and it can be acted
+  on. A score of `APPROVAL_SCORE` (4) or more approves it; the code applies the
+  score, because the model has scored a report 4 and still rejected it. Feedback
+  asks only for what fits in a 250-word brief. A rejected report goes back to its specialist with feedback; the
   specialist revises it. Bounded by `MAX_ITERATIONS` (1 in the initial version),
   so a weak report is revised at most once. Only rejected reports cost another
   call. A round's reports are reviewed at the same time.
@@ -111,16 +136,23 @@ loops are bounded so the workflow always terminates.
   own area (a price, a budget, a timeline, the scope of the first offer) so that
   the founder could not follow both; at most two each. The specialists critique
   at the same time. The Chief of Staff settles all of the round's conflicts in
-  one call, treating a clash raised from
-  both sides as one, records each decision, and sends the affected specialist
+  one call, with the reports and the founder's constraints in view, treating a
+  clash raised from both sides as one. It decides by the founder's hard
+  constraints first (budget, runway, team, law), then the evidence in the
+  reports, then which option keeps the most choices open at the lowest cost; a
+  legal or safety requirement outranks speed or revenue. It records each concrete
+  decision with its reason, and sends the affected specialist
   back to revise with every decision that applies to it. Bounded by
   `MAX_CRITIQUE_ROUNDS` (1): after the last allowed round, a revised report goes
   straight to synthesis instead of through another critique pass that could not
   change anything. Skipped entirely when only one specialist was assigned, since
   there is no one to critique against.
 - **Synthesis.** The Chief of Staff merges the approved reports into one launch
-  strategy: a recommendation, the reasoning, where specialists differ, and
-  prioritised next steps, in at most `STRATEGY_WORDS` (500) words. It uses only
+  strategy that leads with a recommendation (go, go with conditions, or not yet)
+  and its main reason, then the facts that drive it, how each disagreement was
+  settled, the key risks and how the plan contains them, prioritised next steps
+  with owners and timeframes, and early metrics, with the budget, prices, scope
+  and timeline the same throughout; at most `STRATEGY_WORDS` (500) words. It uses only
   what the specialists reported, and is given its own conflict decisions so the
   strategy follows them and says how each disagreement was settled.
 
@@ -146,8 +178,8 @@ No failed LLM call produces a 500. Each failure is handled where it happens:
 
 `POST /evaluate` awaits `graph.ainvoke`, which runs the nodes in worker threads,
 so a request that takes a minute or more does not block the server. The model
-client is built once and reused (`get_llm` is cached), so every call shares one
-connection pool.
+client for each reasoning effort is built once and reused, so its calls share
+one connection pool.
 
 Two clients use the API:
 
@@ -164,28 +196,50 @@ Each session has a written report: the founder's document, separate from the
 workflow's state, so editing it never changes what the agents produced.
 
 - **Recorded after every evaluation.** `/evaluate` hands the session's latest
-  results to the report store (`reports.py`). The report is one markdown section
-  each for the strategy, every specialist's report and the decisions on
-  conflicts. A follow-up rebuilds a report nobody has touched; an edited or
-  detailed report is kept, so no work is lost, and marked `outdated` until the
-  founder resets it.
-- **Edited section by section.** Every change raises the report's `version`. A
-  save names the version it was made to, and a save made to an older version is
-  refused (409), so two open editors cannot silently overwrite each other.
-- **Detailed on demand.** Evaluations keep reports short so they stay fast.
-  `POST /reports/{session_id}/detailed` (`agents/report_writer.py`) has each
-  specialist expand its section from the text as it now stands, edits included,
-  all at the same time, and then the Chief of Staff rewrites the strategy from
-  the expanded sections: five LLM calls, about a minute. A section whose call
-  fails keeps its text and is named in the response.
-- **Rendered as a PDF.** `report_pdf.py` turns each section's markdown into HTML
-  with markdown-it and lays it out with fpdf2, in the bundled DejaVu Sans font
-  (`assets/fonts/`): the PDF core fonts cannot show ≈, ≤, → or curly quotes,
-  which the agents use all the time. Raw HTML is printed as text and images are
-  not loaded, so a report cannot make the server fetch anything. A render takes
-  about 0.1 s, so the Reports page redraws its preview after every saved edit.
-  The page shows the PDF's pages as images (drawn with pypdfium2), because a PDF
-  viewer draws A4 pages at a fixed width and cuts them off in a narrow column.
+  results to the report store (`reports.py`). The team's report is one markdown
+  section each for the strategy, every specialist's report and the decisions on
+  conflicts. A follow-up rebuilds a report nobody has touched; an edited report,
+  or one with a proposal, is kept, so no work is lost, and marked `outdated`
+  until the founder resets it.
+- **Edited in place.** Every change raises the report's `version`. A save names
+  the version it was made to, and a save made to an older version is refused
+  (409), so two open editors cannot silently overwrite each other.
+- **Written up as an investment proposal on demand.** Evaluations keep reports
+  short so they stay fast. `POST /reports/{session_id}/proposal`
+  (`agents/proposal_writer.py`) has the agents write the report up following an
+  investment-proposal template (`proposal.py`): executive summary, market and
+  marketing, technical and operational architecture, financial plan, risk matrix
+  and KPIs. Each part is structured data (figures and tables, with markdown for
+  the prose) written by the agent that owns it, in three waves: Marketing,
+  Technical and Risk & Compliance at the same time; then Finance, with the market
+  and technical parts in front of it so its costs match the channel budgets, team
+  and stack; then the Chief of Staff's executive summary and KPIs, from all four
+  and the investment metrics. NPV, IRR, payback and break-even are calculated in
+  code from Finance's figures (`investment_metrics`), not written by a model, and
+  come back with the report as `investment`. A new proposal with a part missing
+  is not saved (502).
+- **Revised by instruction.** `POST /reports/{session_id}/proposal/revise`
+  applies the founder's instruction to one part, or to all of them: the part's
+  agent rewrites it from its current version, then the parts written from it are
+  brought into line (a market change reaches Finance and the executive summary).
+  A part whose call fails keeps its text and is named in `failed`.
+  `PUT /reports/{session_id}/proposal` saves the founder's own edits.
+- **Rendered as a PDF.** `report_pdf.py` lays the proposal out with fpdf2: a
+  cover with the document control and the recommendation, the template's
+  sections with charts drawn from the figures (`report_charts.py`: market-size
+  circles, the sales funnel, the roadmap, cost breakdowns, revenue against
+  costs, the cash position, a risk heat map, stat tiles and KPI cards), and the
+  team's report as an appendix. Every section carries a label naming the agent
+  it came from, or "calculated", and figures the agents marked as assumptions
+  are highlighted. Before a proposal is written, the PDF is the team's report.
+  Markdown becomes HTML with markdown-it, set in the bundled DejaVu Sans font
+  (`assets/fonts/`) because the PDF core fonts cannot show ≈, ≤, → or curly
+  quotes. Raw HTML is printed as text and images are not loaded, so a report
+  cannot make the server fetch anything.
+- **Read on screen.** The Reports page shows the same content as text, tables
+  and charts in the page (no boxes that scroll on their own), a tab per section,
+  each with an "Edit" switch. The PDF opens in a pop-up, as page images drawn
+  with pypdfium2, beside the inline prompt that sends a revision.
 
 Reports are kept in memory, like sessions, and are lost when the API restarts.
 
@@ -262,12 +316,27 @@ break follow-ups.
   time instead of one after another. The calls and tokens are unchanged; the
   price is bursts of up to four simultaneous calls, which reach a provider's
   rate limit sooner.
-- **Detailed reports only on request.** Writing every report in full would make
-  each evaluation about twice as slow. The short version is kept for the
-  workflow, and the detailed one costs five more calls only when asked for.
+- **The proposal only on request.** Writing the full proposal in every
+  evaluation would make each one about twice as slow. The short reports are
+  kept for the workflow, and the proposal costs five more calls only when asked
+  for.
+- **Proposal parts as structured data.** The charts and the investment metrics
+  need numbers, not prose, so each part is a schema the model fills in. The
+  price is a rigid shape: anything that does not fit a field goes in the prose
+  fields. Finance writes after Marketing and Technical, which costs one extra
+  wave of waiting but keeps the budgets, team and costs consistent.
+- **Metrics in code.** NPV, IRR and payback are calculated from the projections
+  rather than written by the model, so they always match the figures and are
+  recalculated when the founder edits one.
 - **Reports in memory.** Like sessions, reports are lost when the API restarts.
   Keeping them in a database would survive restarts, at the cost of a storage
   dependency the project does not otherwise need.
+- **Deeper reasoning for the Chief of Staff by default.** Its decisions (the
+  plan, reviews, resolutions and synthesis) are a handful of calls, while the
+  specialists make most of them, so reasoning harder there improves the
+  decisions at a fraction of the cost of reasoning harder everywhere. The
+  founder can trade time for depth per request with the sliders. See
+  [performance.md](performance.md) for the measured cost.
 - **Provider by credentials.** Azure OpenAI or OpenAI is chosen by which
   credentials are set, so switching providers needs no code change.
 

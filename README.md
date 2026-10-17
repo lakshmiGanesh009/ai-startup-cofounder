@@ -212,8 +212,8 @@ uv run python main.py
 
 The API listens on http://localhost:8000, with interactive docs at http://localhost:8000/docs.
 
-- `GET /health` — health check.
-- `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), and optional `session_id` for a follow-up. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. A full evaluation takes about a minute. Missing credentials return 503, and an LLM call that still fails after its retries returns 502.
+- `GET /health` — health check, with the reasoning efforts a request can choose and the configured defaults.
+- `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), optional `session_id` for a follow-up, and optional `reasoning` (`{"specialist": "low", "chief": "high"}`, each `minimal`, `low`, `medium` or `high`) to override the configured efforts for this request. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. A full evaluation takes about two minutes at the default efforts, 5–10 minutes with the Chief of Staff at `high`. Missing credentials return 503, and an LLM call that still fails after its retries returns 502.
 
 ```bash
 curl -X POST http://localhost:8000/evaluate \
@@ -226,11 +226,13 @@ Send a follow-up by passing the `session_id` from the first response; only the s
 Each session also has a written report, kept by the API (in memory, like the sessions):
 
 - `GET /reports` — every session's report, newest first.
-- `GET /reports/{session_id}` — the report: a markdown section each for the strategy, the specialists' reports and the decisions on conflicts, with a `version`.
+- `GET /reports/{session_id}` — the report: a markdown section each for the strategy, the specialists' reports and the decisions on conflicts, with a `version`; once written, the investment `proposal`, its calculated `investment` metrics (revenue and OpEx by year, NPV, IRR, payback, break-even) and any failing `checks` on its figures.
 - `PUT /reports/{session_id}` — save edited sections. Send the `version` you edited; if the report changed since, the save is refused with 409.
-- `POST /reports/{session_id}/detailed` — each specialist expands its section and the Chief of Staff the strategy (about a minute).
-- `POST /reports/{session_id}/reset` — rebuild the report from the session's latest results, dropping edits.
-- `GET /reports/{session_id}/pdf` — the report as a PDF.
+- `POST /reports/{session_id}/proposal` — the agents write the investment proposal from the report as it stands: executive summary, market and marketing, technical and operational architecture, financial plan, risk matrix and KPIs. Body: `version`, optional `reasoning`. About 1–1.5 minutes at the default efforts.
+- `POST /reports/{session_id}/proposal/revise` — apply an instruction to one part (`part`: `executive`, `market`, `technical`, `risk` or `financial`) or to the whole proposal; the parts built on it are brought into line. Body: `version`, `instruction`, optional `part` and `reasoning`. About a minute for one part.
+- `PUT /reports/{session_id}/proposal` — save an edited proposal (`version`, `proposal`).
+- `POST /reports/{session_id}/reset` — rebuild the report from the session's latest results, dropping edits and the proposal.
+- `GET /reports/{session_id}/pdf` — the report as a PDF: the investment proposal with charts once it is written, else the team's report.
 
 ### Run the UI
 
@@ -243,7 +245,9 @@ uv run --group ui streamlit run streamlit_app.py
 It opens on http://localhost:8501, with two pages in the sidebar. It finds the API at `API_URL` (http://localhost:8000 by default).
 
 - **Evaluate** — pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session.
-- **Reports** — each session's written report. Edit its sections on the left while the PDF preview on the right follows (a change is saved when you click out of its box). **Write the detailed version** has the agents expand their short reports into full sections, **Reset to the latest results** starts again from the evaluation, and **Download PDF** saves it.
+- **Reports** — each session's report, read on the page as text, tables and charts. **Write the investment proposal** has the agents write it up following an investment-proposal template; each section then has a tab, a label naming the agent that wrote it, and an **Edit** switch. **Open PDF** shows the document in a pop-up, where you can ask the team to revise one part or the whole proposal, and download it. **Reset to the latest results** starts again from the evaluation.
+
+The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time.
 
 The Next.js frontend in [frontend/](frontend/) is a scaffold that will replace the Streamlit UI: it is wired to the API but has no evaluation UI yet. See [frontend/README.md](frontend/README.md) to run it.
 
@@ -266,7 +270,7 @@ Tests use a fake model, so they need no credentials and make no LLM calls. Witho
 
 ### Configuration
 
-Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default), and `API_URL` tells the Streamlit UI where the API is.
+Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default), and `API_URL` tells the Streamlit UI where the API is.
 
 ### Project structure
 
@@ -280,14 +284,17 @@ metrics.py                 Per-node run metrics
 agents/roles.py            The four specialist role definitions
 agents/specialist.py       Shared specialist node
 agents/chief_of_staff.py   Plan, delegate, review, critique, synthesise
-agents/report_writer.py    Detailed version of a report, on demand
+agents/proposal_writer.py  Writes and revises the investment proposal
+proposal.py                The proposal's parts, and the metrics calculated from them
 reports.py                 Each session's written report, and their store
-report_pdf.py              Renders a report as a PDF
+report_pdf.py              Renders a report or proposal as a PDF
+report_charts.py           The PDF's charts and visual blocks
 assets/fonts/              DejaVu Sans, the PDF's font
 scenarios/                 Startup scenarios for the demo and tests
 demo.py                    Scenario walkthrough script
 streamlit_app.py           Streamlit UI: navigation and sidebar
-ui/                        Streamlit pages (Evaluate, Reports) and API client
+ui/                        Streamlit pages (Evaluate, Reports), the proposal view,
+                           the reasoning sliders and the API client
 frontend/                  Next.js frontend (scaffold)
 tests/                     Automated tests
 docs/                      Architecture and performance docs

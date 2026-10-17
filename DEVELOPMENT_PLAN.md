@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, and Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand. Next is Step 14, the Next.js UI.
+**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand, Step 16 sharpened every prompt and gave the Chief of Staff deeper reasoning, and Step 17 turned the report into an investment proposal with charts, revisable by instruction from a PDF pop-up, and added reasoning sliders. Next is Step 14, the Next.js UI.
 
 ## How we work
 
@@ -90,6 +90,8 @@ graph TD
 | 13 | Streamlit UI and Next.js scaffold | Live walkthrough, backend service for a frontend | Done |
 | 14 | Next.js UI | Live walkthrough; replaces the Streamlit UI | Next |
 | 15 | Reports: editor, detailed version and PDF | Synthesis into a cohesive strategy document | Done |
+| 16 | Sharper prompts, deeper Chief of Staff reasoning | Delegation and synthesis effectiveness, reflection and self-correction | Done |
+| 17 | Investment proposal, charts and reasoning sliders | Synthesis into a cohesive strategy document; structured outputs | Done |
 
 ## Live verification
 
@@ -111,6 +113,8 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 12 | The scenarios rerun as in [docs/performance.md](docs/performance.md) | Pass: first requests take 41–59% less time (108–116 s down to 44–64 s) and follow-ups 42–44% less, with the same calls and no rise in rejected reports. Reports run about 450 words and strategies about 570; a healthcare report and strategy read as specific and complete. |
 | 13 | The API, the Streamlit UI and the Next.js app together | Pass: `/health` answered in under 2 ms during a 62 s evaluation. A follow-up sent through the Streamlit UI reran Finance and Marketing in the same session (14 calls). Headless Chrome loaded the Next.js app and showed "Connected", and "Can't reach" with the API stopped. The CORS preflight is allowed for `http://localhost:3000` only. |
 | 15 | A scenario's report on the Reports page, in headless Chrome against Azure OpenAI | Pass: the report and a 6–10 page preview appear after the evaluation. An edit typed in the browser is saved (version 2), shown in the preview and kept by the detailed version, which took 29–34 s and grew the sections from about 330–640 words to about 970–1,340 (13–15 pages). No errors on the page. |
+| 16 | The three scenarios with the Chief of Staff at `medium` and at `high`, against the old prompts; the Reports flow in headless Chrome | Pass: evaluations take 89–130 s at `medium` (50–56 s before) and 5–9.5 minutes at `high`; `medium` was chosen. `xhigh` is accepted but does no reasoning on `gpt-5-mini`. Review caught two weak reports that came back improved; decisions and the strategy are concrete and consistent. The Reports flow passed 14 of 14 checks. |
+| 17 | Two scenarios evaluated, their proposals written and revised against Azure OpenAI; the PDFs read page by page; the Reports page in headless Chrome | Pass after fixes: writing takes 57–82 s and a one-part revision 40–54 s. The live runs moved the projections' arithmetic into code, added the figure checks and the financial case, retried a content-filtered reply, and fixed an IRR above 1,000% shown as "none" (see [docs/performance.md](docs/performance.md)). In the browser, 27 of 27 checks: the sliders, a tab per section, no inner scroll boxes, an edit saved, and the PDF pop-up's revision adding the requested risk, with no console errors from the app. |
 
 ### Fixed during live verification
 
@@ -462,10 +466,52 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - An edit appears in the PDF preview after it is saved.
 - The detailed version keeps the edits and every recommendation, and the PDF reads as one document.
 
+### Step 16 - Sharper prompts, deeper Chief of Staff reasoning (Done)
+
+**Goal:** better decisions from the same workflow: sharper specialists, and a Chief of Staff that reasons harder about what it decides.
+
+**Built:**
+
+- `agents/roles.py`, `agents/specialist.py`: each specialist is an expert persona with concrete deliverables (for example the marketer's beachhead niche, channels and validation experiment with its success threshold), leads with its recommendation, names concrete figures, shows its arithmetic and marks assumptions. A revised or follow-up report is rewritten whole.
+- `agents/chief_of_staff.py`: planning states the objective as the decision at stake and gives each task its question and binding constraint; review scores against a rubric, and the score decides the verdict (`APPROVAL_SCORE`, 4); resolving conflicts follows a decision order (hard constraints, then evidence, then optionality; law and safety first) with the reports in view; synthesis leads with go, go with conditions, or not yet, and keeps figures consistent. Review, resolve and synthesis all see the founder's request and constraints.
+- `llm.py`, `config.py`: the Chief of Staff's calls use their own reasoning effort (`AZURE_OPENAI_CHIEF_REASONING_EFFORT`, `medium`), the specialists' theirs (`minimal`); the per-call timeout is 120 s, a few times the slowest normal call, so a stalled Azure request is retried sooner.
+- `agents/report_writer.py`: the detailed sections and strategy are written to the same standard, the strategy on the Chief of Staff's model (replaced by the proposal writer in Step 17).
+
+**Check:**
+
+- Automated: the Chief of Staff's calls run on its model and the specialists' on theirs; review, resolve and synthesis see the founder's request and constraints; the score decides the verdict; the effort settings and their fallback.
+- Live: the scenarios at each effort, timed, and their outputs compared with the old prompts (see [docs/performance.md](docs/performance.md)).
+
+**Done when:**
+
+- The decisions and strategy are measurably more concrete and consistent, and the extra time is known and chosen.
+
+### Step 17 - Investment proposal, charts and reasoning sliders (Done)
+
+**Goal:** the report becomes an investment proposal an investor can read: the founder's template (executive summary, market and marketing, technical and operational architecture, financial plan, risk matrix, KPIs) with charts, each part marked with the agent it came from; the Reports page easier to read; and the founder choosing how hard the agents reason.
+
+**Built:**
+
+- `proposal.py`: the proposal as structured data, one model per part. Finance gives each year's drivers (customers, fixed costs, one-off fees); each year's revenue and OpEx and the investment metrics (NPV, IRR, payback, break-even, net margins) are calculated from them, and `figure_checks` flags figures that disagree (year one's costs against the launch OpEx, revenue against the SOM, average against year-end customers).
+- `agents/proposal_writer.py` (replaces `agents/report_writer.py` and the detailed version): the agents write their parts from the report as it stands, in three waves (Marketing, Technical and Risk together; then Finance, from the market and technical parts; then the Chief of Staff's executive summary and KPIs, from all four and the metrics). Finance is given what the other parts commit to spend, and a failed figure check sends its plan back once for correction. The executive summary includes a required financial case that faces weak returns. A revision applies the founder's instruction to one part or all of them, and brings the parts written from it into line. A reply withheld by Azure's content filter is retried once.
+- `report_charts.py`, `report_pdf.py`: the proposal PDF: a cover with the document control and recommendation, the template's sections with charts drawn by fpdf2 (market-size circles, funnel, roadmap, cost bars, revenue against costs, cash position, risk heat map and risk cards, stat tiles, KPI cards), source labels on every section ("written by" an agent, or "calculated"), highlighted assumptions, failing figure checks, and the team's report as an appendix.
+- `main.py`: `POST /reports/{id}/proposal`, `POST .../proposal/revise`, `PUT .../proposal` (replacing `POST .../detailed`); the report carries the calculated `investment` metrics; `/evaluate` and the proposal requests take `reasoning` per role; `/health` reports the efforts.
+- `llm.py`, `config.py`: a request's efforts held in a context variable that the worker threads inherit; one model client per effort; `LLM_TIMEOUT_HIGH` (300 s) for calls at `high`.
+- `ui/reports_page.py`, `ui/proposal_view.py`, `ui/reasoning.py`: the Reports page shows the report as text, tables and charts with no inner scroll boxes, a tab per proposal section with an "Edit" switch, the PDF in a pop-up with an inline prompt to revise a part, and two reasoning sliders in the sidebar.
+
+**Check:**
+
+- Automated: revenue, OpEx and the metrics on known drivers; the figure checks, and Finance's one correction; the proposal written in waves from the edited report, with the other parts' commitments summed for Finance; a part revision reaching the parts built on it; a whole-proposal instruction reaching every part; a failed part kept on revision and a new proposal with a part missing refused; stale versions refused; edits saved; the PDF drawn for loss-making, empty and over-long figures; chosen efforts reaching every call, including worker threads, and `xhigh` refused; the Reports page's proposal, edits and pop-up revision.
+- Live: a scenario evaluated, its proposal written and one part revised against Azure OpenAI, timed, the PDF read page by page, and the Reports page in headless Chrome.
+
+**Done when:**
+
+- The proposal follows the template with charts drawn from its figures, its numbers agree across parts, a revision changes what it was asked to, and the founder can read, edit, revise and download it from the Reports page.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward
@@ -474,14 +520,16 @@ metrics.py                 Per-node run metrics               Step 10
 agents/roles.py            Specialist role definitions        Steps 2-3
 agents/specialist.py       Specialist node                    Steps 2, 4, 6
 agents/chief_of_staff.py   Plan, delegate, review, synthesise Steps 4-8
-agents/report_writer.py    Detailed version of a report       Step 15
-reports.py                 Written reports and their store    Step 15
-report_pdf.py              Report as a PDF                    Step 15
+proposal.py                Investment proposal and metrics    Step 17
+agents/proposal_writer.py  Writes and revises the proposal    Step 17
+reports.py                 Written reports and their store    Steps 15, 17
+report_pdf.py              Report as a PDF                    Steps 15, 17
+report_charts.py           The PDF's charts                   Step 17
 assets/fonts/              The PDF's font                     Step 15
 tests/                     Automated tests                    every step
 scenarios/                 Startup scenarios                  Step 9
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-streamlit_app.py, ui/      Streamlit UI and its pages         Steps 13, 15
+streamlit_app.py, ui/      Streamlit UI and its pages         Steps 13, 15, 17
 frontend/                  Next.js frontend                   Steps 13-14
 ```
