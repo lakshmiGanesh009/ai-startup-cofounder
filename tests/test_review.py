@@ -61,3 +61,29 @@ def test_loop_stops_at_max_iterations(fake_llm, thread):
     assert fake_llm.specialist_calls["marketing"] == 2
     assert result["final_strategy"]
     assert fake_llm.synthesis_calls == 1
+
+
+def test_the_score_decides_the_verdict(fake_llm, thread):
+    # Live, the model has scored a report 4 and still rejected it, and the other
+    # way round; the verdict follows the score so the rubric holds.
+    fake_llm.plan = DelegationPlan(
+        objective="Evaluate the request.",
+        tasks=[Task(specialist="marketing", task="Position it."),
+               Task(specialist="finance", task="Price it.")],
+    )
+
+    def review_for(report: str) -> ReviewResult:
+        if "Marketing Strategy Agent" in report:
+            return ReviewResult(approved=False, score=4, feedback="Could be sharper.")
+        return ReviewResult(approved=True, score=3, feedback="The prices contradict each other.")
+
+    fake_llm._review_for = review_for
+    graph = build_graph()
+
+    result = graph.invoke({"request": "Evaluate an AI tool."}, thread)
+
+    first_round = result["review_history"][0]
+    assert first_round["marketing"].approved and first_round["marketing"].feedback == ""
+    assert not first_round["finance"].approved
+    # Only the report that scored 3 was sent back.
+    assert fake_llm.specialist_calls == {"marketing": 1, "finance": 2}

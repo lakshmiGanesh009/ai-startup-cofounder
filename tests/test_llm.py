@@ -57,6 +57,28 @@ def test_selects_openai_when_only_openai_credentials_set(monkeypatch, capture_mo
     assert model.kwargs["model"] == "gpt-4o-mini"
 
 
+def test_the_chief_of_staff_can_reason_harder_than_the_specialists(monkeypatch, capture_models):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5-mini")
+    monkeypatch.setenv("AZURE_OPENAI_REASONING_EFFORT", "minimal")
+    monkeypatch.setenv("AZURE_OPENAI_CHIEF_REASONING_EFFORT", "high")
+
+    assert llm.get_llm(llm.SPECIALIST).kwargs["reasoning_effort"] == "minimal"
+    assert llm.get_llm(llm.CHIEF).kwargs["reasoning_effort"] == "high"
+
+
+def test_the_chief_of_staff_uses_the_general_effort_when_its_own_is_unset(
+    monkeypatch, capture_models
+):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5-mini")
+    monkeypatch.setenv("AZURE_OPENAI_REASONING_EFFORT", "low")
+
+    assert llm.get_llm(llm.CHIEF).kwargs["reasoning_effort"] == "low"
+
+
 def test_the_model_is_built_once_and_reused(monkeypatch, capture_models):
     # One model means one HTTP connection pool for every call of a run.
     monkeypatch.setenv("OPENAI_API_KEY", "key")
@@ -83,3 +105,44 @@ def test_error_names_missing_azure_variable(monkeypatch, capture_models):
     message = str(exc.value)
     assert "AZURE_OPENAI_ENDPOINT" in message
     assert "AZURE_OPENAI_DEPLOYMENT_NAME" in message
+
+
+def _azure(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5-mini")
+
+
+def test_a_request_can_choose_each_roles_effort(monkeypatch, capture_models):
+    _azure(monkeypatch)
+    monkeypatch.setenv("AZURE_OPENAI_REASONING_EFFORT", "minimal")
+    monkeypatch.setenv("AZURE_OPENAI_CHIEF_REASONING_EFFORT", "medium")
+
+    with llm.reasoning(specialist="low", chief=None):
+        # A role left out keeps the configured effort.
+        assert llm.get_llm(llm.SPECIALIST).kwargs["reasoning_effort"] == "low"
+        assert llm.get_llm(llm.CHIEF).kwargs["reasoning_effort"] == "medium"
+    assert llm.get_llm(llm.SPECIALIST).kwargs["reasoning_effort"] == "minimal"
+
+
+def test_calls_at_high_effort_get_the_longer_timeout(monkeypatch, capture_models):
+    _azure(monkeypatch)
+
+    with llm.reasoning(chief="high"):
+        chief = llm.get_llm(llm.CHIEF)
+    specialist = llm.get_llm(llm.SPECIALIST)
+
+    assert chief.kwargs["timeout"] == llm.LLM_TIMEOUT_HIGH
+    assert specialist.kwargs["timeout"] == llm.LLM_TIMEOUT
+    assert "reasoning_effort" not in specialist.kwargs
+
+
+def test_openai_takes_no_reasoning_effort(monkeypatch, capture_models):
+    monkeypatch.setenv("OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_REASONING_EFFORT", "medium")
+
+    with llm.reasoning(specialist="high", chief="high"):
+        model = llm.get_llm(llm.CHIEF)
+
+    assert "reasoning_effort" not in model.kwargs
+    assert model is llm.get_llm(llm.SPECIALIST)

@@ -8,6 +8,7 @@ synthesis node merges their reports into one launch strategy.
 
 import logging
 
+import openai
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables.config import ContextThreadPoolExecutor
 from langgraph.types import Overwrite
@@ -15,7 +16,7 @@ from langgraph.types import Overwrite
 from agents.roles import SPECIALISTS
 from agents.specialist import GAP_PREFIX
 from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
-from llm import LLM_ERRORS, LLMReplyError, get_llm
+from llm import CHIEF, LLM_ERRORS, SPECIALIST, LLMReplyError, get_llm
 from metrics import track
 from state import (
     DelegationPlan,
@@ -34,20 +35,44 @@ SPECIALIST_NAMES = [role.name for role in SPECIALISTS]
 # straight to the response time.
 STRATEGY_WORDS = 500
 
+# The review score (1 to 5) a report needs to be approved without revision.
+APPROVAL_SCORE = 4
 
-def structured_invoke(schema, messages, tracker):
-    """Invoke the model for a structured `schema`, counting each call on `tracker`.
 
-    A reply that does not parse into the schema is retried once. API errors are
-    not retried here: the client has already retried them (LLM_MAX_RETRIES).
+def structured_invoke(schema, messages, tracker, role=CHIEF):
+    """Invoke `role`'s model for a structured `schema`, counting each call on `tracker`.
+
+    A reply that does not parse into the schema is retried once, and so is one
+    the provider's content filter withheld, which is usually a false positive
+    that a second attempt clears. Other API errors are not retried here: the
+    client has already retried them (LLM_MAX_RETRIES).
     """
-    model = get_llm().with_structured_output(schema, include_raw=True)
+    model = get_llm(role).with_structured_output(schema, include_raw=True)
     for _ in range(2):
-        reply = model.invoke(messages)
+        try:
+            reply = model.invoke(messages)
+        except openai.ContentFilterFinishReasonError as error:
+            tracker.record(None)
+            logger.warning("The content filter withheld a %s reply (%s).",
+                           schema.__name__, _filtered(error))
+            problem = error
+            continue
         tracker.record(reply["raw"])  # the raw reply carries the token usage
         if reply["parsed"] is not None:
             return reply["parsed"]
-    raise LLMReplyError(f"No usable {schema.__name__} reply: {reply['parsing_error']}")
+        problem = reply["parsing_error"]
+    raise LLMReplyError(f"No usable {schema.__name__} reply: {problem}")
+
+
+def _filtered(error: openai.ContentFilterFinishReasonError) -> str:
+    """The content-filter categories that withheld a reply, as Azure reports them."""
+    completion = error.completion
+    if not completion or not completion.choices:
+        return "categories not reported"
+    results = (completion.choices[0].model_extra or {}).get("content_filter_results") or {}
+    flagged = [name for name, result in results.items()
+               if isinstance(result, dict) and result.get("filtered")]
+    return ", ".join(flagged) or "categories not reported"
 
 
 def _attempt(call, what: str):
@@ -63,7 +88,7 @@ def _attempt(call, what: str):
         return None
 
 
-def _ask_each(schema, prompts: dict[str, list], tracker, what: str) -> dict:
+def _ask_each(schema, prompts: dict[str, list], tracker, what: str, role=CHIEF) -> dict:
     """Ask for a structured `schema` reply to every prompt at the same time.
 
     The calls are independent, so they run in parallel rather than one after
@@ -76,7 +101,7 @@ def _ask_each(schema, prompts: dict[str, list], tracker, what: str) -> dict:
 
     def ask(key):
         return _attempt(
-            lambda: structured_invoke(schema, prompts[key], tracker), f"{what} {key}"
+            lambda: structured_invoke(schema, prompts[key], tracker, role), f"{what} {key}"
         )
 
     with ContextThreadPoolExecutor(max_workers=len(prompts)) as pool:
@@ -85,16 +110,33 @@ def _ask_each(schema, prompts: dict[str, list], tracker, what: str) -> dict:
 
 
 _PLANNER_PROMPT = (
-    "You are the Chief of Staff of a startup founding team. Read the founder's "
-    "request and decide which specialists it needs. The specialists are: "
+    "You are the Chief of Staff of a startup founding team. You turn the founder's "
+    "request into a plan the specialists can execute, and you answer for the strategy "
+    "that comes out of it. The specialists are: "
     + "; ".join(f"{role.name} ({role.focus})" for role in SPECIALISTS)
-    + ". Evaluating a startup idea as a whole needs all four. A narrower request "
-    "needs only the specialist whose area it asks about, plus the one who owns the "
-    "plan or decision it refers to; leave out the rest even if their area is "
-    "loosely related. State the objective, and give a task only to the specialists "
-    "the request needs. Keep each task to one or two sentences; the specialists "
-    "know their own area."
+    + ". Before you delegate, work out what the founder actually needs: the decision "
+    "at stake, the constraints that bind it (budget, timeline, team, regulation, "
+    "competition) and what is still uncertain. State the objective as that decision, "
+    "in one sentence. Evaluating a startup idea as a whole needs all four specialists. "
+    "A narrower request needs only the specialist whose area it asks about, plus the "
+    "one who owns the plan or decision it refers to; leave out the rest even if their "
+    "area is loosely related. Give each assigned specialist one or two sentences: the "
+    "specific question to answer for this venture and the constraint its answer must "
+    "respect. Never ask a specialist for work outside its area; the specialists know "
+    "their own craft."
 )
+
+
+def _founder_brief(state: WorkflowState) -> str:
+    """The request and what the founder told us, as every Chief of Staff call sees it."""
+    venture = state.get("venture") or state["request"]
+    brief = f"Founder request:\n{venture}"
+    if state["request"] != venture:
+        brief += f"\n\nFollow-up request:\n{state['request']}"
+    context = state.get("context")
+    if context and context.as_prompt():
+        brief += f"\n\nWhat the founder told us:\n{context.as_prompt()}"
+    return brief
 
 
 def _build_prompt(state: WorkflowState, prior: dict[str, str], venture: str) -> list:
@@ -166,10 +208,20 @@ def plan_node(state: WorkflowState) -> dict:
 
 
 _REVIEW_PROMPT = (
-    "You are the Chief of Staff reviewing a specialist's report against its task. "
-    "Approve it if it is specific, on-task, and useful. Otherwise reject it and say "
-    "what to improve. Reports are kept short on purpose, so judge substance, not "
-    "length. Give a score from 1 to 5."
+    "You are the Chief of Staff reviewing one specialist's report before it goes into "
+    "the launch strategy. The report is a brief of at most 250 words: judge whether it "
+    "makes the right calls for this venture with the key numbers behind them, not "
+    "whether it covers everything. Check four things: it answers the task it was "
+    "given; it is specific to this venture (named customers, prices, tools, "
+    "safeguards, dates) rather than generic advice; its figures respect the founder's "
+    "constraints and agree with each other; and its recommendations are concrete "
+    "enough to act on. Score it: 5 ready to use as it is; 4 useful and specific, with "
+    "minor gaps; 3 missing something the task asked for, or with figures that "
+    "contradict each other or the constraints; 2 largely generic or off-task; 1 wrong "
+    f"or unusable. A report scoring {APPROVAL_SCORE} or more is approved; give it no "
+    "feedback. For a lower score, say in one to three sentences exactly what to fix or "
+    "add, asking only for what fits in a brief: no contract wording, vendor quotes or "
+    "full cash-flow tables."
 )
 
 
@@ -193,7 +245,11 @@ def review_node(state: WorkflowState) -> dict:
         if report.startswith(GAP_PREFIX):  # nothing to review for a gap
             reviews[name] = ReviewResult(approved=True, score=1, feedback="")
             continue
-        human = f"Task: {assignments.get(name, state['request'])}\n\nReport:\n{report}"
+        human = (
+            f"{_founder_brief(state)}\n\n"
+            f"Task given to the {name} specialist:\n{assignments.get(name, state['request'])}"
+            f"\n\nReport:\n{report}"
+        )
         prompts[name] = [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
 
     metrics: dict = {}
@@ -201,7 +257,12 @@ def review_node(state: WorkflowState) -> dict:
         replies = _ask_each(ReviewResult, prompts, t, "Review of")
     for name in prompts:
         if name in replies:
-            reviews[name] = replies[name]
+            # The score decides, so the verdict always follows the rubric; models
+            # have scored a report 4 and still rejected it.
+            approved = replies[name].score >= APPROVAL_SCORE
+            reviews[name] = replies[name].model_copy(
+                update={"approved": approved, "feedback": "" if approved else replies[name].feedback}
+            )
         else:  # a failed review leaves the report unreviewed
             reviews.pop(name, None)
 
@@ -223,13 +284,15 @@ def review_node(state: WorkflowState) -> dict:
 
 
 _CRITIQUE_PROMPT = (
-    "You are a specialist on a startup founding team. Compare the other specialists' "
-    "reports with your own. Flag a disagreement only when another specialist "
-    "recommends something different from you on a question inside your own area, "
-    "such as a price, a budget, a timeline or the scope of the first offer, so that "
-    "the founder could not follow both. Ignore differences in emphasis or detail. "
-    "Flag at most two, the most important first. If there are none, return an "
-    "empty list."
+    "You are a specialist on a startup founding team, checking your colleagues' "
+    "reports against your own before they are merged into one strategy. Flag a "
+    "disagreement only when another specialist recommends something that contradicts "
+    "your recommendation on a question inside your own area, so the founder could not "
+    "follow both: for example a price, a budget, a timeline, the scope of the first "
+    "offer, a channel or a safeguard. Describe each in one sentence that states both "
+    "positions and why they cannot both hold. Ignore differences in emphasis, wording "
+    "or detail, and points outside your area. Flag at most two, the most consequential "
+    "first. If there are none, return an empty list."
 )
 
 
@@ -262,7 +325,8 @@ def critique_node(state: WorkflowState) -> dict:
 
     metrics: dict = {}
     with track("critique", metrics) as t:
-        critiques = _ask_each(SpecialistCritique, prompts, t, "Critique by")
+        # The specialists critique each other, so this is their model, not the Chief's.
+        critiques = _ask_each(SpecialistCritique, prompts, t, "Critique by", SPECIALIST)
     conflicts = [conflict for critique in critiques.values() for conflict in critique.conflicts]
 
     logger.debug("Critique round: %d conflicts raised", len(conflicts))
@@ -270,10 +334,16 @@ def critique_node(state: WorkflowState) -> dict:
 
 
 _RESOLVE_PROMPT = (
-    "You are the Chief of Staff. Settle the conflicts your specialists raised. Treat "
-    "the same clash raised by more than one specialist as one conflict. For each, "
-    "give a clear decision and name the one specialist (if any) who should revise "
-    "their report to match it. Keep the decisions consistent with each other."
+    "You are the Chief of Staff. Your specialists disagree on the points below, and "
+    "the launch strategy can follow only one position on each. Treat the same clash "
+    "raised by more than one specialist as one conflict, and decide each one. Weigh "
+    "the options in this order: the founder's hard constraints (budget, runway, team, "
+    "legal requirements); then the evidence and reasoning in the specialists' reports; "
+    "then which option keeps the most choices open at the lowest cost. A legal or "
+    "safety requirement outranks speed or revenue. State each decision concretely (a "
+    "figure, a scope, a date) with its main reason, in one or two sentences, and name "
+    "the one specialist whose report must change to match it, or none. Keep the "
+    "decisions consistent with each other."
 )
 
 
@@ -291,8 +361,11 @@ def resolve_node(state: WorkflowState) -> dict:
     metrics: dict = {}
     with track("resolve", metrics) as t:
         if conflicts:
-            human = "Conflicts raised:\n" + "\n".join(
-                f"- {c.raised_by} about {c.about}: {c.issue}" for c in conflicts
+            human = (
+                f"{_founder_brief(state)}\n\n"
+                f"The specialists' reports:\n\n{_reports_text(state['analyses'])}\n\n"
+                "Conflicts raised:\n"
+                + "\n".join(f"- {c.raised_by} about {c.about}: {c.issue}" for c in conflicts)
             )
             messages = [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
             decided: Resolutions | None = _attempt(
@@ -322,13 +395,17 @@ def resolve_node(state: WorkflowState) -> dict:
 
 _SYNTHESIS_PROMPT = (
     "You are the Chief of Staff of a startup founding team. Merge the specialist "
-    "reports below into one launch strategy. Give a clear recommendation, the "
-    "reasoning behind it, where the specialists pull in different directions, and "
-    "prioritised next steps. Use only what the specialists reported; add nothing new. "
-    "Where you have already settled a disagreement, follow your decision and say "
-    "how it was settled. "
-    "If a report is marked unavailable, name that gap in the strategy and proceed "
-    f"with the reports you do have. Keep the strategy to at most {STRATEGY_WORDS} words."
+    "reports below into one launch strategy the founder can act on. Lead with the "
+    "recommendation: go, go with conditions, or not yet, and the main reason. Then give "
+    "the few facts from the reports that drive it; how each disagreement you settled "
+    "was decided; the key risks and how the plan contains them; prioritised next "
+    "steps, each with the area that owns it and a timeframe; and the early metrics that "
+    "will show whether it is working. Make the parts agree: the budget, prices, scope "
+    "and timeline must be the same wherever they appear. Use only what the specialists "
+    "reported; add nothing new. Where you have already settled a disagreement, follow "
+    "your decision. If a report is marked unavailable, name that gap in the strategy "
+    "and proceed with the reports you do have. Use short markdown headings and bullet "
+    f"points. Keep the strategy to at most {STRATEGY_WORDS} words."
 )
 
 
@@ -348,7 +425,7 @@ def synthesis_node(state: WorkflowState) -> dict:
     """Merge the specialist reports, and any conflict decisions, into one strategy."""
     logger.debug("Synthesising %d reports", len(state["analyses"]))
     human = (
-        f"Objective: {state['plan'].objective}\n\n"
+        f"{_founder_brief(state)}\n\nObjective: {state['plan'].objective}\n\n"
         f"Specialist reports:\n\n{_reports_text(state['analyses'])}"
     )
     resolutions = state.get("resolutions", [])
@@ -356,6 +433,6 @@ def synthesis_node(state: WorkflowState) -> dict:
         human += f"\n\nDisagreements you settled:\n{_decisions_text(resolutions)}"
     metrics: dict = {}
     with track("synthesis", metrics) as t:
-        reply = get_llm().invoke([SystemMessage(_SYNTHESIS_PROMPT), HumanMessage(human)])
+        reply = get_llm(CHIEF).invoke([SystemMessage(_SYNTHESIS_PROMPT), HumanMessage(human)])
         t.record(reply)
     return {"final_strategy": reply.content, "metrics": metrics}

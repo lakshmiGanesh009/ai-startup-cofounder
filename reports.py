@@ -3,9 +3,9 @@
 After every evaluation the API records the session's latest results here. A
 session's report starts as those results: the strategy, each specialist's
 report and the Chief of Staff's decisions on conflicts, one editable markdown
-section each. It can then be edited, expanded into a detailed version
-(agents/report_writer.py) or reset to the latest results, and report_pdf.py
-renders it as a PDF.
+section each. It can then be edited, turned into an investment proposal
+(agents/proposal_writer.py, proposal.py) or reset to the latest results, and
+report_pdf.py renders it as a PDF.
 
 Reports are kept in memory, like the sessions themselves, so they are lost when
 the API restarts. Every change to a report's content raises its version, and a
@@ -16,9 +16,10 @@ overwrite each other.
 import threading
 from datetime import datetime, timezone
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field
 
 from agents.roles import ROLES, SPECIALISTS
+from proposal import InvestmentMetrics, Proposal, figure_checks, investment_metrics
 from state import Resolution
 
 STRATEGY = "strategy"
@@ -65,19 +66,32 @@ class Report(BaseModel):
     context: str
     sections: list[ReportSection]
     version: int
-    detailed: bool = False
+    # The investment proposal, once the agents have written it.
+    proposal: Proposal | None = None
     edited: bool = False
-    # Newer results arrived after the report was edited or expanded, so they
-    # were not applied; resetting the report applies them.
+    # Newer results arrived after the report was edited or got its proposal, so
+    # they were not applied; resetting the report applies them.
     outdated: bool = False
     updated_at: datetime
+
+    @computed_field
+    @property
+    def investment(self) -> InvestmentMetrics | None:
+        """NPV, IRR, payback and break-even, calculated from the proposal's figures."""
+        return investment_metrics(self.proposal.financial) if self.proposal else None
+
+    @computed_field
+    @property
+    def checks(self) -> list[str]:
+        """Where the proposal's figures disagree, calculated from them."""
+        return figure_checks(self.proposal.market, self.proposal.financial) if self.proposal else []
 
 
 class ReportSummary(BaseModel):
     session_id: str
     title: str
     version: int
-    detailed: bool
+    has_proposal: bool
     edited: bool
     outdated: bool
     updated_at: datetime
@@ -140,13 +154,13 @@ class ReportStore:
     def record(self, session_id: str, results: SessionResults) -> None:
         """Keep a session's latest results.
 
-        A report nobody has touched is rebuilt from them. An edited or detailed
-        one is kept, so no work is lost, and marked outdated instead.
+        A report nobody has touched is rebuilt from them. An edited one, or one
+        with a proposal, is kept, so no work is lost, and marked outdated instead.
         """
         with self._lock:
             self._results[session_id] = results
             report = self._reports.get(session_id)
-            if report and (report.edited or report.detailed):
+            if report and (report.edited or report.proposal):
                 self._reports[session_id] = report.model_copy(update={"outdated": True})
             else:
                 self._reports[session_id] = self._from_results(session_id, report)
@@ -155,8 +169,15 @@ class ReportStore:
         """Every report, the most recently changed first."""
         with self._lock:
             reports = sorted(self._reports.values(), key=lambda r: r.updated_at, reverse=True)
-        return [ReportSummary(**r.model_dump(exclude={"objective", "context", "sections"}))
-                for r in reports]
+        return [
+            ReportSummary(
+                **r.model_dump(
+                    exclude={"objective", "context", "sections", "proposal", "investment", "checks"}
+                ),
+                has_proposal=r.proposal is not None,
+            )
+            for r in reports
+        ]
 
     def get(self, session_id: str) -> Report:
         with self._lock:
@@ -169,20 +190,21 @@ class ReportStore:
             self._reports[session_id] = _changed(report, sections=sections, edited=True)
             return self._reports[session_id]
 
-    def apply_detailed(self, session_id: str, version: int, bodies: dict[str, str]) -> Report:
-        """Swap in the detailed text of each section in `bodies`."""
+    def save_proposal(self, session_id: str, version: int, proposal: Proposal,
+                      edited: bool = True) -> Report:
+        """Replace the proposal, if nobody changed the report since `version`.
+
+        `edited` is False when the agents wrote it rather than the founder.
+        """
         with self._lock:
             report = self._current(session_id, version)
-            sections = [
-                section.model_copy(update={"body": bodies[section.key]})
-                if section.key in bodies else section
-                for section in report.sections
-            ]
-            self._reports[session_id] = _changed(report, sections=sections, detailed=True)
+            self._reports[session_id] = _changed(
+                report, proposal=proposal, edited=report.edited or edited
+            )
             return self._reports[session_id]
 
     def reset(self, session_id: str) -> Report:
-        """Rebuild the report from the latest results, dropping edits and detail."""
+        """Rebuild the report from the latest results, dropping edits and the proposal."""
         with self._lock:
             report = self._get(session_id)
             self._reports[session_id] = self._from_results(session_id, report)

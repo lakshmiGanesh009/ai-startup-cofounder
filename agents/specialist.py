@@ -30,9 +30,9 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     if venture != request:
         human += f"\n\nFollow-up request:\n{request}"
     if task:
-        human += f"\n\nYour assignment:\n{task}"
+        human += f"\n\nYour assignment from the Chief of Staff:\n{task}"
     if context_text:
-        human += f"\n\n{context_text}"
+        human += f"\n\nWhat the founder told us:\n{context_text}"
 
     feedback = state.get("revisions", {}).get(role.name) or state.get(
         "critique_revisions", {}
@@ -42,9 +42,15 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
         human += (
             f"\n\nYour previous report:\n{previous}"
             f"\n\nThe Chief of Staff asks you to revise it:\n{feedback}"
+            "\n\nRewrite the whole report so it stands on its own: apply every point "
+            "above, keep what was already right, and make the figures agree."
         )
     elif previous:  # a follow-up: refine the earlier report, don't start over
-        human += f"\n\nYour earlier report:\n{previous}\n\nBuild on it for the follow-up."
+        human += (
+            f"\n\nYour earlier report:\n{previous}"
+            "\n\nRevise it to answer the follow-up. Keep what still holds, change what "
+            "the follow-up calls for, and rewrite the whole report so it stands on its own."
+        )
 
     return [SystemMessage(role.system_prompt), HumanMessage(human)]
 

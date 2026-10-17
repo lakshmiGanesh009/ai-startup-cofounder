@@ -14,7 +14,12 @@ MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "1"))
 MAX_CRITIQUE_ROUNDS = int(os.getenv("MAX_CRITIQUE_ROUNDS", "1"))
 
 # Per-call LLM timeout in seconds, and how many times to retry a failed call.
-LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
+# Azure occasionally stalls a request that an identical retry answers in seconds,
+# so the timeout should be a few times the slowest normal call (under 60 s up to
+# medium reasoning) rather than generous. Calls at high reasoning can take a
+# minute or two, so they get LLM_TIMEOUT_HIGH instead.
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
+LLM_TIMEOUT_HIGH = float(os.getenv("LLM_TIMEOUT_HIGH", "300"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
 # Browser origins allowed to call the API, comma-separated. The default is the

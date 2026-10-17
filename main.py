@@ -1,6 +1,7 @@
 import logging
 import re
 import uuid
+from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Response
@@ -9,10 +10,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from agents.report_writer import write_detailed
+from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
 from config import CORS_ORIGINS, DEBUG_MODE
 from graph import build_graph
-from llm import LLM_ERRORS, LLMNotConfigured
+from llm import (
+    CHIEF,
+    EFFORTS,
+    LLM_ERRORS,
+    SPECIALIST,
+    Effort,
+    LLMNotConfigured,
+    default_effort,
+    reasoning,
+    takes_reasoning_effort,
+)
+from proposal import Proposal
 from report_pdf import render_pdf
 from reports import (
     Report,
@@ -49,10 +61,24 @@ app.add_middleware(
 graph = build_graph()
 
 
+class Reasoning(BaseModel):
+    """How hard the models reason for one request; a role left out keeps the
+    configured effort. Higher efforts give more considered answers but take
+    longer: at "high" an evaluation takes 5 to 10 minutes. Azure OpenAI only."""
+
+    specialist: Effort | None = Field(None, description="The four specialists, and their critiques.")
+    chief: Effort | None = Field(None, description="The Chief of Staff's plan, reviews, decisions and summaries.")
+
+
+def _efforts(choice: Reasoning | None) -> dict:
+    return choice.model_dump() if choice else {}
+
+
 class EvaluateRequest(BaseModel):
     prompt: str
     context: RequestContext | None = None
     session_id: str | None = None
+    reasoning: Reasoning | None = None
 
 
 class EvaluateResponse(BaseModel):
@@ -68,8 +94,18 @@ class EvaluateResponse(BaseModel):
 
 @app.get("/health")
 async def health():
-    """Health check endpoint."""
-    return {"status": "healthy", "service": SERVICE_NAME}
+    """Health check, with the reasoning efforts a request can choose and the
+    configured ones it gets by default."""
+    return {
+        "status": "healthy",
+        "service": SERVICE_NAME,
+        "reasoning": {
+            "adjustable": takes_reasoning_effort(),
+            "efforts": list(EFFORTS),
+            "specialist": default_effort(SPECIALIST),
+            "chief": default_effort(CHIEF),
+        },
+    }
 
 
 @app.post("/evaluate", response_model=EvaluateResponse)
@@ -88,7 +124,9 @@ async def evaluate(request: EvaluateRequest):
     try:
         # ainvoke runs the nodes in worker threads, so a run that takes minutes
         # does not block the event loop, and other requests are still served.
-        result = await graph.ainvoke(state, config)
+        # The threads inherit the request's reasoning efforts.
+        with reasoning(**_efforts(request.reasoning)):
+            result = await graph.ainvoke(state, config)
     except LLMNotConfigured as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LLM_ERRORS as error:
@@ -113,10 +151,30 @@ class ReportEdit(BaseModel):
     sections: list[ReportSection] = Field(min_length=1)
 
 
-class DetailedReport(BaseModel):
+PartKey = Literal["executive", "market", "technical", "risk", "financial"]
+
+
+class ProposalRequest(BaseModel):
+    version: int = Field(description="The report version the request was made from.")
+    reasoning: Reasoning | None = None
+
+
+class ProposalRevision(ProposalRequest):
+    instruction: str = Field(min_length=1, description="What to change, in the founder's words.")
+    part: PartKey | None = Field(
+        None, description="The part to revise; the parts written from it follow. None for all."
+    )
+
+
+class ProposalEdit(BaseModel):
+    version: int = Field(description="The report version the edits were made to.")
+    proposal: Proposal
+
+
+class ProposalResult(BaseModel):
     report: Report
     failed: list[str] = Field(
-        description="Titles of the sections that could not be expanded; they keep their text."
+        description="Titles of the parts that could not be revised; they keep their text."
     )
 
 
@@ -160,22 +218,52 @@ async def reset_report(session_id: str):
     return store.reset(session_id)
 
 
-@app.post("/reports/{session_id}/detailed", response_model=DetailedReport)
-async def detail_report(session_id: str):
-    """Have each specialist expand its section and the Chief of Staff the
-    strategy. Takes about a minute; a section whose call fails keeps its text."""
+def _report_at(session_id: str, version: int) -> Report:
     report = store.get(session_id)
-    try:
-        bodies, failed = await run_in_threadpool(write_detailed, report)
-    except LLMNotConfigured as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    if not bodies:
-        raise HTTPException(
-            status_code=502, detail="The detailed version could not be written: every LLM call failed."
-        )
-    return DetailedReport(
-        report=store.apply_detailed(session_id, report.version, bodies), failed=failed
-    )
+    if report.version != version:
+        raise ReportChanged(f"The report is at version {report.version}, not {version}.")
+    return report
+
+
+async def _write(report: Report, choice: Reasoning | None, instruction: str = "",
+                 part: str | None = None) -> ProposalResult:
+    """Run the proposal writer off the event loop and save what it wrote."""
+    with reasoning(**_efforts(choice)):
+        try:
+            proposal, failed = await run_in_threadpool(write_proposal, report, instruction, part)
+        except LLMNotConfigured as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except ProposalNotWritten as error:
+            raise HTTPException(status_code=502, detail=f"{error} Try again.") from error
+    if report.proposal and len(failed) == len(parts_to_write(report.proposal, part)):
+        raise HTTPException(status_code=502, detail="Nothing could be revised: every LLM call failed.")
+    saved = store.save_proposal(report.session_id, report.version, proposal, edited=False)
+    return ProposalResult(report=saved, failed=failed)
+
+
+@app.post("/reports/{session_id}/proposal", response_model=ProposalResult)
+async def write_report_proposal(session_id: str, request: ProposalRequest):
+    """Have the agents write the investment proposal from the report as it stands,
+    replacing any proposal it has. Takes about two minutes."""
+    report = _report_at(session_id, request.version)
+    return await _write(report.model_copy(update={"proposal": None}), request.reasoning)
+
+
+@app.post("/reports/{session_id}/proposal/revise", response_model=ProposalResult)
+async def revise_report_proposal(session_id: str, revision: ProposalRevision):
+    """Apply the founder's instruction to one part of the proposal (or all of it):
+    the part's agent rewrites it, then the parts written from it are brought into
+    line. A part whose call fails keeps its text and is listed in `failed`."""
+    report = _report_at(session_id, revision.version)
+    if not report.proposal:
+        raise HTTPException(status_code=404, detail="This report has no proposal yet; write it first.")
+    return await _write(report, revision.reasoning, revision.instruction, revision.part)
+
+
+@app.put("/reports/{session_id}/proposal", response_model=Report)
+async def save_report_proposal(session_id: str, edit: ProposalEdit):
+    """Save an edited proposal. Returns 409 if the report changed since `version`."""
+    return store.save_proposal(session_id, edit.version, edit.proposal)
 
 
 @app.get(
@@ -184,14 +272,16 @@ async def detail_report(session_id: str):
     responses={200: {"content": {"application/pdf": {}}}},
 )
 async def download_report(session_id: str):
-    """The report as a PDF."""
+    """The report as a PDF: the investment proposal once it is written, else the
+    team's report."""
     report = store.get(session_id)
     pdf = await run_in_threadpool(render_pdf, report)
     name = re.sub(r"[^A-Za-z0-9-]", "", session_id)[:8] or "report"
+    kind = "investment-proposal" if report.proposal else "launch-report"
     return Response(
         pdf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="launch-report-{name}.pdf"'},
+        headers={"Content-Disposition": f'inline; filename="{kind}-{name}.pdf"'},
     )
 
 

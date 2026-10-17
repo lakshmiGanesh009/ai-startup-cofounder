@@ -13,6 +13,7 @@ import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
 import llm
+from agents.proposal_writer import SCHEMAS as PROPOSAL_SCHEMAS
 from state import (
     DelegationPlan,
     Resolution,
@@ -21,6 +22,7 @@ from state import (
     SpecialistCritique,
     Task,
 )
+from tests.sample_proposal import SAMPLE
 
 PROVIDER_VARS = [
     "AZURE_OPENAI_API_KEY",
@@ -28,6 +30,7 @@ PROVIDER_VARS = [
     "AZURE_OPENAI_API_VERSION",
     "AZURE_OPENAI_DEPLOYMENT_NAME",
     "AZURE_OPENAI_REASONING_EFFORT",
+    "AZURE_OPENAI_CHIEF_REASONING_EFFORT",
     "OPENAI_API_KEY",
     "MODEL_NAME",
 ]
@@ -50,7 +53,7 @@ def strip_credentials(monkeypatch):
     tests never hit a real LLM."""
     for name in PROVIDER_VARS:
         monkeypatch.delenv(name, raising=False)
-    llm.get_llm.cache_clear()
+    llm._model.cache_clear()
 
 
 class FakeModel:
@@ -62,6 +65,10 @@ class FakeModel:
     and `_resolutions_for` (resolve). By default those return `plan`, an
     approval unless `reviews` names the report, the `critique`'s conflicts, and
     the one `resolution` if set. Every reply reports `USAGE` tokens.
+
+    A proposal part is taken from `proposal` (the sample one), and the prompt
+    it was written from is kept in `part_prompts`; `fail_parts` names parts
+    whose call raises.
 
     `synthesis_calls` and `specialist_calls` record how often each ran, `fail`
     names specialists whose call raises, and `delay` makes every call take that
@@ -82,6 +89,9 @@ class FakeModel:
         self.specialist_calls: dict[str, int] = {}
         self.fail: set[str] = set()  # specialist names whose call should raise
         self.delay = 0.0
+        self.proposal = SAMPLE
+        self.part_prompts: dict[str, list[str]] = {}
+        self.fail_parts: set[str] = set()
 
     def _plan_for(self, prompt: str) -> DelegationPlan:
         return self.plan
@@ -115,10 +125,17 @@ class FakeModel:
                 if title in system:
                     self.specialist_calls[name] = self.specialist_calls.get(name, 0) + 1
                     if name in self.fail:  # as the provider fails, after its retries
-                        raise openai.APIConnectionError(
-                            request=httpx.Request("POST", "https://llm.example")
-                        )
+                        raise _provider_error()
         return AIMessage(f"[role: {system}]\n{human}", usage_metadata=self.USAGE)
+
+    def _part_for(self, key: str):
+        def produce(prompt: str):
+            self.part_prompts.setdefault(key, []).append(prompt)
+            if key in self.fail_parts:
+                raise _provider_error()
+            return getattr(self.proposal, key)
+
+        return produce
 
     def with_structured_output(self, schema, include_raw=False):
         produce = {
@@ -126,8 +143,14 @@ class FakeModel:
             ReviewResult: self._review_for,
             SpecialistCritique: self._critique_for,
             Resolutions: self._resolutions_for,
+            **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)
+
+
+def _provider_error():
+    """What a provider call raises once the client has given up retrying."""
+    return openai.APIConnectionError(request=httpx.Request("POST", "https://llm.example"))
 
 
 class _StructuredModel:
@@ -152,13 +175,39 @@ class _StructuredModel:
         return {"raw": raw, "parsed": parsed, "parsing_error": None}
 
 
+class _AsRole:
+    """What get_llm(role) returns in tests: the FakeModel, noting in its `calls`
+    which role's model each call was made on and what for, and in its `efforts`
+    the reasoning effort the call would have used."""
+
+    def __init__(self, model, role):
+        self._model = model
+        self._role = role
+
+    def invoke(self, messages):
+        system = next((m.content for m in messages if isinstance(m, SystemMessage)), "")
+        self._model.calls.append((self._role, system))
+        self._model.efforts.append((self._role, llm.reasoning_effort(self._role)))
+        return self._model.invoke(messages)
+
+    def with_structured_output(self, schema, include_raw=False):
+        self._model.calls.append((self._role, schema.__name__))
+        self._model.efforts.append((self._role, llm.reasoning_effort(self._role)))
+        return self._model.with_structured_output(schema, include_raw)
+
+
 @pytest.fixture
 def fake_llm(monkeypatch):
-    """Make every get_llm() call return the FakeModel (shared by plan and specialists)."""
+    """Make every get_llm(role) call return the FakeModel, whichever role asks."""
     model = FakeModel()
-    monkeypatch.setattr("agents.specialist.get_llm", lambda: model)
-    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
-    monkeypatch.setattr("agents.report_writer.get_llm", lambda: model)
+    model.calls = []
+    model.efforts = []
+
+    def get_llm(role=llm.SPECIALIST):
+        return _AsRole(model, role)
+
+    monkeypatch.setattr("agents.specialist.get_llm", get_llm)
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", get_llm)
     return model
 
 

@@ -86,7 +86,7 @@ def test_reports_and_the_strategy_have_a_word_limit():
 
 def test_an_unusable_reply_is_retried_once(monkeypatch):
     model = _ScriptedModel(_reply(None, ValueError("not JSON")), _reply(APPROVED))
-    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda role=None: model)
     metrics: dict = {}
 
     with track("review", metrics) as t:
@@ -100,8 +100,23 @@ def test_an_unusable_reply_is_retried_once(monkeypatch):
 
 def test_a_reply_that_never_parses_raises(monkeypatch):
     model = _ScriptedModel(_reply(None, ValueError("x")), _reply(None, ValueError("x")))
-    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda role=None: model)
 
+    with track("review", {}) as t, pytest.raises(LLMReplyError):
+        structured_invoke(ReviewResult, [], t)
+
+
+def test_a_reply_the_content_filter_withheld_is_retried_once(monkeypatch):
+    # Azure's filter sometimes withholds a harmless reply; a second attempt clears it.
+    filtered = openai.ContentFilterFinishReasonError()
+    model = _ScriptedModel(filtered, _reply(APPROVED))
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda role=None: model)
+
+    with track("review", {}) as t:
+        assert structured_invoke(ReviewResult, [], t) == APPROVED
+
+    model = _ScriptedModel(filtered, openai.ContentFilterFinishReasonError())
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda role=None: model)
     with track("review", {}) as t, pytest.raises(LLMReplyError):
         structured_invoke(ReviewResult, [], t)
 
@@ -110,7 +125,7 @@ def test_an_api_error_is_not_retried_on_top_of_the_client(monkeypatch):
     # The client already retries API errors (LLM_MAX_RETRIES); retrying them
     # again here would multiply the wait.
     model = _ScriptedModel(OFFLINE)
-    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda: model)
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda role=None: model)
 
     with track("review", {}) as t, pytest.raises(openai.APIConnectionError):
         structured_invoke(ReviewResult, [], t)
