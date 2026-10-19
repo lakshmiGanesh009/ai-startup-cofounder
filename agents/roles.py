@@ -16,7 +16,9 @@ REPORT_WORDS = 250
 _BREVITY = (
     "Be specific to this venture and its constraints: name the customers, prices, "
     "tools, dates and figures, show the arithmetic behind any number, and mark which "
-    "figures are assumptions. Lead with your recommendation, then the few points that "
+    "figures are assumptions. Where the brief includes web research that bears on your "
+    "area, use its figures before your own estimates and cite each one you use as [n]. "
+    "Lead with your recommendation, then the few points that "
     "support it. Answer in short, concrete points, "
     f"at most {REPORT_WORDS} words in all. Do not mention this limit."
 )

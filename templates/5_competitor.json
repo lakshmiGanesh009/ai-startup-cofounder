@@ -1,0 +1,20 @@
+{
+  "title": "Respond to a competitor",
+  "summary": "What a rival's move means, and how to answer it.",
+  "prompt": "{competitor} has {move}. What does this mean for {company}, and how should we respond?",
+  "fields": [
+    {"key": "competitor", "label": "The competitor", "placeholder": "Expensify"},
+    {"key": "move", "label": "What they did", "placeholder": "launched a free plan for teams under ten people", "long": true},
+    {"key": "company", "label": "Your company", "placeholder": "our expense tool for small finance teams"}
+  ],
+  "research": [
+    "the competitor's move and how the market reacted",
+    "the competitor's pricing and positioning",
+    "how similar moves played out in this market"
+  ],
+  "ask": [
+    "what sets us apart today",
+    "the customers most at risk",
+    "the budget and time we can put into a response"
+  ]
+}

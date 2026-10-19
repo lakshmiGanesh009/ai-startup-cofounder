@@ -3,7 +3,7 @@
 
 import { vi } from "vitest";
 
-import type { EvaluateResponse, Health, Scenario, Step } from "@/lib/api";
+import type { EvaluateResponse, Health, PreparedBrief, Scenario, Step, Template } from "@/lib/api";
 
 export const HEALTH: Health = {
   status: "healthy",
@@ -14,6 +14,7 @@ export const HEALTH: Health = {
     specialist: "minimal",
     chief: "medium",
   },
+  research: { available: true, provider: "Tavily" },
 };
 
 export const SCENARIOS: Scenario[] = [
@@ -32,6 +33,58 @@ export const SCENARIOS: Scenario[] = [
     follow_up: null,
   },
 ];
+
+export const TEMPLATES: Template[] = [
+  {
+    name: "evaluate_idea",
+    title: "Evaluate a new idea",
+    summary: "Is it worth building, and how should it launch?",
+    prompt: "Evaluate this startup idea: {idea}. It is for {customer}. Is it worth building, and how should we launch it?",
+    fields: [
+      { key: "idea", label: "The idea", placeholder: "An assistant for clinics", long: true },
+      { key: "customer", label: "Who it is for", placeholder: "Small clinics", long: false },
+    ],
+    research: ["the market's size"],
+    ask: ["the budget"],
+  },
+  {
+    name: "pricing",
+    title: "Set the price",
+    summary: "What to charge, how to package it, and what it does to margins.",
+    prompt: "Decide how to price {product} for {customer}.",
+    fields: [
+      { key: "product", label: "The product", placeholder: "", long: true },
+      { key: "customer", label: "Who pays", placeholder: "", long: false },
+    ],
+    research: [],
+    ask: [],
+  },
+];
+
+// What preparing a brief gives back: three facts from two sources, and two questions.
+export const PREPARED: PreparedBrief = {
+  queries: ["clinic scheduling software market", "clinic scheduling software prices"],
+  research: {
+    findings: [
+      { point: "About 147,000 office-based primary care physicians practised in 2019.", sources: [1] },
+      { point: "Scheduling tools cost $20-$300 per provider a month in 2025.", sources: [2, 1] },
+      { point: "Most small practices still book follow-ups by phone.", sources: [2] },
+    ],
+    sources: [
+      { title: "Physician practice benchmark survey", url: "https://www.ama-assn.org/survey" },
+      { title: "Scheduling software pricing", url: "https://prices.example.com/scheduling" },
+    ],
+  },
+  research_note: null,
+  questions: [
+    {
+      question: "What budget do you have to first launch?",
+      why: "It decides whether a paid pilot is affordable.",
+      suggestions: ["Under $15k", "$15k-$50k"],
+    },
+    { question: "Who is on the team?", why: "It sets what can be built in-house.", suggestions: ["Just me"] },
+  ],
+};
 
 export const RESULT: EvaluateResponse = {
   session_id: "session-1234567890",
@@ -138,6 +191,8 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
   const answers: Record<string, Answering | undefined> = {
     "GET /health": { body: HEALTH },
     "GET /scenarios": { body: SCENARIOS },
+    "GET /templates": { body: TEMPLATES },
+    "POST /brief/prepare": { body: PREPARED },
     "POST /evaluate": { body: RESULT },
     "POST /evaluate/stream": () => ({ stream: sse(STEPS, { result: RESULT }) }),
     ...overrides,

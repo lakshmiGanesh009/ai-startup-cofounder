@@ -13,10 +13,22 @@ export type Effort = (typeof EFFORTS)[number];
 // The efforts one request uses; a role left out keeps the configured effort.
 export type Reasoning = { specialist?: Effort | null; chief?: Effort | null };
 
+// A web page the research drew on, and one fact from it: `sources` number the
+// pages it came from, 1 being the first in the research's `sources`.
+export type Source = { title: string; url: string };
+export type Finding = { point: string; sources: number[] };
+export type Research = { findings: Finding[]; sources: Source[] };
+
+// The founder's answer to one of the Chief of Staff's questions.
+export type Answer = { question: string; answer: string };
+
 export type RequestContext = {
   target_market?: string | null;
   constraints?: string | null;
   competitive_landscape?: string | null;
+  // Set once the brief is prepared: they reach every agent.
+  answers?: Answer[];
+  research?: Research | null;
 };
 
 export type EvaluateRequest = {
@@ -56,7 +68,13 @@ export type ReasoningSettings = {
   chief: Effort | null;
 };
 
-export type Health = { status: string; service: string; reasoning: ReasoningSettings };
+export type Health = {
+  status: string;
+  service: string;
+  reasoning: ReasoningSettings;
+  // Whether a brief can be researched on the web (a search key is set).
+  research: { available: boolean; provider: string };
+};
 
 export type Scenario = {
   name: string;
@@ -64,6 +82,38 @@ export type Scenario = {
   prompt: string;
   context: RequestContext | null;
   follow_up: string | null;
+};
+
+// A kind of decision to bring the team (templates/*.json): a brief with a
+// {key} for each field to fill in.
+export type TemplateField = { key: string; label: string; placeholder: string; long: boolean };
+export type Template = {
+  name: string;
+  title: string;
+  summary: string;
+  prompt: string;
+  fields: TemplateField[];
+  research: string[];
+  ask: string[];
+};
+
+// Something the Chief of Staff needs from the founder before the team starts.
+export type Question = { question: string; why: string; suggestions: string[] };
+
+// What preparing a brief gives back (brief.py): the searches run, the facts
+// found with their sources, or why there are none, and the questions.
+export type PreparedBrief = {
+  queries: string[];
+  research: Research | null;
+  research_note: string | null;
+  questions: Question[];
+};
+
+export type PrepareRequest = {
+  prompt: string;
+  context?: RequestContext | null;
+  template?: string | null;
+  reasoning?: Reasoning | null;
 };
 
 // The backend could not be reached, or answered with an error.
@@ -110,6 +160,20 @@ export function getHealth(): Promise<Health> {
 
 export function getScenarios(): Promise<Scenario[]> {
   return request("/scenarios");
+}
+
+export function getTemplates(): Promise<Template[]> {
+  return request("/templates");
+}
+
+// About 20-30 s: the Chief of Staff plans the searches, Tavily runs them, and
+// the Chief of Staff reads the results and checks the brief.
+export function prepareBrief(body: PrepareRequest): Promise<PreparedBrief> {
+  return request("/brief/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 // A full evaluation makes many LLM calls: about two minutes at the default

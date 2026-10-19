@@ -52,6 +52,27 @@ describe("the Reports page, before the proposal", () => {
     expect(screen.queryByRole("button", { name: "Revise with the team" })).toBeNull();
   });
 
+  test("the web research the team started from is a section, with its sources", async () => {
+    const backend = fakeReports();
+    backend.state.report.sections = [
+      ...backend.state.report.sections,
+      {
+        key: "research",
+        title: "Web Research",
+        body: "- Tools cost $20-$300 per provider a month. [1]\n\n**Sources**\n\n1. [Scheduling software prices](https://prices.example)",
+      },
+    ];
+    renderPage();
+
+    const research = await screen.findByRole("region", { name: "Web Research" });
+
+    expect(within(research).getByText("Found on the web for the Chief of Staff")).toBeTruthy();
+    expect(within(research).getByRole("heading", { name: "Sources" })).toBeTruthy();
+    expect(within(research).getByRole("link", { name: "Scheduling software prices" }).getAttribute("href")).toBe(
+      "https://prices.example",
+    );
+  });
+
   test("writing the proposal shows its chapters, with the sliders' efforts sent", async () => {
     const { sent } = fakeReports();
     renderPage();

@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
+from brief import PreparedBrief, Template, load_templates, prepare_brief
 from config import CORS_ORIGINS, DEBUG_MODE
 from graph import build_graph
 from llm import (
@@ -40,6 +41,7 @@ from reports import (
     SessionResults,
     store,
 )
+from search import search_configured
 from state import NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
@@ -100,8 +102,9 @@ class EvaluateResponse(BaseModel):
 
 @app.get("/health")
 async def health():
-    """Health check, with the reasoning efforts a request can choose and the
-    configured ones it gets by default."""
+    """Health check, with the reasoning efforts a request can choose, the
+    configured ones it gets by default, and whether a brief can be researched
+    on the web."""
     return {
         "status": "healthy",
         "service": SERVICE_NAME,
@@ -111,6 +114,7 @@ async def health():
             "specialist": default_effort(SPECIALIST),
             "chief": default_effort(CHIEF),
         },
+        "research": {"available": search_configured(), "provider": "Tavily"},
     }
 
 
@@ -131,6 +135,45 @@ async def list_scenarios():
         data.setdefault("title", path.stem.replace("_", " ").capitalize())
         scenarios.append(Scenario(name=path.stem, **data))
     return scenarios
+
+
+@app.get("/templates", response_model=list[Template])
+async def list_templates():
+    """The decision templates (templates/*.json) a brief can be written from:
+    each a request to fill in, with what to look up and ask for that decision."""
+    return load_templates()
+
+
+class PrepareRequest(BaseModel):
+    prompt: str = Field(min_length=1, description="The founder's brief.")
+    context: RequestContext | None = None
+    template: str | None = Field(None, description="The template the brief was written from, by name.")
+    reasoning: Reasoning | None = None
+
+
+@app.post("/brief/prepare", response_model=PreparedBrief)
+async def prepare(request: PrepareRequest):
+    """Prepare a brief before the team runs it. The Chief of Staff researches it
+    on the web (when TAVILY_API_KEY is set), keeps the facts that bear on the
+    decision with their sources, and asks up to three questions about what is
+    missing; none when the brief is enough. Send the facts the founder keeps and
+    their answers in the evaluation's `context`. About 20-30 s at the default
+    efforts. A failed search does not fail the request: `research_note` says why
+    there is no research. Missing credentials return 503, a failed LLM call 502.
+    """
+    template = None
+    if request.template:
+        template = next((each for each in load_templates() if each.name == request.template), None)
+        if template is None:
+            raise HTTPException(status_code=422, detail=f"There is no template called {request.template!r}.")
+    try:
+        with reasoning(**_efforts(request.reasoning)):
+            return await run_in_threadpool(prepare_brief, request.prompt.strip(), request.context, template)
+    except LLMNotConfigured as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except LLM_ERRORS as error:
+        logger.warning("Preparing a brief failed on an LLM call: %s", error)
+        raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
 
 
 def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:

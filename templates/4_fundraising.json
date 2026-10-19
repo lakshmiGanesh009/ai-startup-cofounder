@@ -1,0 +1,19 @@
+{
+  "title": "Get ready to raise",
+  "summary": "How much to raise, from whom, and what investors will check.",
+  "prompt": "Assess whether we are ready to raise {round} for {company}. How much should we raise, from whom, and what will investors check first?",
+  "fields": [
+    {"key": "company", "label": "What the company does", "placeholder": "An AI brand-design studio for enterprise marketing teams", "long": true},
+    {"key": "round", "label": "The round", "placeholder": "A pre-seed round"}
+  ],
+  "research": [
+    "recent rounds at this stage in this sector, with their sizes and valuations",
+    "what investors at this stage expect to see",
+    "investors active in this sector"
+  ],
+  "ask": [
+    "traction so far: revenue, users and growth",
+    "the runway left",
+    "what the money would pay for"
+  ]
+}

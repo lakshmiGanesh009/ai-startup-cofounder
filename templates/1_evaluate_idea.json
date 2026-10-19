@@ -1,0 +1,21 @@
+{
+  "title": "Evaluate a new idea",
+  "summary": "Is it worth building, and how should it launch?",
+  "prompt": "Evaluate this startup idea: {idea}. It is for {customer}. Is it worth building, and how should we launch it?",
+  "fields": [
+    {"key": "idea", "label": "The idea", "placeholder": "An assistant that drafts patient follow-ups from clinical notes", "long": true},
+    {"key": "customer", "label": "Who it is for", "placeholder": "Small outpatient clinics in the US"}
+  ],
+  "research": [
+    "the market's size and growth",
+    "the main competitors and what they charge",
+    "what buyers spend on the problem today",
+    "regulation the product must meet"
+  ],
+  "ask": [
+    "the budget to first launch",
+    "who is on the team",
+    "the runway and timeline",
+    "whether the founder wants a small profitable business or a venture-scale one"
+  ]
+}

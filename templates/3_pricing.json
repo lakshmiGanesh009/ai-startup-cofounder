@@ -1,0 +1,19 @@
+{
+  "title": "Set the price",
+  "summary": "What to charge, how to package it, and what it does to margins.",
+  "prompt": "Decide how to price {product} for {customer}. What should we charge, how should we package it, and what does that mean for our margins?",
+  "fields": [
+    {"key": "product", "label": "The product", "placeholder": "A scheduling assistant for clinics", "long": true},
+    {"key": "customer", "label": "Who pays", "placeholder": "Clinic office managers, from a monthly tools budget"}
+  ],
+  "research": [
+    "what competitors charge and how they package it",
+    "what buyers like these pay for similar tools",
+    "typical costs to serve and margins in the category"
+  ],
+  "ask": [
+    "the cost to serve one customer",
+    "the current price, if any, and how buyers react to it",
+    "the margin the business needs"
+  ]
+}

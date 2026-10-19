@@ -150,6 +150,12 @@ export function evaluationWait(reasoning: Reasoning | null): string {
   return "This takes about a minute.";
 }
 
+// How long preparing a brief takes: the Chief of Staff's searches and reading.
+export function briefWait(reasoning: Reasoning | null): string {
+  if (reasoning?.chief === "high") return "At high reasoning this takes a minute or two; then you review it.";
+  return "About half a minute; then you review it.";
+}
+
 // How long writing or revising the proposal takes (measured: 40-82 s at the defaults).
 export function proposalWait(reasoning: Reasoning | null): string {
   const efforts = Object.values(reasoning ?? {});

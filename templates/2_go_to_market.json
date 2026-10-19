@@ -1,0 +1,19 @@
+{
+  "title": "Plan the go-to-market",
+  "summary": "Who to sell to first, through which channels, at what cost.",
+  "prompt": "Plan the go-to-market for {product}, sold to {customer}. Which customers should we win first, through which channels, and what will it cost to acquire them?",
+  "fields": [
+    {"key": "product", "label": "The product", "placeholder": "A tool that automates expense reports", "long": true},
+    {"key": "customer", "label": "Who buys it", "placeholder": "Finance teams at companies of 20 to 200 people"}
+  ],
+  "research": [
+    "what acquiring a customer costs in this market, by channel",
+    "how competitors position and sell",
+    "where these buyers look for tools like this"
+  ],
+  "ask": [
+    "the marketing budget",
+    "who sells, and how much of their time it gets",
+    "customers or traction so far"
+  ]
+}

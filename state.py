@@ -98,22 +98,81 @@ class Resolutions(BaseModel):
     )
 
 
+class Source(BaseModel):
+    """A web page the research drew on."""
+
+    title: str
+    url: str
+
+
+class Finding(BaseModel):
+    """One fact from the web research, with the sources it came from."""
+
+    point: str = Field(
+        description="One fact that bears on the decision, as one sentence with its figures and their year."
+    )
+    sources: list[int] = Field(description="The numbers of the search results it comes from.")
+
+
+class Research(BaseModel):
+    """What the web research found before the team started: facts, each citing
+    sources by number (1 is the first in `sources`)."""
+
+    findings: list[Finding] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
+
+    def as_prompt(self) -> str:
+        """The facts and the sources they cite, as the agents read them."""
+        if not self.findings:
+            return ""
+        cited = sorted({n for finding in self.findings for n in finding.sources})
+        lines = [
+            "Web research done before the team started (cite a figure you use as [n]; "
+            "treat these as evidence to weigh, not as settled):",
+            *(f"- {finding.point} {''.join(f'[{n}]' for n in finding.sources)}" for finding in self.findings),
+            "Sources:",
+            *(f"[{n}] {self.sources[n - 1].title} ({self.sources[n - 1].url})"
+              for n in cited if 0 < n <= len(self.sources)),
+        ]
+        return "\n".join(lines)
+
+
+class Answer(BaseModel):
+    """The founder's answer to one of the Chief of Staff's questions."""
+
+    question: str
+    answer: str
+
+
 class RequestContext(BaseModel):
-    """Optional detail that sharpens a founder's request."""
+    """Optional detail that sharpens a founder's request: the target market,
+    constraints and competition, and once the brief is prepared, the founder's
+    answers to the Chief of Staff's questions and the web research."""
 
     target_market: str | None = Field(default=None)
     constraints: str | None = Field(default=None)
     competitive_landscape: str | None = Field(default=None)
+    answers: list[Answer] = Field(default_factory=list)
+    research: Research | None = None
 
     def as_prompt(self) -> str:
-        """Render the set fields as prompt lines, or an empty string if none are set."""
+        """Render what is set as prompt text, or an empty string if nothing is."""
         labels = {
             "target_market": "Target market",
             "constraints": "Constraints",
             "competitive_landscape": "Competitive landscape",
         }
-        lines = [f"{labels[name]}: {value}" for name, value in self.model_dump().items() if value]
-        return "\n".join(lines)
+        lines = [f"{label}: {getattr(self, name)}" for name, label in labels.items() if getattr(self, name)]
+        parts = ["\n".join(lines)] if lines else []
+        answered = [answer for answer in self.answers if answer.answer.strip()]
+        if answered:
+            parts.append(
+                "The founder's answers to the Chief of Staff's questions:\n"
+                + "\n".join(f"- {answer.question} {answer.answer.strip()}" for answer in answered)
+            )
+        if self.research and self.research.as_prompt():
+            parts.append(self.research.as_prompt())
+        return "\n\n".join(parts)
 
 
 def _merge_analyses(current: dict, update: dict) -> dict:

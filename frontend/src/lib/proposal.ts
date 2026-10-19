@@ -28,6 +28,7 @@ export const SECTION_AGENTS: Record<string, string> = {
   finance: "Written by the Financial Planning Agent",
   technical: "Written by the Technical Feasibility Agent",
   risk: "Written by the Risk & Compliance Agent",
+  research: "Found on the web for the Chief of Staff",
 };
 
 // A compact dollar amount: $750, $12k, $1.2M.

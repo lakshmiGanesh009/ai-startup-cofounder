@@ -2,6 +2,8 @@
 // the team works it shows, from the steps the API streams, which stage is under
 // way, what each finished, and which specialists are writing.
 
+import { useId } from "react";
+
 import { AlertIcon, CheckIcon } from "@/components/ui/icons";
 import type { Specialist, Step } from "@/lib/api";
 import {
@@ -99,10 +101,12 @@ function Specialists({ states, team }: { states: Record<string, NodeState>; team
 export function TeamProgress({ steps, live }: { steps: Step[]; live: boolean }) {
   const states = nodeStates(steps);
   const team = assigned(steps);
+  // The idle panel stays in the page, hidden, while the live one shows.
+  const heading = useId();
 
   return (
-    <section aria-labelledby="team-heading">
-      <h2 id="team-heading" className="kicker">
+    <section aria-labelledby={heading}>
+      <h2 id={heading} className="kicker">
         {live ? "The team at work" : "How the team works"}
       </h2>
       <ol className="mt-4">

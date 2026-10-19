@@ -2,16 +2,21 @@
 // reviews beside it, and the team's work underneath: the specialists' reports,
 // the plan, the reviews, the conflicts and what the request cost.
 
+import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
 import { Markdown } from "@/components/markdown";
 import { Badge, Score } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/icons";
 import { titleSize } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
-import type { EvaluateResponse, ReviewResult } from "@/lib/api";
+import type { Answer, EvaluateResponse, Research, ReviewResult } from "@/lib/api";
 import { formatSeconds, specialistTitle } from "@/lib/team";
 
-export type Run = { prompt: string; result: EvaluateResponse; seconds?: number };
+// What the founder added to the brief before the team ran: answers to the
+// Chief of Staff's questions, and the web research they kept.
+export type Brief = { answers: Answer[]; research: Research | null };
+
+export type Run = { prompt: string; result: EvaluateResponse; seconds?: number; brief?: Brief };
 
 const UNAVAILABLE = "[unavailable]";
 
@@ -88,6 +93,22 @@ function Summary({ run }: { run: Run }) {
           {conflicts ? `${conflicts} settled by the Chief of Staff.` : "None raised."}
         </p>
       </section>
+      {run.brief && (run.brief.answers.length > 0 || run.brief.research) && (
+        <section>
+          <h3 className="kicker">The brief</h3>
+          <p className="mt-2 text-sm text-ink-2">
+            {[
+              run.brief.research &&
+                `${run.brief.research.findings.length} facts from the web, ${run.brief.research.sources.length} sources`,
+              run.brief.answers.length > 0 &&
+                `${run.brief.answers.length} ${run.brief.answers.length === 1 ? "answer" : "answers"} from you`,
+            ]
+              .filter(Boolean)
+              .join("; ")}
+            .
+          </p>
+        </section>
+      )}
       <section>
         <h3 className="kicker">This request</h3>
         <dl className="mt-2 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
@@ -134,6 +155,38 @@ function Reports({ result }: { result: EvaluateResponse }) {
           </div>
         </details>
       ))}
+    </div>
+  );
+}
+
+function BriefTab({ brief }: { brief: Brief }) {
+  return (
+    <div className="max-w-3xl space-y-10">
+      {brief.answers.length > 0 && (
+        <section aria-label="Your answers">
+          <h4 className="kicker">Your answers to the Chief of Staff</h4>
+          <dl className="mt-2 divide-y divide-rule border-y border-rule">
+            {brief.answers.map((answer) => (
+              <div key={answer.question} className="grid grid-cols-1 gap-1 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_14rem] sm:gap-6">
+                <dt className="text-ink-2">{answer.question}</dt>
+                <dd className="font-medium">{answer.answer}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+      {brief.research && (
+        <section aria-label="Web research">
+          <h4 className="kicker">What the web said</h4>
+          <div className="mt-2">
+            <ResearchFindings research={brief.research} prefix="run" />
+          </div>
+          <h4 className="mt-8 kicker">Sources</h4>
+          <div className="mt-3">
+            <ResearchSources sources={brief.research.sources} prefix="run" />
+          </div>
+        </section>
+      )}
     </div>
   );
 }
@@ -287,6 +340,9 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
           label="The team's work"
           tabs={[
             { label: "Specialist reports", content: <Reports result={result} /> },
+            ...(run.brief && (run.brief.answers.length > 0 || run.brief.research)
+              ? [{ label: "Brief & research", content: <BriefTab brief={run.brief} /> }]
+              : []),
             { label: "Plan", content: <Plan result={result} /> },
             { label: "Reviews", content: <Reviews result={result} /> },
             { label: "Conflicts", content: <Conflicts result={result} /> },

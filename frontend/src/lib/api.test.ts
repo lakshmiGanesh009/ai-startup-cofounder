@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { ApiError, evaluate, evaluateStream, getHealth, getScenarios, type Step } from "@/lib/api";
-import { fakeBackend, HEALTH, liveStream, RESULT, SCENARIOS, sse, STEPS } from "@/test/backend";
+import { ApiError, evaluate, evaluateStream, getHealth, getScenarios, getTemplates, prepareBrief, type Step } from "@/lib/api";
+import { fakeBackend, HEALTH, liveStream, PREPARED, RESULT, SCENARIOS, sse, STEPS, TEMPLATES } from "@/test/backend";
 
 // The error a call fails with.
 async function failure(call: Promise<unknown>): Promise<ApiError> {
@@ -14,11 +14,21 @@ async function failure(call: Promise<unknown>): Promise<ApiError> {
 }
 
 describe("the API client", () => {
-  test("reads the health check and the scenarios", async () => {
+  test("reads the health check, the scenarios and the templates", async () => {
     fakeBackend();
 
     expect(await getHealth()).toEqual(HEALTH);
     expect(await getScenarios()).toEqual(SCENARIOS);
+    expect(await getTemplates()).toEqual(TEMPLATES);
+  });
+
+  test("posts a brief to be prepared", async () => {
+    const { sent } = fakeBackend();
+
+    const prepared = await prepareBrief({ prompt: "An idea", context: null, template: "pricing", reasoning: null });
+
+    expect(prepared).toEqual(PREPARED);
+    expect(sent).toEqual([{ path: "/brief/prepare", body: { prompt: "An idea", context: null, template: "pricing", reasoning: null } }]);
   });
 
   test("posts an evaluation as JSON", async () => {

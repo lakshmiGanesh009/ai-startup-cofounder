@@ -14,8 +14,10 @@ from langchain_core.messages import AIMessage, SystemMessage
 
 import llm
 from agents.proposal_writer import SCHEMAS as PROPOSAL_SCHEMAS
+from brief import BriefReview, Question, SearchPlan
 from state import (
     DelegationPlan,
+    Finding,
     Resolution,
     Resolutions,
     ReviewResult,
@@ -33,6 +35,7 @@ PROVIDER_VARS = [
     "AZURE_OPENAI_CHIEF_REASONING_EFFORT",
     "OPENAI_API_KEY",
     "MODEL_NAME",
+    "TAVILY_API_KEY",
 ]
 
 SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
@@ -50,7 +53,7 @@ SPECIALIST_TITLES = {
 @pytest.fixture(autouse=True)
 def strip_credentials(monkeypatch):
     """Remove every provider variable, and any model already built from them, so
-    tests never hit a real LLM."""
+    tests never hit a real LLM or a real web search."""
     for name in PROVIDER_VARS:
         monkeypatch.delenv(name, raising=False)
     llm._model.cache_clear()
@@ -69,6 +72,10 @@ class FakeModel:
     A proposal part is taken from `proposal` (the sample one), and the prompt
     it was written from is kept in `part_prompts`; `fail_parts` names parts
     whose call raises.
+
+    Preparing a brief, the searches come from `search_plan` and the Chief of
+    Staff's reading from `brief_review` (by default two cited facts and one
+    question); `brief_prompts` keeps what each call was given.
 
     `synthesis_calls` and `specialist_calls` record how often each ran, `fail`
     names specialists whose call raises, and `delay` makes every call take that
@@ -92,9 +99,28 @@ class FakeModel:
         self.proposal = SAMPLE
         self.part_prompts: dict[str, list[str]] = {}
         self.fail_parts: set[str] = set()
+        self.search_plan = SearchPlan(queries=["clinic scheduling software market size", "clinic scheduling software prices"])
+        self.brief_review = BriefReview(
+            findings=[
+                Finding(point="About 147,000 office-based primary care physicians practised in 2019.", sources=[2]),
+                Finding(point="Scheduling tools cost $20-$300 per provider a month in 2025.", sources=[1, 2]),
+            ],
+            questions=[Question(question="What budget do you have to first launch?",
+                                why="It decides whether a paid pilot is affordable.",
+                                suggestions=["Under $15k", "$15k-$50k", "Over $50k"])],
+        )
+        self.brief_prompts: list[tuple[str, str]] = []
 
     def _plan_for(self, prompt: str) -> DelegationPlan:
         return self.plan
+
+    def _search_plan_for(self, prompt: str) -> SearchPlan:
+        self.brief_prompts.append(("search", prompt))
+        return self.search_plan
+
+    def _brief_review_for(self, prompt: str) -> BriefReview:
+        self.brief_prompts.append(("review", prompt))
+        return self.brief_review
 
     def _review_for(self, report: str) -> ReviewResult:
         # The verdict depends on the report text in the prompt, so a report can be
@@ -143,6 +169,8 @@ class FakeModel:
             ReviewResult: self._review_for,
             SpecialistCritique: self._critique_for,
             Resolutions: self._resolutions_for,
+            SearchPlan: self._search_plan_for,
+            BriefReview: self._brief_review_for,
             **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)

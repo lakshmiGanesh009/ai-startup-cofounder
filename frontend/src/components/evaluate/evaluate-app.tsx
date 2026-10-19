@@ -7,17 +7,28 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { ActivityLog } from "@/components/evaluate/activity-log";
-import { Composer } from "@/components/evaluate/composer";
-import { ResultView, type Run } from "@/components/evaluate/result-view";
+import { BriefReview } from "@/components/evaluate/brief-review";
+import { Composer, type Submission } from "@/components/evaluate/composer";
+import { type Brief, ResultView, type Run } from "@/components/evaluate/result-view";
 import { TeamProgress } from "@/components/evaluate/team-progress";
 import { Button } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
-import { Clock } from "@/components/ui/progress";
-import { evaluateStream, getScenarios, type RequestContext, type Scenario, type Step } from "@/lib/api";
+import { Clock, Progress } from "@/components/ui/progress";
+import {
+  evaluateStream,
+  getScenarios,
+  getTemplates,
+  type PreparedBrief,
+  prepareBrief,
+  type RequestContext,
+  type Scenario,
+  type Step,
+  type Template,
+} from "@/lib/api";
 import { useBackend } from "@/lib/backend";
-import { evaluationWait } from "@/lib/team";
+import { briefWait, evaluationWait } from "@/lib/team";
 
 const STORAGE_KEY = "cofounder-session";
 const DESCRIPTION =
@@ -25,6 +36,9 @@ const DESCRIPTION =
 
 type Saved = { runs: Run[]; followUp: string };
 type Pending = { prompt: string; steps: Step[] };
+// Preparing the first request's brief: the Chief of Staff at work on it, then
+// the founder reviewing what it found and asked.
+type Preparing = { submission: Submission; prepared: PreparedBrief | null };
 
 function restore(): Saved {
   try {
@@ -74,13 +88,15 @@ function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
 }
 
 function Session() {
-  const { reasoning } = useBackend();
+  const { reasoning, health } = useBackend();
   const [saved] = useState(restore);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [runs, setRuns] = useState<Run[]>(saved.runs);
   // The request shown; null for the latest.
   const [shown, setShown] = useState<number | null>(null);
   const [followUp, setFollowUp] = useState(saved.followUp);
+  const [preparing, setPreparing] = useState<Preparing | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +104,9 @@ function Session() {
     getScenarios()
       .then(setScenarios)
       .catch(() => setScenarios([]));
+    getTemplates()
+      .then(setTemplates)
+      .catch(() => setTemplates([]));
   }, []);
 
   useEffect(() => {
@@ -102,7 +121,7 @@ function Session() {
   const index = shown === null ? runs.length - 1 : Math.min(shown, runs.length - 1);
   const wait = evaluationWait(reasoning);
 
-  async function send(prompt: string, context: RequestContext) {
+  async function send(prompt: string, context: RequestContext, brief?: Brief) {
     setError(null);
     setPending({ prompt, steps: [] });
     let seconds: number | undefined;
@@ -119,7 +138,7 @@ function Session() {
           setPending((current) => current && { ...current, steps: [...current.steps, step] });
         },
       );
-      setRuns((current) => [...current, { prompt, result, seconds }]);
+      setRuns((current) => [...current, { prompt, result, seconds, ...(brief ? { brief } : {}) }]);
       setShown(null);
       return true;
     } catch (reason) {
@@ -127,6 +146,27 @@ function Session() {
       return false;
     } finally {
       setPending(null);
+    }
+  }
+
+  async function begin(submission: Submission) {
+    if (!submission.prepare) {
+      await send(submission.prompt, submission.context);
+      return;
+    }
+    setError(null);
+    setPreparing({ submission, prepared: null });
+    try {
+      const prepared = await prepareBrief({
+        prompt: submission.prompt,
+        context: Object.keys(submission.context).length ? submission.context : null,
+        template: submission.template,
+        reasoning,
+      });
+      setPreparing({ submission, prepared });
+    } catch (reason) {
+      setError((reason as Error).message);
+      setPreparing(null);
     }
   }
 
@@ -156,16 +196,60 @@ function Session() {
         }
       />
 
-      {!latest && !pending && (
-        <div className="mt-10 grid grid-cols-1 gap-14 lg:grid-cols-[minmax(0,1fr)_19rem]">
-          <Composer
-            scenarios={scenarios}
-            wait={wait}
-            busy={Boolean(pending)}
-            onSubmit={send}
-            onScenario={(scenario) => setFollowUp(scenario.follow_up ?? "")}
+      {/* Kept while hidden, so the brief is still there to edit after a review or a failure. */}
+      {!latest && (
+        <div hidden={Boolean(pending || preparing)}>
+          <div className="mt-10 grid grid-cols-1 gap-14 lg:grid-cols-[minmax(0,1fr)_19rem]">
+            <Composer
+              scenarios={scenarios}
+              templates={templates}
+              researchAvailable={health ? health.research.available : null}
+              waits={{ prepare: briefWait(reasoning), evaluate: wait }}
+              busy={Boolean(pending || preparing)}
+              onSubmit={begin}
+              onScenario={(scenario) => setFollowUp(scenario.follow_up ?? "")}
+            />
+            <TeamProgress steps={[]} live={false} />
+          </div>
+        </div>
+      )}
+
+      {preparing && !preparing.prepared && (
+        <div className="mt-10 max-w-3xl">
+          <Progress
+            title="The Chief of Staff is preparing the brief."
+            wait={briefWait(reasoning)}
+            stages={
+              health?.research.available === false
+                ? ["Reads the brief, and checks it for anything missing that would change the answer"]
+                : [
+                    "Plans a few web searches about the idea",
+                    `${health?.research.provider ?? "Tavily"} searches the web`,
+                    "Reads the results, keeps the facts that matter, and checks the brief for anything missing",
+                  ]
+            }
           />
-          <TeamProgress steps={[]} live={false} />
+        </div>
+      )}
+
+      {preparing?.prepared && (
+        <div className="mt-10">
+          <BriefReview
+            prompt={preparing.submission.prompt}
+            prepared={preparing.prepared}
+            wait={wait}
+            onBack={() => setPreparing(null)}
+            onRun={(answers, research) => {
+              const { submission } = preparing;
+              setPreparing(null);
+              const context: RequestContext = {
+                ...submission.context,
+                ...(answers.length ? { answers } : {}),
+                ...(research ? { research } : {}),
+              };
+              void send(submission.prompt, context, { answers, research });
+            }}
+          />
         </div>
       )}
 

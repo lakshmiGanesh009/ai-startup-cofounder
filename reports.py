@@ -20,10 +20,11 @@ from pydantic import BaseModel, computed_field
 
 from agents.roles import ROLES, SPECIALISTS
 from proposal import InvestmentMetrics, Proposal, figure_checks, investment_metrics
-from state import Resolution
+from state import Research, Resolution
 
 STRATEGY = "strategy"
 DECISIONS = "decisions"
+RESEARCH = "research"
 
 
 class ReportSection(BaseModel):
@@ -43,6 +44,7 @@ class SessionResults(BaseModel):
     final_strategy: str
     analyses: dict[str, str]
     resolutions: list[Resolution]
+    research: Research | None = None
 
     @classmethod
     def from_state(cls, state: dict) -> "SessionResults":
@@ -54,6 +56,7 @@ class SessionResults(BaseModel):
             final_strategy=state["final_strategy"],
             analyses=state["analyses"],
             resolutions=state.get("resolutions", []),
+            research=context.research if context else None,
         )
 
 
@@ -113,8 +116,20 @@ def decisions_markdown(resolutions: list[Resolution]) -> str:
     )
 
 
+def research_markdown(research: Research) -> str:
+    """The web research's facts, citing their sources by number, then the sources."""
+    facts = "\n".join(
+        f"- {finding.point} {''.join(f'[{n}]' for n in finding.sources)}" for finding in research.findings
+    )
+    sources = "\n".join(
+        f"{number}. [{source.title}]({source.url})" for number, source in enumerate(research.sources, start=1)
+    )
+    return f"{facts}\n\n**Sources**\n\n{sources}"
+
+
 def build_sections(results: SessionResults) -> list[ReportSection]:
-    """The strategy, each specialist's report, then the decisions on conflicts."""
+    """The strategy, each specialist's report, the decisions on conflicts, then
+    the web research the team started from."""
     sections = [ReportSection(key=STRATEGY, title="Launch Strategy", body=results.final_strategy)]
     for role in SPECIALISTS:
         if role.name in results.analyses:
@@ -128,6 +143,10 @@ def build_sections(results: SessionResults) -> list[ReportSection]:
                 title="Conflicts and Decisions",
                 body=decisions_markdown(results.resolutions),
             )
+        )
+    if results.research and results.research.findings:
+        sections.append(
+            ReportSection(key=RESEARCH, title="Web Research", body=research_markdown(results.research))
         )
     return sections
 

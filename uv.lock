@@ -17,6 +17,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "fpdf2" },
+    { name = "httpx" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "langgraph" },
@@ -37,6 +38,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.143.0" },
     { name = "fpdf2", specifier = ">=2.8.9" },
+    { name = "httpx", specifier = ">=0.28" },
     { name = "langchain-core", specifier = ">=1.6.10" },
     { name = "langchain-openai", specifier = ">=1.7.1" },
     { name = "langgraph", specifier = ">=1.2.15" },

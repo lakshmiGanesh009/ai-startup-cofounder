@@ -33,7 +33,7 @@ from proposal import (
     investment_metrics,
 )
 from report_charts import ASSUMPTION, BLUE, FONT, GRID, INK, MUTED, SECONDARY, STATUS, money
-from reports import DECISIONS, STRATEGY, Report
+from reports import DECISIONS, RESEARCH, STRATEGY, Report
 
 FONT_DIR = Path(__file__).resolve().parent / "assets" / "fonts"
 _FONT_FILES = {
@@ -384,6 +384,8 @@ def _source(key: str) -> tuple[str, str]:
         return ("Written by", _agent("chief"))
     if key == DECISIONS:
         return ("Decided by", _agent("chief"))
+    if key == RESEARCH:
+        return ("Found on the web for", _agent("chief"))
     return ("Written by", _agent(key)) if key in ROLES else ("Edited by", "the founder")
 
 

@@ -1,14 +1,17 @@
 // What the team has finished so far, newest last, as the API streams it.
 
+import { useId } from "react";
+
 import type { Step } from "@/lib/api";
 import { activity, actor, formatSeconds } from "@/lib/team";
 
 export function ActivityLog({ steps }: { steps: Step[] }) {
   const finished = steps.filter((step) => step.type === "done");
+  const heading = useId();
 
   return (
-    <section aria-labelledby="log-heading">
-      <h2 id="log-heading" className="kicker">
+    <section aria-labelledby={heading}>
+      <h2 id={heading} className="kicker">
         What the team has done
       </h2>
       <ol className="mt-3 border-t border-rule">

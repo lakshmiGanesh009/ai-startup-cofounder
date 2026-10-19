@@ -15,9 +15,17 @@ function renderPage() {
   );
 }
 
-const evaluateButton = () => screen.getByRole("button", { name: /^Evaluate/ });
+type User = ReturnType<typeof userEvent.setup>;
 
-async function startFromExample(user: ReturnType<typeof userEvent.setup>) {
+const researchFirst = () => screen.getByRole("checkbox", { name: /Research it and check the brief first/ });
+
+// Runs the team straight away, without researching and checking the brief.
+async function evaluateNow(user: User) {
+  if ((researchFirst() as HTMLInputElement).checked) await user.click(researchFirst());
+  await user.click(screen.getByRole("button", { name: /^Evaluate\s*⌘↵$/ }));
+}
+
+async function startFromExample(user: User) {
   await user.click(await screen.findByRole("button", { name: /Follow-up scheduling for small clinics/ }));
 }
 
@@ -33,7 +41,7 @@ describe("the Evaluate page", () => {
     );
     expect(screen.getByLabelText<HTMLInputElement>("Target market").value).toBe("Small clinics");
     expect(screen.getByRole("button", { name: /Follow-up scheduling/ }).getAttribute("aria-pressed")).toBe("true");
-    await user.click(evaluateButton());
+    await evaluateNow(user);
 
     expect(await screen.findByRole("heading", { name: "Go with conditions" })).toBeTruthy();
     expect(sent[0]).toEqual({
@@ -54,6 +62,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
 
+    await user.click(researchFirst());
     await user.type(screen.getByLabelText("The brief"), "An idea");
     fireEvent.keyDown(screen.getByLabelText("The brief"), { key: "Enter", ctrlKey: true });
 
@@ -67,7 +76,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
     await user.type(screen.getByLabelText("The brief"), "An idea");
-    await user.click(evaluateButton());
+    await evaluateNow(user);
 
     const working = await screen.findByRole("region", { name: "The team is working" });
     expect(within(working).getByText("The Chief of Staff is reading the brief and planning the work.")).toBeTruthy();
@@ -104,7 +113,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
     await user.type(screen.getByLabelText("The brief"), "An idea");
-    await user.click(evaluateButton());
+    await evaluateNow(user);
     await screen.findByRole("region", { name: "The team is working" });
 
     await act(async () => live.fail());
@@ -117,7 +126,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
     await startFromExample(user);
-    await user.click(evaluateButton());
+    await evaluateNow(user);
     await screen.findByRole("heading", { name: "Go with conditions" });
 
     const followUp = screen.getByLabelText<HTMLInputElement>("Follow up in this session");
@@ -138,7 +147,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
     await user.type(screen.getByLabelText("The brief"), "An idea");
-    await user.click(evaluateButton());
+    await evaluateNow(user);
     await screen.findByRole("heading", { name: "Go with conditions" });
 
     const reviews = screen.getByRole("complementary", { name: "The team's reviews" });
@@ -173,7 +182,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
     await user.type(screen.getByLabelText("The brief"), "An idea");
-    await user.click(evaluateButton());
+    await evaluateNow(user);
     await screen.findByRole("heading", { name: "Go with conditions" });
 
     const reviews = screen.getByRole("complementary", { name: "The team's reviews" });
@@ -187,7 +196,7 @@ describe("the Evaluate page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(evaluateButton());
+    await user.click(screen.getByRole("button", { name: /^Check the brief/ }));
 
     expect(screen.getByRole("alert").textContent).toContain("Describe the idea");
     expect(screen.getByLabelText("The brief").getAttribute("aria-invalid")).toBe("true");
@@ -204,10 +213,10 @@ describe("the Evaluate page", () => {
     renderPage();
     await user.type(screen.getByLabelText("The brief"), "An idea");
 
-    await user.click(evaluateButton());
+    await evaluateNow(user);
 
     expect((await screen.findByRole("alert")).textContent).toBe("The backend returned 502: The LLM call failed: timeout");
-    expect(evaluateButton()).toBeTruthy();
+    expect(screen.getByLabelText<HTMLTextAreaElement>("The brief").value).toBe("An idea");
   });
 
   test("the session survives a reload, until a new one is started", async () => {
@@ -229,14 +238,16 @@ describe("the Evaluate page", () => {
     expect(JSON.parse(window.sessionStorage.getItem("cofounder-session") ?? "{}").runs).toEqual([]);
   });
 
-  test("a damaged saved session is ignored, and the page works without examples", async () => {
+  test("a damaged saved session is ignored, and the page works without examples or templates", async () => {
     window.sessionStorage.setItem("cofounder-session", "{not json");
-    fakeBackend({ "GET /scenarios": { status: 500, body: null } });
+    fakeBackend({ "GET /scenarios": { status: 500, body: null }, "GET /templates": { status: 500, body: null } });
 
     renderPage();
 
     expect(await screen.findByRole("form", { name: "New request" })).toBeTruthy();
     await waitFor(() => expect(screen.queryByText("Or start from an example")).toBeNull());
+    expect(screen.queryByText("What do you need decided?")).toBeNull();
+    expect(screen.getByLabelText("The brief")).toBeTruthy();
   });
 });
 
