@@ -117,3 +117,16 @@ def test_the_metrics_read_as_words():
     assert describe_break_even(quick.model_copy(update={"break_even_customers": 1})) == "1 customer"
     assert describe_payback(investment_metrics(_plan())) == "27 months"
     assert describe_break_even(investment_metrics(_plan())) == "13 customers"
+
+
+def test_an_irr_that_cannot_be_worked_out_says_why():
+    from proposal import InvestmentMetrics
+
+    def metrics(flows):
+        return InvestmentMetrics(capex_usd=0, monthly_fixed_costs_usd=0, revenue_usd=[], opex_usd=[],
+                                 net_cash_flow_usd=flows, net_margin=[], npv_usd=0, irr=None,
+                                 payback_months=None, break_even_customers=None)
+
+    assert describe_irr(metrics([0, 5_000, 5_000, 5_000]))[1] == "nothing is invested up front"
+    # Money in, money out, money in again: more than one rate fits, or none does.
+    assert describe_irr(metrics([-1_000, 5_000, -5_000, 0]))[1] == "not defined for these cash flows"

@@ -191,3 +191,29 @@ def test_a_failed_resolve_call_does_not_sink_the_run(fake_llm, thread):
 
     assert result["final_strategy"]
     assert result["resolutions"] == []
+
+
+def test_the_filtered_categories_are_logged(monkeypatch, caplog):
+    from openai.types.chat import ChatCompletion
+
+    completion = ChatCompletion.model_validate({
+        "id": "x", "object": "chat.completion", "created": 0, "model": "gpt-5-mini",
+        "choices": [{
+            "index": 0, "finish_reason": "content_filter",
+            "message": {"role": "assistant", "content": None},
+            "content_filter_results": {
+                "hate": {"filtered": False, "severity": "safe"},
+                "protected_material_text": {"detected": True, "filtered": True},
+            },
+        }],
+    })
+    model = _ScriptedModel(openai.ContentFilterFinishReasonError(completion=completion),
+                           openai.ContentFilterFinishReasonError(), _reply(APPROVED))
+    monkeypatch.setattr("agents.chief_of_staff.get_llm", lambda role=None: model)
+
+    with track("review", {}) as t, pytest.raises(LLMReplyError):
+        structured_invoke(ReviewResult, [], t)
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert "The content filter withheld a ReviewResult reply (protected_material_text)." in warnings
+    assert "The content filter withheld a ReviewResult reply (categories not reported)." in warnings

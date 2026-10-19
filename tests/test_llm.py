@@ -146,3 +146,8 @@ def test_openai_takes_no_reasoning_effort(monkeypatch, capture_models):
 
     assert "reasoning_effort" not in model.kwargs
     assert model is llm.get_llm(llm.SPECIALIST)
+
+
+def test_error_names_the_missing_openai_key(capture_models):
+    with pytest.raises(llm.LLMNotConfigured, match="OPENAI_API_KEY"):
+        llm._openai_llm()

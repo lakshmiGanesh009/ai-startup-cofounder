@@ -25,9 +25,19 @@ addopts = "-v --tb=short"
 dev = [
     "httpx>=0.28.1",
     "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
 ]
 ui = [
     "httpx>=0.28.1",
     "pypdfium2>=5.14.0",
     "streamlit>=1.66.0",
 ]
+
+[tool.coverage.run]
+source = ["."]
+omit = ["tests/*", ".venv/*", "frontend/*"]
+
+[tool.coverage.report]
+show_missing = true
+# `pytest --cov` fails if the tests cover less than this share of the code.
+fail_under = 80

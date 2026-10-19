@@ -344,3 +344,40 @@ def test_the_chief_of_staff_is_told_to_face_weak_returns():
     assert "not paid back within three years" in weak
     assert investment_metrics(SAMPLE.financial).npv_usd > 0
     assert "Note:" not in metrics_text(SAMPLE.financial)
+
+
+def test_revising_the_risks_leaves_the_financial_plan_alone(fake_llm):
+    session_id = _evaluate()
+    _write(session_id)
+    fake_llm.part_prompts.clear()
+
+    assert _revise(session_id, "Add a key-person risk.", part="risk").status_code == 200
+
+    # Finance does not build on the risk part, so its wave is skipped.
+    assert set(fake_llm.part_prompts) == {"risk", "executive"}
+
+
+def test_a_revision_where_every_call_fails_changes_nothing(fake_llm):
+    session_id = _evaluate()
+    version = _write(session_id)["report"]["version"]
+    fake_llm.fail_parts = {"risk", "executive"}
+
+    response = _revise(session_id, "Add a key-person risk.", part="risk")
+
+    assert response.status_code == 502
+    assert "every LLM call failed" in response.json()["detail"]
+    assert client.get(f"/reports/{session_id}").json()["version"] == version
+
+
+def test_a_proposal_needs_a_configured_model():
+    from reports import store
+
+    store.record("unconfigured", SessionResults(
+        venture="Idea", objective="Goal", context="", final_strategy="Plan",
+        analyses={"finance": "Price"}, resolutions=[],
+    ))
+
+    response = client.post("/reports/unconfigured/proposal", json={"version": 1})
+
+    assert response.status_code == 503
+    assert "No LLM provider configured" in response.json()["detail"]
