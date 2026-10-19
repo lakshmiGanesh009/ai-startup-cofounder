@@ -1,6 +1,6 @@
 # Frontend (Next.js)
 
-The Next.js frontend for the AI Startup Co-Founder Team, which will replace the Streamlit UI. It has the **Evaluate** page: run the founding team on an idea and send follow-ups in the same session, with reasoning sliders in the sidebar. The Reports page comes next; until then the sidebar links to the Streamlit UI's.
+The Next.js frontend for the AI Startup Co-Founder Team, which replaces the Streamlit UI. It has two pages: **Evaluate**, to run the founding team on an idea and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
 
 Created with `create-next-app` 16.4.2: TypeScript, App Router, Tailwind CSS and ESLint, with the code under `src/`.
 
@@ -14,7 +14,7 @@ npm install
 cp .env.example .env.local
 ```
 
-`.env.local` holds the backend's address (`NEXT_PUBLIC_API_URL`, http://localhost:8000 by default) and the Streamlit UI's (`NEXT_PUBLIC_STREAMLIT_URL`, for the Reports link). Both are built into the browser bundle, so they must never hold a secret.
+`.env.local` holds the backend's address (`NEXT_PUBLIC_API_URL`, http://localhost:8000 by default). It is built into the browser bundle, so it must never hold a secret.
 
 ## Run
 
@@ -35,6 +35,15 @@ The sidebar shows whether the browser can reach the backend. If it can't, check 
 - A follow-up reuses the session; a scenario's own follow-up is filled in. Earlier requests stay, collapsed.
 - The session is kept in the browser tab, so a reload does not lose a result. **Start a new session** clears it.
 - The sidebar's **Reasoning** sliders set how hard the specialists and the Chief of Staff reason for every request. They start at the backend's configured efforts, and this browser remembers a change.
+- **Open this session's report** goes to the Reports page.
+
+## The Reports page
+
+- **Report** picks a session's report: the one in the address (`/reports?session=…`), else the Evaluate page's, else the newest.
+- Before the proposal, the page shows the team's report (the strategy, each specialist's report, the decisions on conflicts), each section labelled with the agent that wrote it. **Edit the team's report** turns it into markdown boxes, saved together.
+- **Write the investment proposal** has the agents write it (a minute or two at the default efforts). It then has a tab per section: executive summary, market, technical, financial, risk and compliance, KPIs, and the team's report. Each shows its text, tables and charts (market size, funnel, roadmap, costs, projections, cash position, risk matrix), the agent that wrote it, and "calculated" on the figures the API works out; figures that fail a check are flagged. **Edit** turns a section into a form, tables included.
+- **Open PDF** shows the document in a pop-up, in the browser's PDF viewer, with its download. There, **Ask the team to revise the proposal** sends an instruction for one part, or the whole proposal; the parts built on it follow, and the PDF is drawn again.
+- **Rewrite the proposal** and **Reset to the latest results** ask before they replace anything. A change refused because the report changed elsewhere reloads it and says so.
 
 ## Check
 
@@ -42,27 +51,38 @@ The sidebar shows whether the browser can reach the backend. If it can't, check 
 npm run lint
 npm test                 # unit tests (Vitest and React Testing Library)
 npm run test:coverage    # the same, failing below 80% coverage
-npm run build            # also type-checks
+npm run typecheck        # the whole project, tests included
+npm run build            # the production build
 ```
 
-The tests replace the backend with a fake (`src/test/backend.ts`), so they need no server.
+The tests replace the backend with a fake (`src/test/backend.ts`, and `src/test/reports.ts` for the reports), so they need no server. `src/test/sample-report.json` is a report exported from the backend's own models, so the fixture matches what the API sends.
 
 ## What's here
 
 ```
 src/app/layout.tsx                         Root layout: the sidebar and the backend provider
 src/app/page.tsx                           The Evaluate page
+src/app/reports/page.tsx                   The Reports page
 src/components/evaluate/evaluate-app.tsx   The session: requests, follow-ups, progress, errors
 src/components/evaluate/request-form.tsx   The first request: scenario, idea and context
 src/components/evaluate/result-view.tsx    One result: strategy, plan, reports, reviews, conflicts, metrics
-src/components/evaluate/working.tsx        Progress while the team works
+src/components/evaluate/working.tsx        Progress while the team works (also used for the proposal)
+src/components/reports/reports-app.tsx     The Reports page: choosing, writing, editing, resetting
+src/components/reports/proposal-view.tsx   The proposal's sections on screen
+src/components/reports/charts.tsx          The proposal's charts, in HTML and CSS
+src/components/reports/edit-form.tsx       The forms that edit each part, tables included
+src/components/reports/pdf-panel.tsx       The PDF pop-up: the revise prompt, download and viewer
+src/components/reports/team-report.tsx     The team's report, read or edited
 src/components/sidebar.tsx                 Pages, backend status and reasoning sliders
 src/components/reasoning-sliders.tsx       The two reasoning sliders
 src/components/markdown.tsx                The agents' markdown, with assumptions highlighted
 src/components/ui/tabs.tsx                 Accessible tabs
+src/components/ui/dialog.tsx               The modal pop-up, on the browser's <dialog>
+src/components/ui/badge.tsx                Small labels (sources, verdicts, states)
 src/lib/api.ts                             Typed client for the backend
 src/lib/backend.tsx                        The backend's status and the chosen efforts, app-wide
 src/lib/team.ts                            The team's names and how long a request takes
+src/lib/proposal.ts                        The proposal's parts, and its metrics in words
 ```
 
 The types in `src/lib/api.ts` mirror the backend's request and response models in `main.py` and `state.py`; change them together.

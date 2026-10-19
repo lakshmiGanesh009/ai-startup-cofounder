@@ -250,7 +250,7 @@ It opens on http://localhost:8501, with two pages in the sidebar. It finds the A
 
 The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time.
 
-The Next.js frontend in [frontend/](frontend/) is replacing the Streamlit UI. It has the Evaluate page (scenarios, progress, results, follow-ups and the reasoning sliders) on http://localhost:3000; its Reports page comes next, and until then it links to the Streamlit one. See [frontend/README.md](frontend/README.md) to run it.
+The Next.js frontend in [frontend/](frontend/) replaces the Streamlit UI, on http://localhost:3000: the same two pages, Evaluate and Reports, with the reasoning sliders in its sidebar and the PDF in a pop-up with the revise prompt. The Streamlit UI stays until the Next.js one is checked. See [frontend/README.md](frontend/README.md) to run it.
 
 ### Demo
 
@@ -298,7 +298,7 @@ demo.py                    Scenario walkthrough script
 streamlit_app.py           Streamlit UI: navigation and sidebar
 ui/                        Streamlit pages (Evaluate, Reports), the proposal view,
                            the reasoning sliders and the API client
-frontend/                  Next.js frontend (the Evaluate page so far)
+frontend/                  Next.js frontend (Evaluate and Reports pages)
 tests/                     Automated tests
 docs/                      Architecture and performance docs
 DEVELOPMENT_PLAN.md        Build sequence and status
