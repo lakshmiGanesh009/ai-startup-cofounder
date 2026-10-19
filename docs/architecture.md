@@ -181,8 +181,21 @@ so a request that takes a minute or more does not block the server. The model
 client for each reasoning effort is built once and reused, so its calls share
 one connection pool.
 
+`POST /evaluate/stream` runs the same graph with `graph.astream` in LangGraph's
+`tasks` mode, which reports each node as it begins and as it returns its state
+update. It sends these as server-sent events: `start`, then `done` with a
+summary that `progress.py` writes from the update ("Reviewed 4 reports: approved
+3, sent back Financial Planning."), then a `result` event with the body
+`/evaluate` returns, read from the checkpointer once the graph ends. The status
+of a streamed response is sent before the work starts, so a failure arrives as
+an `error` event with the status `/evaluate` would have returned (503, 502 or
+500). A summary that cannot be written never fails the request; it reads
+"Done." instead.
+
 The **Next.js frontend** (`frontend/`) is the UI, with an Evaluate page and a
-Reports page. It calls the API from the browser, so the API allows the origins
+Reports page. The Evaluate page reads the stream with `fetch` (an `EventSource`
+can only send GETs) and shows the team's progress as it arrives. It calls the
+API from the browser, so the API allows the origins
 in `CORS_ORIGINS` (`http://localhost:3000` by default), and it gets the example
 scenarios from `GET /scenarios` because a browser cannot read them from disk. A
 session's requests are kept in the browser tab, and the reasoning efforts in

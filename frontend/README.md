@@ -1,6 +1,6 @@
 # Frontend (Next.js)
 
-The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has two pages: **Evaluate**, to run the founding team on an idea and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
+The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has two pages: **Evaluate**, to run the founding team on an idea, follow it as it works and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
 
 Created with `create-next-app` 16.4.2: TypeScript, App Router, Tailwind CSS and ESLint, with the code under `src/`.
 
@@ -29,21 +29,25 @@ The sidebar shows whether the browser can reach the backend. If it can't, check 
 
 ## The Evaluate page
 
-- **Start from a scenario** fills the form from the example scenarios the API serves (`GET /scenarios`); or describe an idea and add optional context.
-- While the team works (about two minutes at the default efforts), a panel shows a running clock and what the team is doing.
-- The result shows the objective and the launch strategy, with tabs for the plan, the specialists' reports, the reviews, the conflicts and their decisions, and the metrics. Figures the agents marked as assumptions are highlighted.
-- A follow-up reuses the session; a scenario's own follow-up is filled in. Earlier requests stay, collapsed.
+- **The brief** is the idea, or the decision you want the team to make; **Context** adds the target market, constraints and competition. **Or start from an example** fills both from the scenarios the API serves (`GET /scenarios`). **Evaluate** (or ⌘/Ctrl+Enter) sends it.
+- While the team works (about two minutes at the default efforts), the page follows it through the streamed evaluation (`POST /evaluate/stream`): a log of what each agent finished, with the time, a line saying who is working now, and the five stages of the work, with each specialist writing, revising or done. A clock shows the time taken.
+- The result is the launch strategy, set as a memo under its objective, with the team's reviews beside it: each specialist's score and verdict, the conflicts the Chief of Staff settled, and the request's model calls, tokens and time. Tabs below hold the specialists' reports, the plan, each round of reviews, the conflicts and their decisions, and the time each step took. Figures the agents marked as assumptions are highlighted.
+- A follow-up reuses the session; a scenario's own follow-up is filled in. Each request in the session stays, one click away.
 - The session is kept in the browser tab, so a reload does not lose a result. **Start a new session** clears it.
 - The sidebar's **Reasoning** sliders set how hard the specialists and the Chief of Staff reason for every request. They start at the backend's configured efforts, and this browser remembers a change.
-- **Open this session's report** goes to the Reports page.
+- **Open the report** goes to the session's report on the Reports page.
 
 ## The Reports page
 
 - **Report** picks a session's report: the one in the address (`/reports?session=…`), else the Evaluate page's, else the newest.
 - Before the proposal, the page shows the team's report (the strategy, each specialist's report, the decisions on conflicts), each section labelled with the agent that wrote it. **Edit the team's report** turns it into markdown boxes, saved together.
-- **Write the investment proposal** has the agents write it (a minute or two at the default efforts). It then has a tab per section: executive summary, market, technical, financial, risk and compliance, KPIs, and the team's report. Each shows its text, tables and charts (market size, funnel, roadmap, costs, projections, cash position, risk matrix), the agent that wrote it, and "calculated" on the figures the API works out; figures that fail a check are flagged. **Edit** turns a section into a form, tables included.
-- **Open PDF** shows the document in a pop-up, in the browser's PDF viewer, with its download. There, **Ask the team to revise the proposal** sends an instruction for one part, or the whole proposal; the parts built on it follow, and the PDF is drawn again.
-- **Rewrite the proposal** and **Reset to the latest results** ask before they replace anything. A change refused because the report changed elsewhere reloads it and says so.
+- **Write the investment proposal** has the agents write it (a minute or two at the default efforts). It then reads as chapters, numbered as in the PDF: executive summary, market and marketing, technical and operations, the financial plan, risk and compliance, success metrics, and the team's report as an appendix. Each has its text, tables and charts (market size, funnel, roadmap, costs, projections, cash position, risk matrix), the agent that wrote it, and "calculated" on the figures the API works out; figures that fail a check are flagged. **Edit** turns a chapter into a form, tables included.
+- **Open PDF** shows the document in a pop-up, in the browser's PDF viewer, with its download. There, **Ask the team to revise** sends an instruction for one part, or the whole proposal; the parts built on it follow, and the PDF is drawn again. **Revise with the team** opens the pop-up with the prompt ready.
+- **More actions** holds **Rewrite the proposal** and **Reset to the latest results**, which ask before they replace anything. A change refused because the report changed elsewhere reloads it and says so.
+
+## Design
+
+The pages read like the documents they hold. The agents' writing (strategies, reports, the proposal) is set in Newsreader, a serif, and the interface in Geist, with Geist Mono for times and IDs. Colours are tokens in `src/app/globals.css`: warm paper and ink, hairline rules, one navy for primary actions, and a data palette for the charts (blue and orange for two series, a blue ramp for ordered stages, red only for cash below zero). Each has a dark-mode value, chosen rather than inverted. Status colours (good, warning, bad) always sit beside a word. `.doc` sets the agents' markdown; a short line on its own before a list ("Key risks") is set as a heading, since the agents write section labels that way.
 
 ## Check
 
@@ -60,33 +64,35 @@ The tests replace the backend with a fake (`src/test/backend.ts`, and `src/test/
 ## What's here
 
 ```
-src/app/layout.tsx                         Root layout: the sidebar and the backend provider
+src/app/layout.tsx                         Root layout and fonts: the sidebar and the backend provider
+src/app/globals.css                        Colour tokens (light and dark), document type (.doc), sliders
 src/app/page.tsx                           The Evaluate page
 src/app/reports/page.tsx                   The Reports page
-src/components/evaluate/evaluate-app.tsx   The session: requests, follow-ups, progress, errors
-src/components/evaluate/request-form.tsx   The first request: scenario, idea and context
-src/components/evaluate/result-view.tsx    One result: strategy, plan, reports, reviews, conflicts, metrics
-src/components/evaluate/working.tsx        Progress while the team works (also used for the proposal)
-src/components/reports/reports-app.tsx     The Reports page: choosing, writing, editing, resetting
-src/components/reports/proposal-view.tsx   The proposal's sections on screen
+src/components/evaluate/evaluate-app.tsx   The session: requests, follow-ups, the live run, errors
+src/components/evaluate/composer.tsx       The first request: the brief, context and examples
+src/components/evaluate/activity-log.tsx   What the team has done so far, and who is working now
+src/components/evaluate/team-progress.tsx  The five stages of the team's work, idle or live
+src/components/evaluate/result-view.tsx    One result: the strategy memo, the reviews, the team's work
+src/components/reports/reports-app.tsx     The Reports page: cover, chapters, writing, editing, resetting
+src/components/reports/proposal-view.tsx   The proposal's chapters on screen
 src/components/reports/charts.tsx          The proposal's charts, in HTML and CSS
 src/components/reports/edit-form.tsx       The forms that edit each part, tables included
 src/components/reports/pdf-panel.tsx       The PDF pop-up: the revise prompt, download and viewer
 src/components/reports/team-report.tsx     The team's report, read or edited
-src/components/sidebar.tsx                 Pages, backend status and reasoning sliders
+src/components/sidebar.tsx                 Pages, backend status and reasoning sliders (a menu on phones)
 src/components/reasoning-sliders.tsx       The two reasoning sliders
-src/components/markdown.tsx                The agents' markdown, with assumptions highlighted
-src/components/ui/tabs.tsx                 Accessible tabs
-src/components/ui/dialog.tsx               The modal pop-up, on the browser's <dialog>
-src/components/ui/badge.tsx                Small labels (sources, verdicts, states)
-src/lib/api.ts                             Typed client for the backend
+src/components/backend-status.tsx          Whether the browser can reach the API
+src/components/markdown.tsx                The agents' markdown: assumptions highlighted, labels as headings
+src/components/ui/                         Buttons, fields, notices, badges, menu, tabs, dialog, icons,
+                                           the page header, the progress panel and the team's mark
+src/lib/api.ts                             Typed client for the backend, the stream reader included
 src/lib/backend.tsx                        The backend's status and the chosen efforts, app-wide
-src/lib/team.ts                            The team's names and how long a request takes
+src/lib/team.ts                            The team: names, stages, what it is doing, how long it takes
 src/lib/proposal.ts                        The proposal's parts, and its metrics in words
 ```
 
-The types in `src/lib/api.ts` mirror the backend's request and response models in `main.py` and `state.py`; change them together.
+The types in `src/lib/api.ts` mirror the backend's request and response models in `main.py` and `state.py`, and its `Step` the summaries in `progress.py`; change them together.
 
-`npm audit` reports two advisories, both in build-time tooling, not in the app the browser runs: a high-severity one in `braces` (through `eslint-config-next`, linting only) and a moderate one in `postcss-selector-parser` (through `@tailwindcss/typography`, which only parses this project's own CSS at build time). `npm audit fix --force` would downgrade `eslint-config-next` to Next.js 14 and the typography plugin to an old release, so both are left until those packages update.
+`npm audit` reports one high-severity advisory, in `braces`, which only the linter uses (through `eslint-config-next`); nothing the browser runs depends on it. `npm audit fix --force` would downgrade `eslint-config-next` to Next.js 14, so it is left until that package updates.
 
 `AGENTS.md` is written by Next.js for coding agents. It points them to the docs that ship with this version (`node_modules/next/dist/docs/`), which differ from older Next.js versions.

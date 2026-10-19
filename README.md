@@ -215,8 +215,9 @@ uv run python main.py
 The API listens on http://localhost:8000, with interactive docs at http://localhost:8000/docs.
 
 - `GET /health` — health check, with the reasoning efforts a request can choose and the configured defaults.
-- `GET /scenarios` — the example scenarios in `scenarios/`, to start a request from.
+- `GET /scenarios` — the example scenarios in `scenarios/`, each with a short title, to start a request from.
 - `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), optional `session_id` for a follow-up, and optional `reasoning` (`{"specialist": "low", "chief": "high"}`, each `minimal`, `low`, `medium` or `high`) to override the configured efforts for this request. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. A full evaluation takes about two minutes at the default efforts, 5–10 minutes with the Chief of Staff at `high`. Missing credentials return 503, and an LLM call that still fails after its retries returns 502.
+- `POST /evaluate/stream` — the same evaluation, reported as it happens, as server-sent events. Each step of the graph (`plan`, each specialist, `review`, `critique`, `resolve`, `synthesis`) sends a `start` event and a `done` event; the `done` event carries a one-line summary, such as "Reviewed 4 reports: approved 3, sent back Financial Planning.", and the figures behind it. A `result` event with the body `/evaluate` returns ends the stream. A failure ends it with an `error` event carrying the status `/evaluate` would have returned (503, 502 or 500). The Evaluate page uses this to show the team at work.
 
 ```bash
 curl -X POST http://localhost:8000/evaluate \
@@ -248,8 +249,8 @@ npm run dev
 
 It opens on http://localhost:3000, with two pages in the sidebar. It finds the API at `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (http://localhost:8000 by default), and the API must allow its origin in `CORS_ORIGINS` (it does by default).
 
-- **Evaluate** — pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session. The session is kept in the browser tab, so a reload does not lose it.
-- **Reports** — each session's report, read on the page as text, tables and charts. **Write the investment proposal** has the agents write it up following an investment-proposal template; each section then has a tab, a label naming the agent that wrote it, and an **Edit** button. **Open PDF** shows the document in a pop-up, where you can ask the team to revise one part or the whole proposal, and download it. **Reset to the latest results** starts again from the evaluation.
+- **Evaluate** — write a brief, or start from an example, add optional context, and run the team (⌘/Ctrl+Enter sends it). While the team works, the page follows it step by step: what each agent finished, who is working now, the five stages of the work and the time taken. The launch strategy is then set as a memo, with the team's reviews beside it and the specialists' reports, plan, reviews, conflicts and cost below. Follow-ups continue the same session, which is kept in the browser tab, so a reload does not lose it.
+- **Reports** — each session's report, read on the page as a document. **Write the investment proposal** has the agents write it up following an investment-proposal template; it then reads as numbered chapters, as in the PDF, each with its charts, the agent that wrote it and an **Edit** button. **Open PDF** shows the document in a pop-up, where you can ask the team to revise one part or the whole proposal, and download it; **Revise with the team** opens it with the prompt ready. **More actions** rewrites the proposal or resets the report to the latest results, after asking.
 
 The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time. See [frontend/README.md](frontend/README.md) for more.
 
@@ -278,7 +279,8 @@ Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and Lang
 ### Project structure
 
 ```
-main.py                    FastAPI app: /health, /evaluate, /reports
+main.py                    FastAPI app: /health, /evaluate, /evaluate/stream, /reports
+progress.py                What each step of the graph did, for the streamed evaluation
 config.py                  Environment settings and loop/LLM limits
 llm.py                     Chat model client (Azure OpenAI or OpenAI)
 state.py                   Shared workflow state and structured models

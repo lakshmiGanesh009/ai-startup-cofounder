@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand, Step 16 sharpened every prompt and gave the Chief of Staff deeper reasoning, and Step 17 turned the report into an investment proposal with charts, revisable by instruction from a PDF pop-up, and added reasoning sliders. Step 14 built the Next.js UI's Evaluate and Reports pages, which replaced the Streamlit UI. The tests cover 99% of the backend and 96% of the Next.js frontend; both fail below 80%.
+**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand, Step 16 sharpened every prompt and gave the Chief of Staff deeper reasoning, and Step 17 turned the report into an investment proposal with charts, revisable by instruction from a PDF pop-up, and added reasoning sliders. Step 14 built the Next.js UI's Evaluate and Reports pages, which replaced the Streamlit UI, and Step 18 redesigned them and shows the team's progress as it works. The tests cover 99% of the backend and 97% of the Next.js frontend; both fail below 80%.
 
 ## How we work
 
@@ -92,6 +92,7 @@ graph TD
 | 15 | Reports: editor, detailed version and PDF | Synthesis into a cohesive strategy document | Done |
 | 16 | Sharper prompts, deeper Chief of Staff reasoning | Delegation and synthesis effectiveness, reflection and self-correction | Done |
 | 17 | Investment proposal, charts and reasoning sliders | Synthesis into a cohesive strategy document; structured outputs | Done |
+| 18 | UI design pass and live progress | Live walkthrough; agent communication made visible | Done |
 
 ## Live verification
 
@@ -115,6 +116,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 15 | A scenario's report on the Reports page, in headless Chrome against Azure OpenAI | Pass: the report and a 6–10 page preview appear after the evaluation. An edit typed in the browser is saved (version 2), shown in the preview and kept by the detailed version, which took 29–34 s and grew the sections from about 330–640 words to about 970–1,340 (13–15 pages). No errors on the page. |
 | 16 | The three scenarios with the Chief of Staff at `medium` and at `high`, against the old prompts; the Reports flow in headless Chrome | Pass: evaluations take 89–130 s at `medium` (50–56 s before) and 5–9.5 minutes at `high`; `medium` was chosen. `xhigh` is accepted but does no reasoning on `gpt-5-mini`. Review caught two weak reports that came back improved; decisions and the strategy are concrete and consistent. The Reports flow passed 14 of 14 checks. |
 | 17 | Two scenarios evaluated, their proposals written and revised against Azure OpenAI; the PDFs read page by page; the Reports page in headless Chrome | Pass after fixes: writing takes 57–82 s and a one-part revision 40–54 s. The live runs moved the projections' arithmetic into code, added the figure checks and the financial case, retried a content-filtered reply, and fixed an IRR above 1,000% shown as "none" (see [docs/performance.md](docs/performance.md)). In the browser, 27 of 27 checks: the sliders, a tab per section, no inner scroll boxes, an edit saved, and the PDF pop-up's revision adding the requested risk, with no console errors from the app. |
+| 18 | The redesigned pages in headless Chrome against Azure OpenAI, light, dark and at phone width, read screenshot by screenshot | Pass after fixes: evaluations streamed their steps live and finished in 90–142 s; proposals took 69–73 s. The first pass found a sideways scroll on phones, "Sent back" on a report still short after its one revision, the agents' section labels set as plain text, "0.0% of TAM", a "0 mo" roadmap phase, "Revise with the team" leaving the prompt unfocused, and an FTE total of 2.1500000000000004; each is fixed, with a test. The second pass: 11 of 11 checks, with no console errors. |
 
 ### Fixed during live verification
 
@@ -449,7 +451,7 @@ Built in two parts, each checked by the user before the next.
 
 **Part 3, retiring the Streamlit UI (done):** `streamlit_app.py`, `ui/`, their tests and the `ui` dependency group (Streamlit, pypdfium2) are removed, and so is `API_URL`, which only the Streamlit UI read. The backend's tests no longer need a dependency group to measure coverage.
 
-Optionally, a streaming endpoint (LangGraph's `astream`) so the UI can show each stage as it finishes instead of one long wait.
+A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it finishes instead of one long wait, followed in Step 18.
 
 **Done when:**
 
@@ -519,10 +521,38 @@ Optionally, a streaming endpoint (LangGraph's `astream`) so the UI can show each
 
 - The proposal follows the template with charts drawn from its figures, its numbers agree across parts, a revision changes what it was asked to, and the founder can read, edit, revise and download it from the Reports page.
 
+### Step 18 - UI design pass and live progress (Done)
+
+**Goal:** the Next.js UI reads as a crafted product rather than a default template, and the two-minute wait shows the team at work instead of a clock alone.
+
+**Built:**
+
+- `main.py`, `progress.py`: `POST /evaluate/stream` runs the graph with `astream` and sends each node's start and finish as server-sent events, the finish with a one-line summary of what it did and the figures behind it, then the result. A failure ends the stream with an `error` event carrying the status `/evaluate` would return. `GET /scenarios` gives each scenario a short title.
+- `frontend/`: a design system: colour tokens with chosen dark-mode values (warm paper and ink, one navy for actions, a data palette checked for colour blindness), Newsreader for the agents' documents and Geist for the interface, and shared components (buttons, fields, notices, menu, tabs, dialog, page header, progress, icons).
+- The Evaluate page: a composer with the brief set in the serif, the context and examples. While the team works, the page shows a log of what each agent finished, who is working now, and the five stages, with each specialist writing, revising or done. The result reads as a memo, with the reviews beside it and the team's work in tabs below.
+- The Reports page: a cover with the document control; an action bar with Open PDF, Revise with the team and More actions; the proposal as numbered chapters in a side list, as in the PDF; a confirmation before a rewrite or reset; and the PDF pop-up's part chosen by radio.
+- Fixes from reading the live screenshots:
+  - A report still short after its one revision reads "Not approved after revision" (it said "Sent back"), on the page and in the stream, and each review round shows only the reports it reviewed.
+  - The agents' section labels ("Key facts driving the decision" before a list) are set as headings.
+  - Nothing scrolls sideways on a phone.
+  - Small market shares keep their precision ("0.04% of TAM", not "0.0%").
+  - A roadmap phase under a month reads as month 1 on the page and in the PDF, not "1-0".
+  - "Revise with the team" puts the cursor in the prompt.
+
+**Check:**
+
+- Automated: the stream's events, their order, summaries and errors (`tests/test_streaming.py`); the stream reader with split chunks, CRLF line endings, an error event and a lost connection; the page as steps arrive; the verdicts; the label headings; the team's progress, including a failed specialist and a skipped cross-check; every Reports action through the new menu and dialogs.
+- Live: an evaluation and a proposal in headless Chrome against Azure OpenAI, captured light, dark and at phone width, and read screen by screen.
+
+**Done when:**
+
+- The pages read as a designed product, the wait shows the team's progress step by step, and nothing scrolls sideways on a phone.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17, 18
+progress.py                Step summaries for the stream      Step 18
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward
@@ -541,5 +571,5 @@ tests/                     Automated tests                    every step
 scenarios/                 Startup scenarios                  Step 9
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-frontend/                  Next.js frontend                   Steps 13-14
+frontend/                  Next.js frontend                   Steps 13-14, 18
 ```
