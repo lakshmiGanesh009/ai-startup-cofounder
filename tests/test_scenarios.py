@@ -67,3 +67,16 @@ def test_the_demo_explains_how_to_run_it(monkeypatch, capsys):
     assert stopped.value.code == 1
     assert "Usage: uv run python demo.py" in capsys.readouterr().out
 
+
+def test_the_api_serves_the_scenarios():
+    from fastapi.testclient import TestClient
+
+    from main import app
+
+    scenarios = TestClient(app).get("/scenarios").json()
+
+    assert [s["name"] for s in scenarios] == [path.stem for path in SCENARIOS]
+    healthcare = next(s for s in scenarios if s["name"] == "healthcare_scheduling")
+    assert healthcare["context"]["target_market"] == "Small outpatient clinics in the US"
+    assert healthcare["follow_up"] == "Refine the pricing strategy after financial review."
+    assert next(s for s in scenarios if s["name"] == "gtm_risk")["follow_up"] is None

@@ -1,6 +1,8 @@
+import json
 import logging
 import re
 import uuid
+from pathlib import Path
 from typing import Literal
 
 import uvicorn
@@ -38,6 +40,7 @@ from reports import (
 from state import NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
+SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
 
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
@@ -106,6 +109,22 @@ async def health():
             "chief": default_effort(CHIEF),
         },
     }
+
+
+class Scenario(BaseModel):
+    name: str = Field(description="The scenario file's name, without .json.")
+    prompt: str
+    context: RequestContext | None = None
+    follow_up: str | None = Field(None, description="A follow-up to send after the first request.")
+
+
+@app.get("/scenarios", response_model=list[Scenario])
+async def list_scenarios():
+    """The example startup scenarios (scenarios/*.json) a request can start from."""
+    return [
+        Scenario(name=path.stem, **json.loads(path.read_text(encoding="utf-8")))
+        for path in sorted(SCENARIO_DIR.glob("*.json"))
+    ]
 
 
 @app.post("/evaluate", response_model=EvaluateResponse)
