@@ -22,9 +22,8 @@ describe("the sidebar", () => {
 
     expect(await screen.findByText(/Connected to http:\/\/localhost:8000/)).toBeTruthy();
     expect(screen.getByRole("link", { name: "Evaluate" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("link", { name: /Reports/ }).getAttribute("href")).toBe(
-      "http://localhost:8501/reports_page",
-    );
+    expect(screen.getByRole("link", { name: "Reports" }).getAttribute("href")).toBe("/reports");
+    expect(screen.getByRole("link", { name: "Reports" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>("Specialists").getAttribute("aria-valuetext")).toBe("minimal");
     expect(screen.getByLabelText<HTMLInputElement>("Chief of Staff").getAttribute("aria-valuetext")).toBe("medium");
     expect(screen.getByText(/This takes about two minutes/)).toBeTruthy();

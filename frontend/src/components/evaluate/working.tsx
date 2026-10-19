@@ -16,7 +16,18 @@ const STAGES = [
   "The Chief of Staff writes the launch strategy",
 ];
 
-export function Working({ prompt, reasoning }: { prompt: string; reasoning: Reasoning | null }) {
+// A panel with a running clock for a request that takes minutes.
+export function Progress({
+  title,
+  wait,
+  detail,
+  stages,
+}: {
+  title: string;
+  wait: string;
+  detail?: React.ReactNode;
+  stages: string[];
+}) {
   const [elapsed, setElapsed] = useState(0);
   // Kept across the effect's restarts, as when the page is hidden and shown
   // again on navigation, so the clock does not start over.
@@ -39,19 +50,34 @@ export function Working({ prompt, reasoning }: { prompt: string; reasoning: Reas
           aria-hidden
           className="size-5 animate-spin rounded-full border-2 border-accent border-t-transparent"
         />
-        <p className="font-medium">The founding team is working.</p>
+        <p className="font-medium">{title}</p>
         <span className="ml-auto font-mono text-sm tabular-nums" aria-label="Elapsed time">
           {formatSeconds(elapsed)}
         </span>
       </div>
       <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
-        {evaluationWait(reasoning)} Request: <q>{prompt}</q>
+        {wait} {detail}
       </p>
       <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
-        {STAGES.map((stage) => (
+        {stages.map((stage) => (
           <li key={stage}>{stage}</li>
         ))}
       </ol>
     </section>
+  );
+}
+
+export function Working({ prompt, reasoning }: { prompt: string; reasoning: Reasoning | null }) {
+  return (
+    <Progress
+      title="The founding team is working."
+      wait={evaluationWait(reasoning)}
+      detail={
+        <>
+          Request: <q>{prompt}</q>
+        </>
+      }
+      stages={STAGES}
+    />
   );
 }

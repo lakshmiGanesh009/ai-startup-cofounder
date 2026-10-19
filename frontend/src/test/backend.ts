@@ -55,8 +55,9 @@ export const RESULT: EvaluateResponse = {
 };
 
 type Answer = { status?: number; body?: unknown };
-// A function answers each call afresh, and can hold it open with a promise.
-type Answering = Answer | (() => Answer | Promise<Answer>);
+// A function answers each call afresh, from the body sent, and can hold the
+// call open with a promise.
+export type Answering = Answer | ((body: unknown) => Answer | Promise<Answer>);
 
 export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) {
   const sent: { path: string; body: unknown }[] = [];
@@ -69,10 +70,11 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const path = new URL(url).pathname;
     const key = `${init?.method ?? "GET"} ${path}`;
-    if (init?.body) sent.push({ path, body: JSON.parse(String(init.body)) });
+    const request = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (init?.body) sent.push({ path, body: request });
     const answer = answers[key];
     if (!answer) throw new TypeError("Failed to fetch");
-    const { status = 200, body } = typeof answer === "function" ? await answer() : answer;
+    const { status = 200, body } = typeof answer === "function" ? await answer(request) : answer;
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetch);

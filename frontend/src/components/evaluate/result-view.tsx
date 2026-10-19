@@ -2,19 +2,10 @@
 // plan, the specialists' reports, the reviews, the conflicts and the metrics.
 
 import { Markdown } from "@/components/markdown";
+import { Badge } from "@/components/ui/badge";
 import { Tabs } from "@/components/ui/tabs";
 import type { EvaluateResponse, ReviewResult } from "@/lib/api";
 import { specialistTitle } from "@/lib/team";
-
-function Badge({ children, tone = "blue" }: { children: React.ReactNode; tone?: "blue" | "green" | "amber" | "gray" }) {
-  const tones = {
-    blue: "bg-accent-soft/70 text-navy dark:bg-accent/20 dark:text-accent-soft",
-    green: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-    amber: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-    gray: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  };
-  return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${tones[tone]}`}>{children}</span>;
-}
 
 function Plan({ result }: { result: EvaluateResponse }) {
   return (

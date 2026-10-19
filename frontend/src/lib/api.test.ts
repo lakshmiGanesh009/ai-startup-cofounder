@@ -3,6 +3,16 @@ import { describe, expect, test } from "vitest";
 import { ApiError, evaluate, getHealth, getScenarios } from "@/lib/api";
 import { fakeBackend, HEALTH, RESULT, SCENARIOS } from "@/test/backend";
 
+// The error a call fails with.
+async function failure(call: Promise<unknown>): Promise<ApiError> {
+  try {
+    await call;
+  } catch (error) {
+    return error as ApiError;
+  }
+  throw new Error("The call succeeded.");
+}
+
 describe("the API client", () => {
   test("reads the health check and the scenarios", async () => {
     fakeBackend();
@@ -24,7 +34,7 @@ describe("the API client", () => {
   test("an error carries the backend's reason and status", async () => {
     fakeBackend({ "POST /evaluate": { status: 503, body: { detail: "No LLM provider configured." } } });
 
-    const error = await evaluate({ prompt: "An idea" }).catch((reason: ApiError) => reason);
+    const error = await failure(evaluate({ prompt: "An idea" }));
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.message).toBe("The backend returned 503: No LLM provider configured.");
@@ -53,7 +63,7 @@ describe("the API client", () => {
   test("an unreachable backend is named", async () => {
     fakeBackend({ "GET /health": undefined });
 
-    const error = await getHealth().catch((reason: ApiError) => reason);
+    const error = await failure(getHealth());
 
     expect(error.message).toBe("Could not reach the backend at http://localhost:8000.");
     expect(error.status).toBeNull();

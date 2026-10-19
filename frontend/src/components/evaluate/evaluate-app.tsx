@@ -4,6 +4,7 @@
 // the same session. The session's requests are kept in this browser tab, so a
 // reload does not lose a result that took minutes.
 
+import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { RequestForm } from "@/components/evaluate/request-form";
@@ -145,6 +146,12 @@ function Session() {
             Request {runs.length}: {latest.prompt}
           </h2>
           <ResultView result={latest.result} />
+          <Link
+            href={`/reports?session=${encodeURIComponent(latest.result.session_id)}`}
+            className="inline-flex rounded-md border border-accent px-3 py-1.5 text-sm font-medium text-accent-strong hover:bg-accent-soft/40 dark:text-accent-soft dark:hover:bg-accent/10"
+          >
+            Open this session&apos;s report: edit it, write the investment proposal, get the PDF
+          </Link>
         </section>
       )}
 

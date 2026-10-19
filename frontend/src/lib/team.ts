@@ -30,6 +30,13 @@ export function evaluationWait(reasoning: Reasoning | null): string {
   return "This takes about a minute.";
 }
 
+// How long writing or revising the proposal takes (measured: 40-82 s at the defaults).
+export function proposalWait(reasoning: Reasoning | null): string {
+  const efforts = Object.values(reasoning ?? {});
+  if (efforts.includes("high")) return "At high reasoning this takes several minutes.";
+  return "This takes a minute or two.";
+}
+
 export function formatSeconds(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(whole / 60);
