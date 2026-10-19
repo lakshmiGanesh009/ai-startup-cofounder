@@ -181,19 +181,15 @@ so a request that takes a minute or more does not block the server. The model
 client for each reasoning effort is built once and reused, so its calls share
 one connection pool.
 
-Two clients use the API:
-
-- **Streamlit UI** (`streamlit_app.py` and `ui/`), the working UI for now, with
-  an Evaluate page and a Reports page. It calls the API from the server side, so
-  it needs no CORS.
-- **Next.js frontend** (`frontend/`), which replaces it, with the same two
-  pages; the PDF opens in a pop-up on the browser's `<dialog>`, shown by its
-  own PDF viewer from a blob the page fetches. It calls the API from the
-  browser, so the API allows the origins in `CORS_ORIGINS`
-  (`http://localhost:3000` by default), and it gets the example scenarios from
-  `GET /scenarios` because a browser cannot read them from disk. A session's
-  requests are kept in the browser tab, and the reasoning efforts in the
-  browser, so a reload loses neither.
+The **Next.js frontend** (`frontend/`) is the UI, with an Evaluate page and a
+Reports page. It calls the API from the browser, so the API allows the origins
+in `CORS_ORIGINS` (`http://localhost:3000` by default), and it gets the example
+scenarios from `GET /scenarios` because a browser cannot read them from disk. A
+session's requests are kept in the browser tab, and the reasoning efforts in
+the browser, so a reload loses neither. The PDF opens in a pop-up on the
+browser's `<dialog>`, shown by the browser's own PDF viewer from a blob the page
+fetches. (A Streamlit UI served the same pages until the Next.js one replaced
+it in Step 14.)
 
 ## Reports
 
@@ -243,8 +239,8 @@ workflow's state, so editing it never changes what the agents produced.
   cannot make the server fetch anything.
 - **Read on screen.** The Reports page shows the same content as text, tables
   and charts in the page (no boxes that scroll on their own), a tab per section,
-  each with an "Edit" switch. The PDF opens in a pop-up, as page images drawn
-  with pypdfium2, beside the inline prompt that sends a revision.
+  each with an Edit button. The PDF opens in a pop-up, in the browser's PDF
+  viewer, beside the inline prompt that sends a revision.
 
 Reports are kept in memory, like sessions, and are lost when the API restarts.
 

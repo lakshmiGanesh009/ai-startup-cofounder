@@ -185,7 +185,7 @@ business plan.
 
 ## Implementation
 
-A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine served by a FastAPI backend, with a Streamlit UI on top and a Next.js frontend scaffolded to replace it. [docs/architecture.md](docs/architecture.md) explains it in full, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
+A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine served by a FastAPI backend, with a Next.js frontend on top. [docs/architecture.md](docs/architecture.md) explains it in full, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
 
 ### Setup
 
@@ -198,10 +198,12 @@ cp .env.example .env
 
 Fill in `.env` with Azure OpenAI or OpenAI credentials. The provider is chosen by which credentials are set.
 
-For the Streamlit UI, also install the optional `ui` group:
+For the frontend, install its packages with [Node.js](https://nodejs.org/) 20.9 or newer:
 
 ```bash
-uv sync --group ui
+cd frontend
+npm install
+cp .env.example .env.local
 ```
 
 ### Run the API
@@ -237,20 +239,19 @@ Each session also has a written report, kept by the API (in memory, like the ses
 
 ### Run the UI
 
-With the API running, start the Streamlit UI, the working UI for now:
+With the API running, start the Next.js frontend in [frontend/](frontend/):
 
 ```bash
-uv run --group ui streamlit run streamlit_app.py
+cd frontend
+npm run dev
 ```
 
-It opens on http://localhost:8501, with two pages in the sidebar. It finds the API at `API_URL` (http://localhost:8000 by default).
+It opens on http://localhost:3000, with two pages in the sidebar. It finds the API at `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (http://localhost:8000 by default), and the API must allow its origin in `CORS_ORIGINS` (it does by default).
 
-- **Evaluate** — pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session.
-- **Reports** — each session's report, read on the page as text, tables and charts. **Write the investment proposal** has the agents write it up following an investment-proposal template; each section then has a tab, a label naming the agent that wrote it, and an **Edit** switch. **Open PDF** shows the document in a pop-up, where you can ask the team to revise one part or the whole proposal, and download it. **Reset to the latest results** starts again from the evaluation.
+- **Evaluate** — pick a scenario or describe an idea, add optional context, and run the team; once the strategy is shown, send follow-ups in the same session. The session is kept in the browser tab, so a reload does not lose it.
+- **Reports** — each session's report, read on the page as text, tables and charts. **Write the investment proposal** has the agents write it up following an investment-proposal template; each section then has a tab, a label naming the agent that wrote it, and an **Edit** button. **Open PDF** shows the document in a pop-up, where you can ask the team to revise one part or the whole proposal, and download it. **Reset to the latest results** starts again from the evaluation.
 
-The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time.
-
-The Next.js frontend in [frontend/](frontend/) replaces the Streamlit UI, on http://localhost:3000: the same two pages, Evaluate and Reports, with the reasoning sliders in its sidebar and the PDF in a pop-up with the revise prompt. The Streamlit UI stays until the Next.js one is checked. See [frontend/README.md](frontend/README.md) to run it.
+The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time. See [frontend/README.md](frontend/README.md) for more.
 
 ### Demo
 
@@ -264,16 +265,15 @@ uv run python demo.py scenarios/healthcare_scheduling.json
 
 ```bash
 uv run pytest                     # backend
-uv run --group ui pytest          # backend and the Streamlit UI
-uv run --group ui pytest --cov    # the same, with a coverage report; fails below 80%
-cd frontend && npm test           # the Next.js frontend (npm run test:coverage for coverage)
+uv run pytest --cov               # the same, with a coverage report; fails below 80%
+cd frontend && npm test           # the frontend (npm run test:coverage fails below 80%)
 ```
 
-Tests use a fake model, so they need no credentials and make no LLM calls. Without the `ui` group the Streamlit UI tests are skipped, so measure coverage with it.
+Tests use a fake model, and the frontend's a fake backend, so they need no credentials and make no LLM calls.
 
 ### Configuration
 
-Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default), and `API_URL` tells the Streamlit UI where the API is.
+Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default).
 
 ### Project structure
 
@@ -295,9 +295,6 @@ report_charts.py           The PDF's charts and visual blocks
 assets/fonts/              DejaVu Sans, the PDF's font
 scenarios/                 Startup scenarios for the demo and tests
 demo.py                    Scenario walkthrough script
-streamlit_app.py           Streamlit UI: navigation and sidebar
-ui/                        Streamlit pages (Evaluate, Reports), the proposal view,
-                           the reasoning sliders and the API client
 frontend/                  Next.js frontend (Evaluate and Reports pages)
 tests/                     Automated tests
 docs/                      Architecture and performance docs

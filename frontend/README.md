@@ -1,6 +1,6 @@
 # Frontend (Next.js)
 
-The Next.js frontend for the AI Startup Co-Founder Team, which replaces the Streamlit UI. It has two pages: **Evaluate**, to run the founding team on an idea and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
+The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has two pages: **Evaluate**, to run the founding team on an idea and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
 
 Created with `create-next-app` 16.4.2: TypeScript, App Router, Tailwind CSS and ESLint, with the code under `src/`.
 
