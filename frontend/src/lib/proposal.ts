@@ -57,6 +57,21 @@ export function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
+// One figure as a share of another, with the precision a small share needs:
+// "47.9%", "0.04%".
+export function share(part: number, whole: number): string {
+  const value = (part / whole) * 100;
+  const text = value === 0 || value >= 1 ? value.toFixed(1).replace(/\.0$/, "") : String(Number(value.toPrecision(1)));
+  return `${text}%`;
+}
+
+// The months a roadmap phase spans, counting the project's start as month 1:
+// "1–4", or "1" for a phase of a month or less.
+export function monthRange(start: number, duration: number): string {
+  const end = start + Math.max(Math.ceil(duration), 1) - 1;
+  return end > start ? `${start}–${end}` : `${start}`;
+}
+
 export function describeIrr(metrics: InvestmentMetrics): [string, string] {
   const { irr, net_cash_flow_usd: flows } = metrics;
   if (irr === null) {

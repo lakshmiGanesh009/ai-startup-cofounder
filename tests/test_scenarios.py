@@ -77,6 +77,21 @@ def test_the_api_serves_the_scenarios():
 
     assert [s["name"] for s in scenarios] == [path.stem for path in SCENARIOS]
     healthcare = next(s for s in scenarios if s["name"] == "healthcare_scheduling")
+    assert healthcare["title"] == "Follow-up scheduling for small clinics"
     assert healthcare["context"]["target_market"] == "Small outpatient clinics in the US"
     assert healthcare["follow_up"] == "Refine the pricing strategy after financial review."
     assert next(s for s in scenarios if s["name"] == "gtm_risk")["follow_up"] is None
+
+
+def test_a_scenario_without_a_title_is_named_after_its_file(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    import main
+
+    (tmp_path / "pricing_check.json").write_text(json.dumps({"prompt": "Check our pricing."}))
+    monkeypatch.setattr(main, "SCENARIO_DIR", tmp_path)
+
+    assert TestClient(main.app).get("/scenarios").json() == [
+        {"name": "pricing_check", "title": "Pricing check", "prompt": "Check our pricing.",
+         "context": None, "follow_up": None}
+    ]

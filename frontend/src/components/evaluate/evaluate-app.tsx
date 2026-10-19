@@ -1,22 +1,30 @@
 "use client";
 
-// The Evaluate page: run the founding team on an idea, then send follow-ups in
-// the same session. The session's requests are kept in this browser tab, so a
-// reload does not lose a result that took minutes.
+// The Evaluate page: run the founding team on an idea and watch it work, then
+// send follow-ups in the same session. The session's requests are kept in this
+// browser tab, so a reload does not lose a result that took minutes.
 
-import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-import { RequestForm } from "@/components/evaluate/request-form";
-import { ResultView } from "@/components/evaluate/result-view";
-import { Working } from "@/components/evaluate/working";
-import { evaluate, type EvaluateResponse, getScenarios, type RequestContext, type Scenario } from "@/lib/api";
+import { ActivityLog } from "@/components/evaluate/activity-log";
+import { Composer } from "@/components/evaluate/composer";
+import { ResultView, type Run } from "@/components/evaluate/result-view";
+import { TeamProgress } from "@/components/evaluate/team-progress";
+import { Button } from "@/components/ui/button";
+import { inputClass, Label } from "@/components/ui/field";
+import { Notice } from "@/components/ui/notice";
+import { PageHeader } from "@/components/ui/page-header";
+import { Clock } from "@/components/ui/progress";
+import { evaluateStream, getScenarios, type RequestContext, type Scenario, type Step } from "@/lib/api";
 import { useBackend } from "@/lib/backend";
+import { evaluationWait } from "@/lib/team";
 
 const STORAGE_KEY = "cofounder-session";
+const DESCRIPTION =
+  "Describe an idea or a decision. The Chief of Staff plans the work, four specialists analyse it, and the team reviews and reconciles their reports into one launch strategy.";
 
-type Run = { prompt: string; result: EvaluateResponse };
 type Saved = { runs: Run[]; followUp: string };
+type Pending = { prompt: string; steps: Step[] };
 
 function restore(): Saved {
   try {
@@ -33,21 +41,35 @@ export function EvaluateApp() {
   // The session is kept in this tab's storage, which the server cannot read,
   // so it is read only once the page runs in the browser.
   const inBrowser = useSyncExternalStore(neverChanges, () => true, () => false);
-  return inBrowser ? <Session /> : <Intro />;
+  return inBrowser ? <Session /> : <PageHeader title="Evaluate an idea" description={DESCRIPTION} />;
 }
 
-function Intro({ children }: { children?: React.ReactNode }) {
+function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    section.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, []);
+
   return (
-    <header className="flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Evaluate an idea</h1>
-        <p className="mt-1 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
-          The Chief of Staff plans the work, four specialists analyse it, and the team reviews and
-          reconciles their reports into one launch strategy.
-        </p>
+    <section ref={section} aria-label="The team is working" aria-busy="true" className="scroll-mt-8">
+      <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3 border-b border-rule pb-6">
+        <div className="max-w-3xl">
+          <p className="kicker flex items-center gap-2">
+            <span aria-hidden className="working-dot size-1.5 rounded-full bg-primary" />
+            The team is working
+          </p>
+          <p className="mt-2 font-serif text-xl leading-snug">{pending.prompt}</p>
+        </div>
+        <div className="text-right">
+          <Clock className="text-lg" />
+          <p className="mt-0.5 text-xs text-ink-3">{wait}</p>
+        </div>
       </div>
-      {children}
-    </header>
+      <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
+        <ActivityLog steps={pending.steps} />
+        <TeamProgress steps={pending.steps} live />
+      </div>
+    </section>
   );
 }
 
@@ -56,8 +78,10 @@ function Session() {
   const [saved] = useState(restore);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [runs, setRuns] = useState<Run[]>(saved.runs);
+  // The request shown; null for the latest.
+  const [shown, setShown] = useState<number | null>(null);
   const [followUp, setFollowUp] = useState(saved.followUp);
-  const [pending, setPending] = useState<string | null>(null);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,18 +99,28 @@ function Session() {
   }, [runs, followUp]);
 
   const latest = runs.at(-1);
+  const index = shown === null ? runs.length - 1 : Math.min(shown, runs.length - 1);
+  const wait = evaluationWait(reasoning);
 
   async function send(prompt: string, context: RequestContext) {
     setError(null);
-    setPending(prompt);
+    setPending({ prompt, steps: [] });
+    let seconds: number | undefined;
     try {
-      const result = await evaluate({
-        prompt,
-        context: Object.keys(context).length ? context : null,
-        session_id: latest?.result.session_id ?? null,
-        reasoning,
-      });
-      setRuns((current) => [...current, { prompt, result }]);
+      const result = await evaluateStream(
+        {
+          prompt,
+          context: Object.keys(context).length ? context : null,
+          session_id: latest?.result.session_id ?? null,
+          reasoning,
+        },
+        (step) => {
+          seconds = step.at;
+          setPending((current) => current && { ...current, steps: [...current.steps, step] });
+        },
+      );
+      setRuns((current) => [...current, { prompt, result, seconds }]);
+      setShown(null);
       return true;
     } catch (reason) {
       setError((reason as Error).message);
@@ -98,98 +132,108 @@ function Session() {
 
   function startOver() {
     setRuns([]);
+    setShown(null);
     setFollowUp("");
     setError(null);
   }
 
   return (
-    <div className="space-y-8">
-      <Intro>
-        {latest && (
-          <div className="flex items-center gap-3 text-xs text-zinc-500">
-            <span>Session {latest.result.session_id.slice(0, 8)}</span>
-            <button
-              type="button"
-              onClick={startOver}
-              disabled={Boolean(pending)}
-              className="rounded-md border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-            >
-              Start a new session
-            </button>
-          </div>
-        )}
-      </Intro>
+    <div>
+      <PageHeader
+        title="Evaluate an idea"
+        description={DESCRIPTION}
+        aside={
+          latest && (
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-ink-3">
+                Session <span className="font-mono">{latest.result.session_id.slice(0, 8)}</span>
+              </span>
+              <Button size="sm" onClick={startOver} disabled={Boolean(pending)}>
+                Start a new session
+              </Button>
+            </div>
+          )
+        }
+      />
 
       {!latest && !pending && (
-        <RequestForm
-          scenarios={scenarios}
-          busy={Boolean(pending)}
-          onSubmit={send}
-          onScenario={(scenario) => setFollowUp(scenario?.follow_up ?? "")}
-        />
+        <div className="mt-10 grid grid-cols-1 gap-14 lg:grid-cols-[minmax(0,1fr)_19rem]">
+          <Composer
+            scenarios={scenarios}
+            wait={wait}
+            busy={Boolean(pending)}
+            onSubmit={send}
+            onScenario={(scenario) => setFollowUp(scenario.follow_up ?? "")}
+          />
+          <TeamProgress steps={[]} live={false} />
+        </div>
       )}
 
-      {runs.slice(0, -1).map((run, index) => (
-        <details key={run.result.session_id + index} className="rounded-lg border border-zinc-200 dark:border-zinc-800">
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-            Request {index + 1}: {run.prompt}
-          </summary>
-          <div className="border-t border-zinc-200 p-4 dark:border-zinc-800">
-            <ResultView result={run.result} />
-          </div>
-        </details>
-      ))}
-
-      {latest && (
-        <section aria-labelledby="latest-request" className="space-y-4">
-          <h2 id="latest-request" className="text-lg font-semibold">
-            Request {runs.length}: {latest.prompt}
-          </h2>
-          <ResultView result={latest.result} />
-          <Link
-            href={`/reports?session=${encodeURIComponent(latest.result.session_id)}`}
-            className="inline-flex rounded-md border border-accent px-3 py-1.5 text-sm font-medium text-accent-strong hover:bg-accent-soft/40 dark:text-accent-soft dark:hover:bg-accent/10"
-          >
-            Open this session&apos;s report: edit it, write the investment proposal, get the PDF
-          </Link>
-        </section>
+      {runs.length > 1 && (
+        <nav aria-label="Requests in this session" className="mt-8 flex gap-2 overflow-x-auto pb-1">
+          {runs.map((run, number) => (
+            <button
+              key={`${run.result.session_id}-${number}`}
+              type="button"
+              aria-current={number === index ? "true" : undefined}
+              onClick={() => setShown(number)}
+              className={`w-64 shrink-0 rounded-md border px-3 py-2 text-left transition-colors ${
+                number === index
+                  ? "border-ink-3 bg-surface"
+                  : "border-rule text-ink-2 hover:border-rule-strong hover:bg-surface/60"
+              }`}
+            >
+              <span className="kicker block">Request {number + 1}</span>
+              <span className="mt-0.5 block truncate text-sm">{run.prompt}</span>
+            </button>
+          ))}
+        </nav>
       )}
 
-      {pending && <Working prompt={pending} reasoning={reasoning} />}
+      {runs[index] && (
+        <div className="mt-10">
+          <ResultView run={runs[index]} number={index + 1} />
+        </div>
+      )}
+
+      {pending && (
+        <div className="mt-12">
+          <LiveRun pending={pending} wait={wait} />
+        </div>
+      )}
 
       {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
+        <Notice tone="bad" className="mt-8">
           {error}
-        </p>
+        </Notice>
       )}
 
-      {latest && (
+      {latest && !pending && (
         <form
           aria-label="Follow-up"
-          className="flex flex-col gap-2 border-t border-zinc-200 pt-6 sm:flex-row dark:border-zinc-800"
+          className="mt-16 rounded-lg border border-rule bg-surface p-5"
           onSubmit={async (event) => {
             event.preventDefault();
             if (!followUp.trim()) return;
             if (await send(followUp.trim(), {})) setFollowUp("");
           }}
         >
-          <label htmlFor="follow-up" className="sr-only">
-            Follow-up in this session
-          </label>
-          <input
-            id="follow-up"
-            value={followUp}
-            onChange={(event) => setFollowUp(event.target.value)}
-            placeholder="Follow-up in this session, e.g. Refine the pricing strategy after financial review."
-            className="flex-1 rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30 focus:outline-none dark:border-zinc-700"
-          />
-          <button
-            type="submit"
-            disabled={Boolean(pending) || !followUp.trim()}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Send follow-up
-          </button>
+          <Label htmlFor="follow-up">Follow up in this session</Label>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              id="follow-up"
+              value={followUp}
+              onChange={(event) => setFollowUp(event.target.value)}
+              placeholder="Refine the pricing strategy after financial review."
+              className={inputClass}
+            />
+            <Button type="submit" variant="primary" disabled={!followUp.trim()}>
+              Send follow-up
+            </Button>
+          </div>
+          <p className="mt-2 text-xs text-ink-3">
+            Only the specialists the follow-up concerns work again; the rest keep their reports. {wait}
+          </p>
         </form>
       )}
     </div>

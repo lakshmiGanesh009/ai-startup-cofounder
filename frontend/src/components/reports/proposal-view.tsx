@@ -1,49 +1,59 @@
-// The investment proposal on screen, one section at a time: text, tables and
-// charts, each marked with the agent it came from, or "calculated" for the
-// figures the API works out.
+// The investment proposal on screen, a chapter at a time: text, tables and
+// charts, numbered as the PDF numbers them. Figures the API calculates say so.
 
-import { BarList, BLUE, CashPosition, Funnel, Gantt, GroupedColumns, ORANGE, ramp, RiskMatrix, SEVERITY_STYLE } from "@/components/reports/charts";
+import { BarList, CashPosition, DATA_1, DATA_2, DATA_3, Funnel, Gantt, GroupedColumns, ramp, RiskMatrix, SEVERITY_FILL } from "@/components/reports/charts";
 import { Markdown } from "@/components/markdown";
 import { Badge, type Tone } from "@/components/ui/badge";
+import { Notice } from "@/components/ui/notice";
 import type { InvestmentMetrics, Kpi, Proposal } from "@/lib/api";
 import {
   describeBreakEven,
   describeIrr,
   describePayback,
   money,
-  PART_AGENTS,
+  monthRange,
   percent,
   severity,
+  share,
   usd,
 } from "@/lib/proposal";
 
-type View = { proposal: Proposal; metrics: InvestmentMetrics; checks: string[] };
+export type View = { proposal: Proposal; metrics: InvestmentMetrics; checks: string[] };
 
-function Source({ part }: { part: keyof Proposal }) {
-  return <Badge>Written by the {PART_AGENTS[part]}</Badge>;
-}
-
-function Calculated({ what }: { what: string }) {
-  return <Badge tone="gray">Calculated {what}</Badge>;
-}
-
-function Heading({ children, badge }: { children: React.ReactNode; badge?: React.ReactNode }) {
+function Sub({
+  number,
+  title,
+  note,
+  children,
+}: {
+  number: string;
+  title: string;
+  note?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mt-8 mb-3 flex flex-wrap items-center gap-3 first:mt-0">
-      <h3 className="text-base font-semibold">{children}</h3>
-      {badge}
-    </div>
+    <section aria-label={title} className="mt-12 first:mt-0">
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h3 className="font-serif text-[1.3rem] leading-snug font-medium">
+          <span className="mr-2.5 font-sans text-sm font-normal text-ink-3 tabular">{number}</span>
+          {title}
+        </h3>
+        {note && <span className="text-xs text-ink-3">{note}</span>}
+      </div>
+      {children}
+    </section>
   );
 }
 
-function Tiles({ items }: { items: [string, string, string][] }) {
+// Figures in a hairline grid.
+function Figures({ items }: { items: [string, string, string][] }) {
   return (
-    <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <dl className="grid grid-cols-1 gap-px overflow-hidden rounded-lg border border-rule bg-rule sm:grid-cols-2 lg:grid-cols-3">
       {items.map(([label, value, note]) => (
-        <div key={label} className="rounded-lg border border-zinc-200 bg-surface p-4 dark:border-zinc-800">
-          <dt className="text-xs tracking-wide text-zinc-500 uppercase">{label}</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums">{value}</dd>
-          <dd className="mt-1 text-xs text-zinc-500">{note}</dd>
+        <div key={label} className="bg-surface px-4 py-3.5">
+          <dt className="kicker">{label}</dt>
+          <dd className="mt-1 text-[1.6rem] leading-tight font-medium tracking-[-0.01em] tabular">{value}</dd>
+          <dd className="mt-0.5 text-xs text-ink-3">{note}</dd>
         </div>
       ))}
     </dl>
@@ -54,20 +64,26 @@ function Table({ head, rows, numeric = [] }: { head: string[]; rows: React.React
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
-        <thead className="bg-accent-soft/40 text-xs text-navy uppercase dark:bg-accent/15 dark:text-accent-soft">
-          <tr>
+        <thead>
+          <tr className="border-b border-rule-strong">
             {head.map((cell, index) => (
-              <th key={index} className={`px-3 py-2 font-semibold ${numeric.includes(index) ? "text-right" : ""}`}>
+              <th
+                key={index}
+                className={`py-2 pr-4 text-xs font-medium text-ink-3 ${numeric.includes(index) ? "text-right" : ""}`}
+              >
                 {cell}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+        <tbody className="divide-y divide-rule">
           {rows.map((row, number) => (
             <tr key={number} className="align-top">
               {row.map((cell, index) => (
-                <td key={index} className={`px-3 py-2 ${numeric.includes(index) ? "text-right tabular-nums" : ""}`}>
+                <td
+                  key={index}
+                  className={`py-2.5 pr-4 ${index === 0 ? "font-medium text-ink" : "text-ink-2"} ${numeric.includes(index) ? "text-right tabular" : ""}`}
+                >
                   {cell}
                 </td>
               ))}
@@ -79,19 +95,29 @@ function Table({ head, rows, numeric = [] }: { head: string[]; rows: React.React
   );
 }
 
-const VERDICT: Record<Proposal["executive"]["verdict"], { tone: string; badge: Tone }> = {
-  Go: { tone: "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40", badge: "green" },
-  "Go with conditions": { tone: "border-amber-400 bg-amber-50 dark:bg-amber-950/40", badge: "amber" },
-  "Not yet": { tone: "border-red-500 bg-red-50 dark:bg-red-950/40", badge: "red" },
+// A passage set apart: the recommendation, the value proposition, the figures' meaning.
+function Callout({ label, color, children }: { label: string; color: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-r-lg border-l-[3px] bg-surface py-4 pr-5 pl-5" style={{ borderLeftColor: color }}>
+      <p className="kicker">{label}</p>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  );
+}
+
+const VERDICT_COLOR: Record<Proposal["executive"]["verdict"], string> = {
+  Go: "var(--good)",
+  "Go with conditions": "var(--warn)",
+  "Not yet": "var(--bad)",
 };
 
 function snapshot(proposal: Proposal, metrics: InvestmentMetrics): [string, string, string][] {
-  const years = metrics.revenue_usd;
+  const revenue = metrics.revenue_usd;
   return [
     ["Total CapEx", money(metrics.capex_usd), "one-off, before launch"],
     [
-      "Revenue, years 1-3",
-      years.length ? `${money(years[0])} → ${money(years[years.length - 1])}` : "-",
+      "Revenue, years 1–3",
+      revenue.length ? `${money(revenue[0])} → ${money(revenue[revenue.length - 1])}` : "–",
       "from the Financial Planning Agent's drivers",
     ],
     ["NPV", money(metrics.npv_usd), `at a ${percent(proposal.financial.discount_rate)} discount rate`],
@@ -105,24 +131,32 @@ export function ExecutiveSection({ proposal, metrics }: View) {
   const e = proposal.executive;
   return (
     <div>
-      <Source part="executive" />
-      <div className={`mt-4 rounded-lg border-l-4 p-4 ${VERDICT[e.verdict].tone}`}>
-        <p className="mb-1 flex items-center gap-2 font-semibold">
-          Recommendation <Badge tone={VERDICT[e.verdict].badge}>{e.verdict}</Badge>
+      <Callout label="Recommendation" color={VERDICT_COLOR[e.verdict]}>
+        <p className="font-serif text-xl font-semibold" style={{ color: VERDICT_COLOR[e.verdict] }}>
+          {e.verdict}
         </p>
-        <Markdown>{e.recommendation}</Markdown>
-      </div>
-      <Heading>Project overview</Heading>
-      <Markdown>{e.overview}</Markdown>
-      <Heading>The opportunity</Heading>
-      <Markdown>{e.opportunity}</Markdown>
-      <Heading>Strategic alignment</Heading>
-      <Markdown>{e.strategic_alignment}</Markdown>
-      <Heading badge={<Calculated what="from the financial plan" />}>Financial snapshot</Heading>
-      <Tiles items={snapshot(proposal, metrics)} />
-      <div className="mt-4 rounded-lg border-l-4 border-accent bg-accent-soft/30 p-4 dark:bg-accent/10">
-        <p className="mb-1 font-semibold">What the numbers say</p>
-        <Markdown>{e.financial_case}</Markdown>
+        <div className="mt-2">
+          <Markdown compact>{e.recommendation}</Markdown>
+        </div>
+      </Callout>
+      <div className="mt-12">
+        <Sub number="1.1" title="Project overview">
+          <Markdown>{e.overview}</Markdown>
+        </Sub>
+        <Sub number="1.2" title="The opportunity">
+          <Markdown>{e.opportunity}</Markdown>
+        </Sub>
+        <Sub number="1.3" title="Strategic alignment">
+          <Markdown>{e.strategic_alignment}</Markdown>
+        </Sub>
+        <Sub number="1.4" title="Financial snapshot" note="Calculated from the financial plan">
+          <Figures items={snapshot(proposal, metrics)} />
+          <div className="mt-6">
+            <Callout label="What the numbers say" color="var(--primary)">
+              <Markdown compact>{e.financial_case}</Markdown>
+            </Callout>
+          </div>
+        </Sub>
       </div>
     </div>
   );
@@ -132,59 +166,68 @@ export function MarketSection({ proposal }: View) {
   const m = proposal.market;
   const sizes = [
     ["TAM", "Total addressable market", m.tam, ""],
-    ["SAM", "Serviceable addressable market", m.sam, m.tam.value_usd ? `${((m.sam.value_usd / m.tam.value_usd) * 100).toFixed(1)}% of TAM` : ""],
-    ["SOM", "Serviceable obtainable market", m.som, m.sam.value_usd ? `${((m.som.value_usd / m.sam.value_usd) * 100).toFixed(1)}% of SAM` : ""],
+    ["SAM", "Serviceable addressable market", m.sam, m.tam.value_usd ? `${share(m.sam.value_usd, m.tam.value_usd)} of TAM` : ""],
+    ["SOM", "Serviceable obtainable market", m.som, m.sam.value_usd ? `${share(m.som.value_usd, m.sam.value_usd)} of SAM` : ""],
   ] as const;
   const budget = m.channels.reduce((sum, channel) => sum + channel.monthly_budget_usd, 0);
   return (
     <div>
-      <Source part="market" />
-      <Heading>Target audience and buyer personas</Heading>
-      <Markdown>{m.personas}</Markdown>
-      <Heading>Market size</Heading>
-      <BarList
-        keepOrder
-        items={sizes.map(([short, , size, share], index) => ({
-          label: short,
-          value: size.value_usd,
-          color: ramp(index * 2, 5),
-          note: share,
-        }))}
-      />
-      <ul className="mt-3 space-y-1 text-sm text-zinc-700 dark:text-zinc-300">
-        {sizes.map(([short, long, size]) => (
-          <li key={short}>
-            <span className="font-semibold">{short}</span> ({long}): {size.basis}
-          </li>
-        ))}
-      </ul>
-      <Heading>Competitive landscape</Heading>
-      <Table
-        head={["Competitor", "Type", "Est. share", "Strengths", "Weaknesses"]}
-        rows={m.competitors.map((c) => [c.name, c.kind, c.market_share, c.strengths, c.weaknesses])}
-      />
-      <Heading>Unique value proposition</Heading>
-      <div className="rounded-lg border-l-4 border-accent bg-accent-soft/30 p-4 dark:bg-accent/10">
-        <Markdown>{m.value_proposition}</Markdown>
-      </div>
-      <Heading>Go-to-market channels</Heading>
-      <Table
-        head={["Channel", "How it is used", "Monthly budget"]}
-        numeric={[2]}
-        rows={[
-          ...m.channels.map((c) => [c.channel, c.approach, usd(c.monthly_budget_usd)]),
-          [<strong key="t">Total</strong>, "", <strong key="v">{usd(budget)}</strong>],
-        ]}
-      />
-      {m.channels.length > 1 && (
-        <div className="mt-4">
-          <BarList items={m.channels.map((c) => ({ label: c.channel, value: c.monthly_budget_usd }))} />
-        </div>
-      )}
-      <Heading>Pricing strategy</Heading>
-      <Markdown>{m.pricing_strategy}</Markdown>
-      <Heading badge={<Badge tone="amber">Estimated monthly volumes at the end of year 1</Badge>}>Sales funnel</Heading>
-      <Funnel stages={m.funnel} />
+      <Sub number="2.1" title="Target audience and buyer personas">
+        <Markdown>{m.personas}</Markdown>
+      </Sub>
+      <Sub number="2.2" title="Market size">
+        <BarList
+          keepOrder
+          items={sizes.map(([short, , size, share], index) => ({
+            label: short,
+            value: size.value_usd,
+            color: ramp(index * 2, 5),
+            note: share,
+          }))}
+        />
+        <dl className="mt-5 space-y-2 text-sm">
+          {sizes.map(([short, long, size]) => (
+            <div key={short} className="grid grid-cols-1 gap-x-4 sm:grid-cols-[3.5rem_minmax(0,1fr)]">
+              <dt className="font-medium" title={long}>
+                {short}
+              </dt>
+              <dd className="text-ink-2">{size.basis}</dd>
+            </div>
+          ))}
+        </dl>
+      </Sub>
+      <Sub number="2.3" title="Competitive landscape">
+        <Table
+          head={["Competitor", "Type", "Est. share", "Strengths", "Weaknesses"]}
+          rows={m.competitors.map((c) => [c.name, c.kind, c.market_share, c.strengths, c.weaknesses])}
+        />
+      </Sub>
+      <Sub number="2.4" title="Unique value proposition">
+        <blockquote className="border-l-[3px] border-primary py-1 pl-5 font-serif text-[1.3rem] leading-snug text-ink">
+          {m.value_proposition.replace(/\*\*/g, "")}
+        </blockquote>
+      </Sub>
+      <Sub number="2.5" title="Go-to-market channels">
+        <Table
+          head={["Channel", "How it is used", "Monthly budget"]}
+          numeric={[2]}
+          rows={[
+            ...m.channels.map((c) => [c.channel, c.approach, usd(c.monthly_budget_usd)]),
+            ["Total", "", <span key="v" className="font-medium text-ink">{usd(budget)}</span>],
+          ]}
+        />
+        {m.channels.length > 1 && (
+          <div className="mt-6 max-w-xl">
+            <BarList items={m.channels.map((c) => ({ label: c.channel, value: c.monthly_budget_usd }))} />
+          </div>
+        )}
+      </Sub>
+      <Sub number="2.6" title="Pricing strategy">
+        <Markdown>{m.pricing_strategy}</Markdown>
+      </Sub>
+      <Sub number="2.7" title="Sales funnel" note="Estimated monthly volumes at the end of year 1">
+        <Funnel stages={m.funnel} />
+      </Sub>
     </div>
   );
 }
@@ -192,30 +235,35 @@ export function MarketSection({ proposal }: View) {
 export function TechnicalSection({ proposal }: View) {
   const t = proposal.technical;
   const phases = [...t.roadmap].sort((a, b) => a.start_month - b.start_month);
-  const fte = t.staffing.reduce((sum, line) => sum + line.count, 0);
+  // Rounded, so fractions of a person add up as written: 0.1 + 0.2 is 0.3, not 0.30000000000000004.
+  const fte = Number(t.staffing.reduce((sum, line) => sum + line.count, 0).toFixed(2));
   return (
     <div>
-      <Source part="technical" />
-      <Heading>Infrastructure</Heading>
-      <Markdown>{t.infrastructure}</Markdown>
-      <Heading>Technology stack</Heading>
-      <Markdown>{t.stack}</Markdown>
-      <Heading>Scalability and performance</Heading>
-      <Markdown>{t.scalability}</Markdown>
-      <Heading>Implementation roadmap</Heading>
-      <Gantt phases={phases} />
-      <div className="mt-4">
+      <Sub number="3.1" title="Infrastructure">
+        <Markdown>{t.infrastructure}</Markdown>
+      </Sub>
+      <Sub number="3.2" title="Technology stack">
+        <Markdown>{t.stack}</Markdown>
+      </Sub>
+      <Sub number="3.3" title="Scalability and performance">
+        <Markdown>{t.scalability}</Markdown>
+      </Sub>
+      <Sub number="3.4" title="Implementation roadmap">
+        <Gantt phases={phases} />
+        <div className="mt-6">
+          <Table
+            head={["Phase", "Months", "Deliverables"]}
+            rows={phases.map((p) => [p.name, monthRange(p.start_month, p.duration_months), p.deliverables])}
+          />
+        </div>
+      </Sub>
+      <Sub number="3.5" title="Resource and staffing plan">
         <Table
-          head={["Phase", "Months", "Deliverables"]}
-          rows={phases.map((p) => [p.name, `${p.start_month}-${p.start_month + p.duration_months - 1}`, p.deliverables])}
+          head={["Role", "FTE", "When"]}
+          numeric={[1]}
+          rows={[...t.staffing.map((s) => [s.role, String(s.count), s.timing]), ["Total", <span key="v" className="font-medium text-ink">{fte}</span>, ""]]}
         />
-      </div>
-      <Heading>Resource and staffing plan</Heading>
-      <Table
-        head={["Role", "FTE", "When"]}
-        numeric={[1]}
-        rows={[...t.staffing.map((s) => [s.role, String(s.count), s.timing]), [<strong key="t">Total</strong>, <strong key="v">{fte}</strong>, ""]]}
-      />
+      </Sub>
     </div>
   );
 }
@@ -233,130 +281,143 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
   const row = (name: string, values: string[]) => [name, ...values];
   return (
     <div>
-      <Source part="financial" />
       {checks.length > 0 && (
-        <div role="note" className="mt-4 rounded-lg border-l-4 border-amber-400 bg-amber-50 p-4 text-sm dark:bg-amber-950/40">
-          <p className="font-semibold">Checks on the figures (calculated from them)</p>
-          <ul className="mt-1 list-disc pl-5">
+        <Notice tone="warn" className="mb-10">
+          <p className="font-medium">Checks on the figures, calculated from them</p>
+          <ul className="mt-1 list-disc pl-4">
             {checks.map((check) => (
               <li key={check}>{check}</li>
             ))}
           </ul>
-        </div>
+        </Notice>
       )}
-      <Heading>Capital and operating expenditures</Heading>
-      <div className="grid gap-8 md:grid-cols-2">
-        <div>
-          <p className="mb-3 text-sm font-semibold">CapEx: {money(metrics.capex_usd)} one-off</p>
-          <BarList items={f.capex.map((line) => ({ label: line.item, value: line.amount_usd }))} />
+      <Sub number="4.1" title="Capital and operating expenditures">
+        <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
+          <div>
+            <p className="mb-3 text-sm">
+              <span className="font-medium">CapEx</span> <span className="text-ink-3">· {money(metrics.capex_usd)} one-off</span>
+            </p>
+            {/* Blue is revenue in this chapter and orange operating costs; one-off spend is neither. */}
+            <BarList color="var(--ink-3)" items={f.capex.map((line) => ({ label: line.item, value: line.amount_usd }))} />
+          </div>
+          <div>
+            <p className="mb-3 text-sm">
+              <span className="font-medium">OpEx at launch</span>{" "}
+              <span className="text-ink-3">· {money(metrics.monthly_fixed_costs_usd)} a month</span>
+            </p>
+            <BarList color={DATA_2} items={f.monthly_opex.map((line) => ({ label: line.item, value: line.amount_usd }))} />
+          </div>
         </div>
-        <div>
-          <p className="mb-3 text-sm font-semibold">OpEx at launch: {money(metrics.monthly_fixed_costs_usd)} a month</p>
-          <BarList color={ORANGE} items={f.monthly_opex.map((line) => ({ label: line.item, value: line.amount_usd }))} />
-        </div>
-      </div>
-      <Heading>Three-year projections</Heading>
-      {years.length > 0 && (
-        <GroupedColumns
-          categories={labels}
-          series={[
-            { name: "Revenue", color: BLUE, values: metrics.revenue_usd },
-            { name: "Operating costs", color: ORANGE, values: metrics.opex_usd },
+      </Sub>
+      <Sub number="4.2" title="Three-year projections">
+        {years.length > 0 && (
+          <GroupedColumns
+            categories={labels}
+            series={[
+              { name: "Revenue", color: DATA_1, values: metrics.revenue_usd },
+              { name: "Operating costs", color: DATA_2, values: metrics.opex_usd },
+            ]}
+          />
+        )}
+        <p className="mt-8 mb-2 kicker">Drivers from the Financial Planning Agent</p>
+        <Table
+          head={["", ...labels]}
+          numeric={labels.map((_, index) => index + 1)}
+          rows={[
+            row("Paying customers (year end)", years.map((y) => y.customers.toLocaleString("en-US"))),
+            row("Average paying customers", years.map((y) => String(Number(y.average_customers.toFixed(1))))),
+            row("Fixed costs a month", years.map((y) => usd(y.fixed_costs_month_usd))),
+            row("One-off revenue", years.map((y) => usd(y.one_off_revenue_usd))),
+            row("Customer acquisition cost", years.map((y) => usd(y.cac_usd))),
           ]}
         />
-      )}
-      <p className="mt-5 mb-2 text-sm font-semibold">Drivers from the Financial Planning Agent</p>
-      <Table
-        head={["", ...labels]}
-        numeric={labels.map((_, index) => index + 1)}
-        rows={[
-          row("Paying customers (year end)", years.map((y) => y.customers.toLocaleString("en-US"))),
-          row("Average paying customers", years.map((y) => String(Number(y.average_customers.toFixed(1))))),
-          row("Fixed costs a month", years.map((y) => usd(y.fixed_costs_month_usd))),
-          row("One-off revenue", years.map((y) => usd(y.one_off_revenue_usd))),
-          row("Customer acquisition cost", years.map((y) => usd(y.cac_usd))),
-        ]}
-      />
-      <div className="mt-5 mb-2 flex flex-wrap items-center gap-3">
-        <p className="text-sm font-semibold">Results</p>
-        <Calculated what="from the drivers: revenue = average customers × price × 12 + one-off revenue; OpEx = (fixed costs + average customers × cost to serve) × 12" />
-      </div>
-      <Table
-        head={["", ...labels]}
-        numeric={labels.map((_, index) => index + 1)}
-        rows={[
-          row("Revenue", metrics.revenue_usd.map(usd)),
-          row("Operating costs (OpEx), with the cost to serve", metrics.opex_usd.map(usd)),
-          row("Net cash flow", metrics.net_cash_flow_usd.slice(1).map(usd)),
-          row("Net margin", metrics.net_margin.map((margin) => (margin === null ? "-" : percent(margin)))),
-        ]}
-      />
-      <Heading badge={<Calculated what="from the figures above" />}>Investment metrics</Heading>
-      <Tiles
-        items={[
-          ["NPV", money(metrics.npv_usd), `at a ${percent(f.discount_rate)} discount rate`],
-          ["IRR", ...describeIrr(metrics)],
-          ["Payback", describePayback(metrics), "cumulative cash back to zero"],
-          ["Break-even", describeBreakEven(metrics), `at ${money(metrics.monthly_fixed_costs_usd)} fixed costs a month`],
-          ["Contribution", `${money(contribution)}/mo`, "per customer, after the cost to serve"],
-          ["Price", `${money(f.price_per_customer_month_usd)}/mo`, `per customer; ${money(f.variable_cost_per_customer_month_usd)} to serve`],
-        ]}
-      />
-      <div className="mt-6">
-        <CashPosition
-          points={cumulative}
-          note={metrics.payback_months === null ? "Not paid back within three years" : `Paid back: ${describePayback(metrics).toLowerCase()}`}
+        <p className="mt-8 mb-1 kicker">Results</p>
+        <p className="mb-2 text-xs text-ink-3">
+          Calculated from the drivers: revenue = average customers × price × 12 + one-off revenue; OpEx = (fixed costs +
+          average customers × cost to serve) × 12.
+        </p>
+        <Table
+          head={["", ...labels]}
+          numeric={labels.map((_, index) => index + 1)}
+          rows={[
+            row("Revenue", metrics.revenue_usd.map(usd)),
+            row("Operating costs (OpEx), with the cost to serve", metrics.opex_usd.map(usd)),
+            row("Net cash flow", metrics.net_cash_flow_usd.slice(1).map(usd)),
+            row("Net margin", metrics.net_margin.map((margin) => (margin === null ? "–" : percent(margin)))),
+          ]}
         />
-      </div>
-      <Heading>Assumptions</Heading>
-      <Markdown>{f.assumptions}</Markdown>
+      </Sub>
+      <Sub number="4.3" title="Investment metrics" note="Calculated from the figures above">
+        <Figures
+          items={[
+            ["NPV", money(metrics.npv_usd), `at a ${percent(f.discount_rate)} discount rate`],
+            ["IRR", ...describeIrr(metrics)],
+            ["Payback", describePayback(metrics), "cumulative cash back to zero"],
+            ["Break-even", describeBreakEven(metrics), `at ${money(metrics.monthly_fixed_costs_usd)} fixed costs a month`],
+            ["Contribution", `${money(contribution)}/mo`, "per customer, after the cost to serve"],
+            ["Price", `${money(f.price_per_customer_month_usd)}/mo`, `per customer; ${money(f.variable_cost_per_customer_month_usd)} to serve`],
+          ]}
+        />
+        <div className="mt-10">
+          <CashPosition
+            points={cumulative}
+            note={metrics.payback_months === null ? "Not paid back within three years" : `Paid back: ${describePayback(metrics).toLowerCase()}`}
+          />
+        </div>
+      </Sub>
+      <Sub number="4.4" title="Assumptions">
+        <Markdown>{f.assumptions}</Markdown>
+      </Sub>
     </div>
   );
 }
 
-const LEVEL_TONE: Record<string, Tone> = { Low: "green", Medium: "amber", High: "red" };
+const LEVEL_TONE: Record<string, Tone> = { Low: "good", Medium: "warn", High: "bad" };
 
 export function RiskSection({ proposal }: View) {
   const r = proposal.risk;
   const risks = r.risks.map((risk, index) => ({ ...risk, id: `R${index + 1}` }));
   return (
     <div>
-      <Source part="risk" />
-      <Heading>Data protection</Heading>
-      <Markdown>{r.data_protection}</Markdown>
-      <Heading>Compliance</Heading>
-      <Markdown>{r.compliance}</Markdown>
-      <Heading>Risk matrix</Heading>
-      <RiskMatrix risks={risks} />
-      <ul className="mt-5 space-y-3">
-        {risks.map((risk) => {
-          const level = severity(risk.probability, risk.impact);
-          return (
-            <li key={risk.id} className="flex overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-800">
-              <span aria-hidden className={`w-1.5 shrink-0 ${SEVERITY_STYLE[level]}`} />
-              <div className="p-4 text-sm">
-                <p className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">
-                    {risk.id} · {risk.category}
-                  </span>
-                  <Badge tone={LEVEL_TONE[risk.probability]}>Probability: {risk.probability}</Badge>
-                  <Badge tone={LEVEL_TONE[risk.impact]}>Impact: {risk.impact}</Badge>
-                  <Badge tone="gray">Severity: {level}</Badge>
-                </p>
-                <p className="mt-2 font-semibold">{risk.description}</p>
-                <p className="mt-1 text-zinc-700 dark:text-zinc-300">
-                  <span className="font-medium">Mitigation:</span> {risk.mitigation}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <Sub number="5.1" title="Data protection">
+        <Markdown>{r.data_protection}</Markdown>
+      </Sub>
+      <Sub number="5.2" title="Compliance">
+        <Markdown>{r.compliance}</Markdown>
+      </Sub>
+      <Sub number="5.3" title="Risk matrix">
+        <RiskMatrix risks={risks} />
+        <ol className="mt-8 divide-y divide-rule border-y border-rule">
+          {risks.map((risk) => {
+            const level = severity(risk.probability, risk.impact);
+            return (
+              <li key={risk.id} className="grid grid-cols-1 gap-x-4 py-4 text-sm sm:grid-cols-[3rem_minmax(0,1fr)]">
+                <span className="flex items-center gap-2 pt-0.5 sm:block">
+                  <span className="font-semibold tabular">{risk.id}</span>
+                  <span aria-hidden className="mt-1.5 block h-1 w-6 rounded-full" style={{ background: SEVERITY_FILL[level] }} />
+                </span>
+                <div>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="text-xs text-ink-3">{risk.category}</span>
+                    <Badge tone={LEVEL_TONE[risk.probability]}>Probability: {risk.probability}</Badge>
+                    <Badge tone={LEVEL_TONE[risk.impact]}>Impact: {risk.impact}</Badge>
+                    <span className="text-xs text-ink-3">Severity: {level}</span>
+                  </p>
+                  <p className="mt-1.5 font-medium text-ink">{risk.description}</p>
+                  <p className="mt-1 text-ink-2">
+                    <span className="text-ink-3">Mitigation.</span> {risk.mitigation}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      </Sub>
     </div>
   );
 }
 
-const KPI_COLORS: Record<Kpi["category"], string> = { Financial: BLUE, Technical: ORANGE, Marketing: "#1baf7a" };
+const KPI_COLORS: Record<Kpi["category"], string> = { Financial: DATA_1, Technical: DATA_2, Marketing: DATA_3 };
 
 export function KpiSection({ proposal }: View) {
   const kpis = proposal.executive.kpis;
@@ -364,32 +425,25 @@ export function KpiSection({ proposal }: View) {
     kpis.some((kpi) => kpi.category === category),
   );
   return (
-    <div>
-      <Source part="executive" />
-      <div className="mt-4 grid gap-6 md:grid-cols-3">
-        {categories.map((category) => (
-          <section key={category} aria-label={`${category} metrics`}>
-            <h3 className="mb-3 flex items-center gap-2 font-semibold">
-              <span aria-hidden className="size-2.5 rounded-sm" style={{ background: KPI_COLORS[category] }} />
-              {category}
-            </h3>
-            <ul className="space-y-2">
-              {kpis
-                .filter((kpi) => kpi.category === category)
-                .map((kpi) => (
-                  <li
-                    key={kpi.metric}
-                    className="rounded-md border border-l-4 border-zinc-200 p-3 text-sm dark:border-zinc-800"
-                    style={{ borderLeftColor: KPI_COLORS[category] }}
-                  >
-                    <p className="font-semibold">{kpi.metric}</p>
-                    <p className="text-zinc-600 dark:text-zinc-400">{kpi.target}</p>
-                  </li>
-                ))}
-            </ul>
-          </section>
-        ))}
-      </div>
+    <div className="grid grid-cols-1 gap-10 md:grid-cols-3">
+      {categories.map((category) => (
+        <section key={category} aria-label={`${category} metrics`}>
+          <h3 className="flex items-center gap-2 border-b border-rule-strong pb-2 text-sm font-medium">
+            <span aria-hidden className="size-2.5 rounded-[2px]" style={{ background: KPI_COLORS[category] }} />
+            {category}
+          </h3>
+          <ul className="divide-y divide-rule">
+            {kpis
+              .filter((kpi) => kpi.category === category)
+              .map((kpi) => (
+                <li key={kpi.metric} className="py-3 text-sm">
+                  <p className="font-medium text-ink">{kpi.metric}</p>
+                  <p className="mt-0.5 text-ink-2">{kpi.target.replace(/\*\*/g, "")}</p>
+                </li>
+              ))}
+          </ul>
+        </section>
+      ))}
     </div>
   );
 }

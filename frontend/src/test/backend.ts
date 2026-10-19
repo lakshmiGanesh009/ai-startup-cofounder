@@ -3,7 +3,7 @@
 
 import { vi } from "vitest";
 
-import type { EvaluateResponse, Health, Scenario } from "@/lib/api";
+import type { EvaluateResponse, Health, Scenario, Step } from "@/lib/api";
 
 export const HEALTH: Health = {
   status: "healthy",
@@ -19,11 +19,18 @@ export const HEALTH: Health = {
 export const SCENARIOS: Scenario[] = [
   {
     name: "healthcare_scheduling",
+    title: "Follow-up scheduling for small clinics",
     prompt: "Evaluate an assistant that schedules patient follow-ups.",
     context: { target_market: "Small clinics", constraints: "Under $15k", competitive_landscape: null },
     follow_up: "Refine the pricing strategy after financial review.",
   },
-  { name: "gtm_risk", prompt: "Identify risks in our go-to-market plan.", context: null, follow_up: null },
+  {
+    name: "gtm_risk",
+    title: "Go-to-market risks for an expense tool",
+    prompt: "Identify risks in our go-to-market plan.",
+    context: null,
+    follow_up: null,
+  },
 ];
 
 export const RESULT: EvaluateResponse = {
@@ -34,9 +41,14 @@ export const RESULT: EvaluateResponse = {
     finance: "Charge **$149** a month (assumption).",
     marketing: "Start with small clinics.",
   },
+  // Each round carries the earlier reviews forward, as the backend does.
   review_history: [
     {
       finance: { approved: false, score: 3, feedback: "Show the break-even arithmetic." },
+      marketing: { approved: true, score: 5, feedback: "" },
+    },
+    {
+      finance: { approved: true, score: 4, feedback: "" },
       marketing: { approved: true, score: 5, feedback: "" },
     },
   ],
@@ -54,7 +66,69 @@ export const RESULT: EvaluateResponse = {
   final_strategy: "## Go with conditions\nLaunch a paid pilot with five clinics.",
 };
 
-type Answer = { status?: number; body?: unknown };
+// What /evaluate/stream reports for RESULT, step by step.
+export const STEPS: Step[] = [
+  { type: "start", node: "plan", at: 0.1 },
+  {
+    type: "done",
+    node: "plan",
+    at: 9.6,
+    summary: "Planned the work and assigned Financial Planning and Marketing Strategy.",
+    objective: "Decide whether to launch a paid pilot.",
+    assigned: ["finance", "marketing"],
+  },
+  { type: "start", node: "finance", at: 9.7 },
+  { type: "start", node: "marketing", at: 9.7 },
+  { type: "done", node: "marketing", at: 27.2, summary: "Wrote its report (4 words).", words: 4, revision: false },
+  { type: "done", node: "finance", at: 29.9, summary: "Wrote its report (6 words).", words: 6, revision: false },
+  { type: "start", node: "review", at: 30.0 },
+  { type: "done", node: "review", at: 41.0, summary: "Reviewed 2 reports: approved 1, sent back Financial Planning." },
+  { type: "start", node: "finance", at: 41.1 },
+  { type: "done", node: "finance", at: 58.4, summary: "Revised its report (6 words).", words: 6, revision: true },
+  { type: "start", node: "review", at: 58.5 },
+  { type: "done", node: "review", at: 66.0, summary: "Reviewed 1 report: approved 1." },
+  { type: "start", node: "critique", at: 66.1 },
+  { type: "done", node: "critique", at: 73.0, summary: "Cross-checked the reports and raised 1 conflict.", conflicts: 1 },
+  { type: "start", node: "resolve", at: 73.1 },
+  { type: "done", node: "resolve", at: 88.0, summary: "Settled 1 conflict; Marketing Strategy to revise." },
+  { type: "start", node: "marketing", at: 88.1 },
+  { type: "done", node: "marketing", at: 99.0, summary: "Revised its report (4 words).", revision: true },
+  { type: "start", node: "synthesis", at: 99.1 },
+  { type: "done", node: "synthesis", at: 117.0, summary: "Wrote the launch strategy (10 words).", words: 10 },
+];
+
+// The server-sent events of a stream: the steps, then the result or an error.
+export function sse(steps: Step[], end: { result: unknown } | { error: { status: number; detail: string } } | null) {
+  const events = steps.map(({ type, ...data }) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+  if (end && "result" in end) events.push(`event: result\ndata: ${JSON.stringify(end.result)}\n\n`);
+  if (end && "error" in end) events.push(`event: error\ndata: ${JSON.stringify(end.error)}\n\n`);
+  return events.join("");
+}
+
+// A stream the test feeds as it goes, to see the page while the team works.
+export function liveStream() {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const stream = new ReadableStream<Uint8Array>({
+    start(control) {
+      controller = control;
+    },
+  });
+  return {
+    stream,
+    send(text: string) {
+      controller.enqueue(encoder.encode(text));
+    },
+    close() {
+      controller.close();
+    },
+    fail() {
+      controller.error(new TypeError("network error"));
+    },
+  };
+}
+
+type Answer = { status?: number; body?: unknown; stream?: string | ReadableStream<Uint8Array> };
 // A function answers each call afresh, from the body sent, and can hold the
 // call open with a promise.
 export type Answering = Answer | ((body: unknown) => Answer | Promise<Answer>);
@@ -65,6 +139,7 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
     "GET /health": { body: HEALTH },
     "GET /scenarios": { body: SCENARIOS },
     "POST /evaluate": { body: RESULT },
+    "POST /evaluate/stream": () => ({ stream: sse(STEPS, { result: RESULT }) }),
     ...overrides,
   };
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
@@ -74,7 +149,10 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
     if (init?.body) sent.push({ path, body: request });
     const answer = answers[key];
     if (!answer) throw new TypeError("Failed to fetch");
-    const { status = 200, body } = typeof answer === "function" ? await answer(request) : answer;
+    const { status = 200, body, stream } = typeof answer === "function" ? await answer(request) : answer;
+    if (stream !== undefined) {
+      return new Response(stream, { status, headers: { "Content-Type": "text/event-stream" } });
+    }
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   });
   vi.stubGlobal("fetch", fetch);

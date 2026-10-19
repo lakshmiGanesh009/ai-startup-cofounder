@@ -134,6 +134,12 @@ def _usd(value: float) -> str:
     return f"-${-value:,.0f}" if value < 0 else f"${value:,.0f}"
 
 
+def _months(start: int, length: int) -> str:
+    """The months a roadmap phase spans: "1-4", or "1" for a month or less."""
+    end = start + max(length, 1) - 1
+    return f"{start}-{end}" if end > start else f"{start}"
+
+
 def _written_by(part: str) -> tuple[str, str]:
     return ("Written by", _agent(OWNERS[part]))
 
@@ -277,8 +283,7 @@ def _technical(pdf: FPDF, p: Proposal) -> None:
     phases = sorted(t.roadmap, key=lambda phase: phase.start_month)
     chart.gantt(pdf, [(ph.name, ph.start_month, ph.duration_months) for ph in phases])
     _table(pdf, ["Phase", "Months", "Deliverables"],
-           [[ph.name, f"{ph.start_month}-{ph.start_month + ph.duration_months - 1}",
-             ph.deliverables] for ph in phases],
+           [[ph.name, _months(ph.start_month, ph.duration_months), ph.deliverables] for ph in phases],
            [28, 12, 60])
     chart.label_line(pdf, "Resource & staffing plan")
     fte = sum(s.count for s in t.staffing)

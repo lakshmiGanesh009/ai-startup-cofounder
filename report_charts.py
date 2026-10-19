@@ -435,7 +435,7 @@ def gantt(pdf: FPDF, phases: list[tuple[str, int, int]]) -> None:
         w = max(length, 1) * per_month
         pdf.set_fill_color(SERIES[0])
         pdf.rect(x, y + 1, w, 5.5, style="F", round_corners=True, corner_radius=1)
-        text = f"{length} mo"
+        text = f"{length} mo" if length >= 1 else "< 1 mo"
         _font(pdf, 7, "B", WHITE)
         if pdf.get_string_width(text) + 3 < w:
             pdf.set_xy(x, y + 1)

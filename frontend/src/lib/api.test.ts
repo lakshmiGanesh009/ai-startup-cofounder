@@ -1,7 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
-import { ApiError, evaluate, getHealth, getScenarios } from "@/lib/api";
-import { fakeBackend, HEALTH, RESULT, SCENARIOS } from "@/test/backend";
+import { ApiError, evaluate, evaluateStream, getHealth, getScenarios, type Step } from "@/lib/api";
+import { fakeBackend, HEALTH, liveStream, RESULT, SCENARIOS, sse, STEPS } from "@/test/backend";
 
 // The error a call fails with.
 async function failure(call: Promise<unknown>): Promise<ApiError> {
@@ -67,5 +67,64 @@ describe("the API client", () => {
 
     expect(error.message).toBe("Could not reach the backend at http://localhost:8000.");
     expect(error.status).toBeNull();
+  });
+});
+
+describe("the streamed evaluation", () => {
+  test("reports each step as it arrives, then resolves with the result", async () => {
+    const live = liveStream();
+    const { fetch, sent } = fakeBackend({ "POST /evaluate/stream": () => ({ stream: live.stream }) });
+    const steps: Step[] = [];
+
+    const running = evaluateStream({ prompt: "An idea" }, (step) => steps.push(step));
+    // Events split across chunks anywhere, with the line endings some proxies use.
+    const text = `: a comment to keep the connection open\n\n${sse(STEPS.slice(0, 3), { result: RESULT })}`.replace(/\n/g, "\r\n");
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalled());
+    live.send(text.slice(0, 50));
+    live.send(text.slice(50, 333));
+    live.send(text.slice(333));
+
+    expect(await running).toEqual(RESULT);
+    expect(steps).toEqual(STEPS.slice(0, 3));
+    expect(sent).toEqual([{ path: "/evaluate/stream", body: { prompt: "An idea" } }]);
+    expect(fetch.mock.calls[0][1]?.headers).toEqual({ "Content-Type": "application/json", Accept: "text/event-stream" });
+  });
+
+  test("an error partway through carries the backend's status and reason", async () => {
+    fakeBackend({
+      "POST /evaluate/stream": () => ({ stream: sse(STEPS.slice(0, 2), { error: { status: 502, detail: "The LLM call failed: timeout" } }) }),
+    });
+    const steps: Step[] = [];
+
+    const error = await failure(evaluateStream({ prompt: "An idea" }, (step) => steps.push(step)));
+
+    expect(error.message).toBe("The backend returned 502: The LLM call failed: timeout");
+    expect(error.status).toBe(502);
+    expect(steps).toHaveLength(2);
+  });
+
+  test("a stream that ends, or breaks, before the result is a lost connection", async () => {
+    fakeBackend({ "POST /evaluate/stream": () => ({ stream: sse(STEPS.slice(0, 2), null) }) });
+    expect((await failure(evaluateStream({ prompt: "An idea" }, () => {}))).message).toBe(
+      "The connection to the backend was lost before the evaluation finished.",
+    );
+
+    const live = liveStream();
+    fakeBackend({ "POST /evaluate/stream": () => ({ stream: live.stream }) });
+    const running = failure(evaluateStream({ prompt: "An idea" }, () => {}));
+    await vi.waitFor(() => live.fail());
+    expect((await running).message).toBe("The connection to the backend was lost before the evaluation finished.");
+  });
+
+  test("a refused request, or an unreachable backend, fails before any step", async () => {
+    fakeBackend({ "POST /evaluate/stream": { status: 422, body: { detail: [{ msg: "Field required" }] } } });
+    const refused = await failure(evaluateStream({ prompt: "" }, () => {}));
+    expect(refused.message).toBe("The backend returned 422: Field required");
+    expect(refused.status).toBe(422);
+
+    fakeBackend({ "POST /evaluate/stream": undefined });
+    expect((await failure(evaluateStream({ prompt: "An idea" }, () => {}))).message).toBe(
+      "Could not reach the backend at http://localhost:8000.",
+    );
   });
 });

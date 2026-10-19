@@ -16,9 +16,25 @@ function renderPage() {
 
 const user = () => userEvent.setup();
 
-async function openTab(name: string) {
+const CHAPTERS = [
+  "Executive summary",
+  "Market & marketing",
+  "Technical & operations",
+  "Financial plan",
+  "Risk & compliance",
+  "Success metrics",
+  "The team's report",
+];
+
+async function openChapter(name: string) {
   await userEvent.click(screen.getByRole("tab", { name }));
   return screen.getByRole("tabpanel", { name });
+}
+
+// The actions behind the "More actions" button.
+async function moreActions(action: string) {
+  await user().click(await screen.findByRole("button", { name: "More actions" }));
+  await user().click(screen.getByRole("menuitem", { name: new RegExp(`^${action}`) }));
 }
 
 describe("the Reports page, before the proposal", () => {
@@ -32,9 +48,11 @@ describe("the Reports page, before the proposal", () => {
     expect(screen.getByText("Decided by the Chief of Staff")).toBeTruthy();
     expect(screen.getByText("Written by the Financial Planning Agent")).toBeTruthy();
     expect(screen.getByRole("option").textContent).toMatch(/team report, 19 Oct, 09:30 UTC\)$/);
+    expect(screen.getByText(SESSION.slice(0, 8))).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Revise with the team" })).toBeNull();
   });
 
-  test("writing the proposal shows its sections, with the sliders' efforts sent", async () => {
+  test("writing the proposal shows its chapters, with the sliders' efforts sent", async () => {
     const { sent } = fakeReports();
     renderPage();
     await screen.findByRole("heading", { name: "Launch Strategy" });
@@ -48,15 +66,9 @@ describe("the Reports page, before the proposal", () => {
     });
     expect(screen.getByRole("status").textContent).toContain("The investment proposal is written.");
     expect(screen.getByRole("option").textContent).toContain("(investment proposal,");
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-      "Executive summary",
-      "Market",
-      "Technical",
-      "Financial",
-      "Risk & compliance",
-      "KPIs",
-      "Team report",
-    ]);
+    expect(screen.getAllByRole("tab")).toHaveLength(CHAPTERS.length);
+    for (const name of CHAPTERS) expect(screen.getByRole("tab", { name })).toBeTruthy();
+    expect(screen.getByText("Investment proposal")).toBeTruthy();
   });
 
   test("a failed write says why", async () => {
@@ -96,7 +108,7 @@ describe("the Reports page, before the proposal", () => {
     await user().click(screen.getByRole("button", { name: "Save changes" }));
 
     expect((await screen.findAllByText(/changed elsewhere/)).length).toBeGreaterThan(0);
-    await waitFor(() => expect(screen.getByText(/^Version 5/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Version 5")).toBeTruthy());
   });
 
   test("a failed save keeps the form open with the reason", async () => {
@@ -111,77 +123,131 @@ describe("the Reports page, before the proposal", () => {
     expect(screen.getByRole("button", { name: "Edit the team's report" })).toBeTruthy();
   });
 
-  test("an outdated report says so, and a reset rebuilds it", async () => {
+  test("an outdated report says so, and a reset, once confirmed, rebuilds it", async () => {
     const backend = fakeReports({ proposal: true });
     backend.state.report.outdated = true;
     renderPage();
 
-    expect(await screen.findByRole("note")).toBeTruthy();
-    await user().click(screen.getByRole("button", { name: "Reset to the latest results" }));
-    await user().click(screen.getByRole("button", { name: "Reset the report" }));
+    expect(await screen.findByText(/A later evaluation in this session produced newer results/)).toBeTruthy();
+    await moreActions("Reset to the latest results");
+    const confirm = screen.getByRole("dialog", { name: "Reset the report?" });
+    await user().click(within(confirm).getByRole("button", { name: "Reset the report" }));
 
     expect(await screen.findByText(/rebuilt from the session's latest results/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Write the investment proposal" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   test("a failed reset says why", async () => {
     fakeReports({ failures: { reset: 500 } });
     renderPage();
-    await user().click(await screen.findByRole("button", { name: "Reset to the latest results" }));
+    await moreActions("Reset to the latest results");
 
     await user().click(screen.getByRole("button", { name: "Reset the report" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("500");
   });
+
+  test("the menu of more actions closes on Escape or a click elsewhere", async () => {
+    fakeReports();
+    renderPage();
+    const more = await screen.findByRole("button", { name: "More actions" });
+
+    await user().click(more);
+    expect(more.getAttribute("aria-expanded")).toBe("true");
+    // A team report has no proposal to rewrite.
+    expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+      expect.stringMatching(/^Reset to the latest results/),
+    ]);
+    await user().keyboard("{Escape}");
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    await user().click(more);
+    await user().click(screen.getByRole("heading", { name: "Reports" }));
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
 });
 
-describe("the proposal's sections", () => {
-  test("each tab shows its part, with charts and sources", async () => {
+describe("the proposal's chapters", () => {
+  test("each shows its part, with charts and its author", async () => {
     fakeReports({ proposal: true });
     renderPage();
     await screen.findByRole("tab", { name: "Executive summary" });
 
     const executive = screen.getByRole("tabpanel", { name: "Executive summary" });
+    expect(within(executive).getByRole("heading", { name: "Executive Summary" })).toBeTruthy();
+    expect(within(executive).getByText("Written by the Chief of Staff")).toBeTruthy();
     expect(within(executive).getByText("Go with conditions")).toBeTruthy();
     expect(within(executive).getByText("NPV")).toBeTruthy();
     expect(within(executive).getByText("Calculated from the financial plan")).toBeTruthy();
     expect(within(executive).getByText("What the numbers say")).toBeTruthy();
 
-    const market = await openTab("Market");
+    const market = await openChapter("Market & marketing");
     expect(within(market).getByText("Written by the Marketing Strategy Agent")).toBeTruthy();
     expect(within(market).getByText("$216M")).toBeTruthy();
-    expect(within(market).getByText("15.0% of TAM")).toBeTruthy();
+    expect(within(market).getByText("15% of TAM")).toBeTruthy();
     expect(within(market).getByText("Retained")).toBeTruthy();
 
-    const technical = await openTab("Technical");
-    expect(within(technical).getAllByText("Phase 1: MVP").length).toBe(2);
-    expect(within(technical).getByText("2 mo")).toBeTruthy();
+    const technical = await openChapter("Technical & operations");
+    expect(within(technical).getAllByText("Phase 1: MVP")).toHaveLength(2);
+    expect(within(technical).getByText("Months 1–2")).toBeTruthy();
 
-    const financial = await openTab("Financial");
-    expect(within(financial).getByText("CapEx: $12k one-off")).toBeTruthy();
+    const financial = await openChapter("Financial plan");
+    expect(within(financial).getByText("· $12k one-off")).toBeTruthy();
     expect(within(financial).getByText("Drivers from the Financial Planning Agent")).toBeTruthy();
     expect(within(financial).getByText(/^Paid back/)).toBeTruthy();
-    expect(within(financial).queryByText("Checks on the figures (calculated from them)")).toBeNull();
+    expect(within(financial).queryByText("Checks on the figures, calculated from them")).toBeNull();
 
-    const risk = await openTab("Risk & compliance");
-    expect(within(risk).getByText("R1 · Regulatory")).toBeTruthy();
-    expect(within(risk).getAllByText("Severity: High").length).toBeGreaterThan(0);
+    const risk = await openChapter("Risk & compliance");
+    expect(within(risk).getAllByText("R1")).toHaveLength(2); // in the matrix and the list
+    expect(within(risk).getByText("Regulatory")).toBeTruthy();
+    expect(within(risk).getAllByText(/^Severity: /).length).toBe(SAMPLE_REPORT.proposal?.risk.risks.length);
 
-    const kpis = await openTab("KPIs");
+    const kpis = await openChapter("Success metrics");
     expect(within(kpis).getByText("Monthly recurring revenue")).toBeTruthy();
 
-    const team = await openTab("Team report");
+    const team = await openChapter("The team's report");
     expect(within(team).getByRole("heading", { name: "Launch Strategy" })).toBeTruthy();
+  });
+
+  test("the Next link at a chapter's end opens the following one", async () => {
+    fakeReports({ proposal: true });
+    renderPage();
+    const executive = await screen.findByRole("tabpanel", { name: "Executive summary" });
+
+    await user().click(within(executive).getByRole("button", { name: /^Next/ }));
+
+    expect(screen.getByRole("tab", { name: "Market & marketing" }).getAttribute("aria-selected")).toBe("true");
+    const last = await openChapter("The team's report");
+    expect(within(last).queryByRole("button", { name: /^Next/ })).toBeNull();
+  });
+
+  test("fractions of a person add up as written", async () => {
+    const backend = fakeReports({ proposal: true });
+    // These sum to 2.1500000000000004 in floating point.
+    backend.state.report.proposal!.technical.staffing = [1, 0.6, 0.2, 0.05, 0.2, 0.1].map((count, index) => ({
+      role: `Role ${index + 1}`,
+      count,
+      timing: "Months 1-6",
+    }));
+    renderPage();
+    await screen.findByRole("tab", { name: "Technical & operations" });
+
+    const technical = await openChapter("Technical & operations");
+
+    const total = within(technical).getByText("Total").closest("tr")!;
+    expect(total.textContent).toBe("Total2.15");
   });
 
   test("figures that fail a check are flagged", async () => {
     const backend = fakeReports({ proposal: true });
     backend.state.report.checks = ["Year 1's fixed costs ($100 a month) are below the monthly OpEx at launch ($850)."];
     renderPage();
-    await screen.findByRole("tab", { name: "Financial" });
+    await screen.findByRole("tab", { name: "Financial plan" });
 
-    const financial = await openTab("Financial");
+    const financial = await openChapter("Financial plan");
 
+    expect(within(financial).getByText("Checks on the figures, calculated from them")).toBeTruthy();
     expect(within(financial).getByText(/Year 1's fixed costs/)).toBeTruthy();
   });
 
@@ -210,8 +276,8 @@ describe("the proposal's sections", () => {
   test("tables in a form gain and lose rows, and numbers are numbers", async () => {
     const { sent } = fakeReports({ proposal: true });
     renderPage();
-    await screen.findByRole("tab", { name: "Market" });
-    const market = await openTab("Market");
+    await screen.findByRole("tab", { name: "Market & marketing" });
+    const market = await openChapter("Market & marketing");
 
     await user().click(within(market).getByRole("button", { name: "Edit" }));
     await user().click(within(market).getByRole("button", { name: "Remove row 3 of Competitors" }));
@@ -238,15 +304,15 @@ describe("the proposal's sections", () => {
     renderPage();
     await screen.findByRole("tab", { name: "Executive summary" });
 
-    for (const [tab, part] of [
-      ["Technical", "technical"],
-      ["Financial", "financial"],
+    for (const [chapter, part] of [
+      ["Technical & operations", "technical"],
+      ["Financial plan", "financial"],
       ["Risk & compliance", "risk"],
-      ["KPIs", "executive"],
+      ["Success metrics", "executive"],
     ] as const) {
-      const panel = await openTab(tab);
+      const panel = await openChapter(chapter);
       await user().click(within(panel).getByRole("button", { name: "Edit" }));
-      await user().click(within(screen.getByRole("tabpanel", { name: tab })).getByRole("button", { name: "Save changes" }));
+      await user().click(within(screen.getByRole("tabpanel", { name: chapter })).getByRole("button", { name: "Save changes" }));
       await waitFor(() => expect(sent.at(-1)?.path).toBe(`/reports/${SESSION}/proposal`));
       const body = sent.at(-1)?.body as { proposal: Record<string, unknown> };
       expect(body.proposal[part]).toEqual(SAMPLE_REPORT.proposal?.[part]);
@@ -257,8 +323,8 @@ describe("the proposal's sections", () => {
   test("an edit the API rejects stays open with the reason", async () => {
     fakeReports({ proposal: true, failures: { saveProposal: 422 } });
     renderPage();
-    await screen.findByRole("tab", { name: "Financial" });
-    const financial = await openTab("Financial");
+    await screen.findByRole("tab", { name: "Financial plan" });
+    const financial = await openChapter("Financial plan");
     await user().click(within(financial).getByRole("button", { name: "Edit" }));
 
     await user().clear(within(financial).getByLabelText("Discount rate (0.30 = 30%)"));
@@ -272,11 +338,11 @@ describe("the proposal's sections", () => {
   test("rewriting asks first, then writes again", async () => {
     const { sent } = fakeReports({ proposal: true });
     renderPage();
-    await user().click(await screen.findByRole("button", { name: "Rewrite the proposal" }));
-    await user().click(screen.getByRole("button", { name: "Keep it" }));
+    await moreActions("Rewrite the proposal");
+    await user().click(within(screen.getByRole("dialog", { name: "Rewrite the proposal?" })).getByRole("button", { name: "Keep it" }));
     expect(sent).toEqual([]);
 
-    await user().click(screen.getByRole("button", { name: "Rewrite the proposal" }));
+    await moreActions("Rewrite the proposal");
     await user().click(screen.getByRole("button", { name: "Rewrite it" }));
 
     await screen.findByText(/The investment proposal is written/);
@@ -300,7 +366,8 @@ describe("the PDF pop-up", () => {
     await user().click(within(dialog).getByRole("button", { name: "Revise" }));
     expect(within(dialog).getByRole("alert").textContent).toBe("Say what to change.");
 
-    await user().selectOptions(within(dialog).getByLabelText("Part"), "market");
+    expect(within(dialog).getByRole("radio", { name: /^The whole proposal/ })).toHaveProperty("checked", true);
+    await user().click(within(dialog).getByRole("radio", { name: /^Market & Marketing Strategy/ }));
     await user().type(within(dialog).getByLabelText("What to change"), "Add a referral channel.");
     await user().click(within(dialog).getByRole("button", { name: "Revise" }));
 
@@ -319,6 +386,16 @@ describe("the PDF pop-up", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  test("Revise with the team opens it with the prompt ready", async () => {
+    fakeReports({ proposal: true });
+    renderPage();
+
+    await user().click(await screen.findByRole("button", { name: "Revise with the team" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Report PDF" });
+    await waitFor(() => expect(document.activeElement).toBe(within(dialog).getByLabelText("What to change")));
+  });
+
   test("a revision of the whole proposal, and its failures", async () => {
     const backend = fakeReports({ proposal: true });
     renderPage();
@@ -335,7 +412,7 @@ describe("the PDF pop-up", () => {
     backend.state.report = { ...backend.state.report, version: 7 };
     await user().click(within(dialog).getByRole("button", { name: "Revise" }));
     expect((await within(dialog).findByRole("alert")).textContent).toContain("changed elsewhere");
-    await waitFor(() => expect(screen.getByText(/^Version 7/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Version 7")).toBeTruthy());
 
     await user().click(within(dialog).getByRole("button", { name: "Revise" }));
     expect((await within(dialog).findByRole("alert")).textContent).toContain("Could not revise");
@@ -357,7 +434,8 @@ describe("choosing a report", () => {
     fakeReports({ extra: { "GET /reports": { body: [] } } });
     renderPage();
 
-    expect(await screen.findByText(/No reports yet/)).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "No reports yet" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Evaluate an idea" }).getAttribute("href")).toBe("/");
   });
 
   test("a report that cannot be loaded says why", async () => {
@@ -386,7 +464,7 @@ describe("choosing a report", () => {
     await screen.findByRole("heading", { name: "Launch Strategy" });
     expect(screen.getByLabelText<HTMLSelectElement>("Report").value).toBe(SESSION);
     await user().selectOptions(screen.getByLabelText("Report"), "other-session");
-    await waitFor(() => expect(screen.getByText(/^Version 1 · objective/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("other-se")).toBeTruthy());
     window.history.pushState({}, "", "/reports");
   });
 

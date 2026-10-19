@@ -1,4 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
 import { Sidebar } from "@/components/sidebar";
@@ -20,20 +21,24 @@ describe("the sidebar", () => {
     fakeBackend();
     renderSidebar();
 
-    expect(await screen.findByText(/Connected to http:\/\/localhost:8000/)).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Evaluate" }).getAttribute("aria-current")).toBe("page");
-    expect(screen.getByRole("link", { name: "Reports" }).getAttribute("href")).toBe("/reports");
-    expect(screen.getByRole("link", { name: "Reports" }).getAttribute("aria-current")).toBeNull();
+    expect(await screen.findByText(/API connected/)).toBeTruthy();
+    expect(screen.getByText("localhost:8000")).toBeTruthy();
+    const pages = screen.getByRole("navigation", { name: "Pages" });
+    expect(within(pages).getByRole("link", { name: "Evaluate" }).getAttribute("aria-current")).toBe("page");
+    expect(within(pages).getByRole("link", { name: "Reports" }).getAttribute("href")).toBe("/reports");
+    expect(within(pages).getByRole("link", { name: "Reports" }).getAttribute("aria-current")).toBeNull();
     expect(screen.getByLabelText<HTMLInputElement>("Specialists").getAttribute("aria-valuetext")).toBe("minimal");
     expect(screen.getByLabelText<HTMLInputElement>("Chief of Staff").getAttribute("aria-valuetext")).toBe("medium");
     expect(screen.getByText(/This takes about two minutes/)).toBeTruthy();
+    // The value beside each slider, with what a call takes at it.
+    expect(screen.getByText("medium").textContent).toBe("medium · ~9 s");
   });
 
   test("a slider changes the effort, which this browser remembers", async () => {
     fakeBackend();
     renderSidebar();
     const chief = await screen.findByLabelText<HTMLInputElement>("Chief of Staff");
-    await screen.findByText(/Connected/);
+    await screen.findByText(/API connected/);
 
     fireEvent.change(chief, { target: { value: "3" } });
 
@@ -49,7 +54,7 @@ describe("the sidebar", () => {
     window.localStorage.setItem("cofounder-reasoning", JSON.stringify({ specialist: "low", chief: "xhigh" }));
     fakeBackend();
     renderSidebar();
-    await screen.findByText(/Connected/);
+    await screen.findByText(/API connected/);
 
     expect(screen.getByLabelText("Specialists").getAttribute("aria-valuetext")).toBe("low");
     // Not an effort the API offers, so the configured one is used.
@@ -68,8 +73,22 @@ describe("the sidebar", () => {
     fakeBackend({ "GET /health": undefined });
     renderSidebar();
 
-    expect(await screen.findByText(/Can.t reach http:\/\/localhost:8000/)).toBeTruthy();
+    expect(await screen.findByText(/Can.t reach localhost:8000/)).toBeTruthy();
     expect(screen.getByText("Unavailable until the backend answers.")).toBeTruthy();
+  });
+
+  test("on a phone the rail folds into a menu", async () => {
+    fakeBackend();
+    const user = userEvent.setup();
+    renderSidebar();
+    const toggle = screen.getByRole("button", { name: "Open the menu" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    await user.click(toggle);
+
+    expect(screen.getByRole("button", { name: "Close the menu" }).getAttribute("aria-expanded")).toBe("true");
+    await user.click(within(screen.getByRole("navigation", { name: "Pages" })).getByRole("link", { name: "Reports" }));
+    expect(screen.getByRole("button", { name: "Open the menu" })).toBeTruthy();
   });
 
   test("the backend's state is only available inside its provider", () => {

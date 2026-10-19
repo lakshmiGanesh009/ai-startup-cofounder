@@ -1,51 +1,437 @@
 @import "tailwindcss";
-@plugin "@tailwindcss/typography";
+
+/*
+  The app's look: warm paper and ink, one navy accent (the PDF's), hairline
+  rules instead of boxes, Newsreader for the documents the agents write and
+  Geist for everything around them. Status colours are kept for state (a
+  verdict, a risk, a failing check) and always sit beside words.
+*/
 
 :root {
-  --background: #fafaf9;
-  --foreground: #18181b;
-  --surface: #ffffff;
-}
+  --paper: #f6f4ee;
+  --surface: #fdfcf9;
+  --sunken: #efece5;
+  --ink: #1c1b18;
+  --ink-2: #4b4840;
+  --ink-3: #7c786d;
+  --rule: #e3dfd4;
+  --rule-strong: #cfc8b8;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  /* The PDF's blue, so the app and the documents it produces look alike. */
-  --color-accent: #2a78d6;
-  --color-accent-strong: #1c5cab;
-  --color-accent-soft: #cde2fb;
-  --color-navy: #0d366b;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --primary: #163c6b;
+  --primary-hover: #0e2c52;
+  --primary-ink: #ffffff;
+  --primary-soft: #e4ebf5;
+  --link: #1d58ad;
+  --focus: #2a78d6;
+
+  --good: #17692d;
+  --good-soft: #e2f0e3;
+  --warn: #855600;
+  --warn-soft: #faefd6;
+  --bad: #a1272b;
+  --bad-soft: #f8e2e0;
+
+  /* Data marks, from the validated chart palette. */
+  --data-1: #2a78d6;
+  --data-2: #eb6834;
+  --data-3: #1baf7a;
+  --data-negative: #e34948;
+  --ramp-1: #86b6ef;
+  --ramp-2: #5598e7;
+  --ramp-3: #2a78d6;
+  --ramp-4: #1c5cab;
+  --ramp-5: #104281;
+  --sev-low: #cfe8cf;
+  --sev-moderate: #f8e3ad;
+  --sev-high: #f5cdb8;
+  --sev-critical: #efb7b4;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0b0b0c;
-    --foreground: #ededed;
-    --surface: #18181b;
+    --paper: #131311;
+    --surface: #1b1a17;
+    --sunken: #22211d;
+    --ink: #edebe4;
+    --ink-2: #bdb9ad;
+    --ink-3: #8b877c;
+    --rule: #302f2a;
+    --rule-strong: #46443c;
+
+    --primary: #dfe8f6;
+    --primary-hover: #ffffff;
+    --primary-ink: #10294b;
+    --primary-soft: #1b2a40;
+    --link: #92b9ef;
+    --focus: #5598e7;
+
+    --good: #86d394;
+    --good-soft: #17301d;
+    --warn: #efc56e;
+    --warn-soft: #382a0d;
+    --bad: #f0a19b;
+    --bad-soft: #3c1a18;
+
+    --data-1: #3987e5;
+    --data-2: #d95926;
+    --data-3: #199e70;
+    --data-negative: #e66767;
+    --ramp-1: #5598e7;
+    --ramp-2: #3987e5;
+    --ramp-3: #2a78d6;
+    --ramp-4: #256abf;
+    --ramp-5: #1c5cab;
+    --sev-low: #1f3a23;
+    --sev-moderate: #45360f;
+    --sev-high: #4a2a1b;
+    --sev-critical: #4e2120;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-ink: var(--primary-ink);
+  --color-primary-soft: var(--primary-soft);
+  --color-link: var(--link);
+  --color-focus: var(--focus);
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-serif: var(--font-newsreader), ui-serif, Georgia, serif;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--focus) 25%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+}
+
+/* A small label above a heading or a group: "Launch strategy", "Chapter 2". */
+@utility kicker {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- The documents the agents write ---- */
+
+.doc {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  color: var(--ink);
+  max-width: 68ch;
+  font-optical-sizing: auto;
+}
+
+.doc > * + * {
+  margin-top: 0.85em;
+}
+
+.doc h1,
+.doc h2,
+.doc h3,
+.doc h4 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+  letter-spacing: -0.005em;
+}
+
+.doc h1 {
+  font-size: 1.5rem;
+  margin-top: 1.6em;
+}
+
+.doc h2 {
+  font-size: 1.3rem;
+  margin-top: 1.5em;
+}
+
+.doc h3 {
+  font-size: 1.12rem;
+  margin-top: 1.4em;
+}
+
+.doc h4 {
+  font-size: 1rem;
+  margin-top: 1.2em;
+}
+
+.doc > :first-child {
+  margin-top: 0;
+}
+
+.doc strong {
+  font-weight: 600;
+}
+
+.doc a {
+  color: var(--link);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.doc ul,
+.doc ol {
+  padding-left: 1.4em;
+}
+
+.doc ul {
+  list-style: none;
+}
+
+.doc ul > li {
+  position: relative;
+}
+
+.doc ul > li::before {
+  content: "";
+  position: absolute;
+  left: -0.95em;
+  top: 0.72em;
+  width: 0.32em;
+  height: 0.32em;
+  border-radius: 999px;
+  background: var(--ink-3);
+}
+
+.doc ol {
+  list-style: decimal;
+}
+
+.doc ol > li::marker {
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 0.85em;
+}
+
+.doc li + li {
+  margin-top: 0.35em;
+}
+
+.doc li > ul,
+.doc li > ol {
+  margin-top: 0.35em;
+}
+
+.doc blockquote {
+  border-left: 2px solid var(--rule-strong);
+  padding-left: 1em;
+  color: var(--ink-2);
+}
+
+.doc code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  background: var(--sunken);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+
+.doc pre {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: var(--sunken);
+  border-radius: 6px;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+}
+
+.doc pre code {
+  background: none;
+  padding: 0;
+}
+
+.doc hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
+  margin: 2em 0;
+}
+
+.doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  display: block;
+  overflow-x: auto;
+}
+
+.doc th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border-bottom: 1px solid var(--rule-strong);
+  padding: 0.4em 0.9em 0.4em 0;
+}
+
+.doc td {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.5em 0.9em 0.5em 0;
+  vertical-align: top;
+}
+
+/* A compact variant, for reports shown inside other views. */
+.doc-compact {
+  font-size: 1rem;
+  line-height: 1.6;
 }
 
 /* Figures the agents marked as assumptions. */
 mark.assumption {
-  background: #fdecc8;
-  color: #6b4200;
-  border-radius: 0.25rem;
-  padding: 0 0.2rem;
-  font-style: italic;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: 3px;
+  padding: 0 0.25em;
+  font-family: var(--font-sans);
+  font-size: 0.78em;
+  font-style: normal;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-@media (prefers-color-scheme: dark) {
-  mark.assumption {
-    background: #4a3510;
-    color: #fbd38d;
+/* ---- The reasoning sliders: a native range input, drawn to match ---- */
+
+.range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.25rem;
+  background: transparent;
+  cursor: pointer;
+  --fill: 0%;
+}
+
+.range:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--primary) var(--fill), var(--rule-strong) var(--fill));
+}
+
+.range::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--rule-strong);
+}
+
+.range::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+}
+
+.range::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 2px solid var(--primary);
+}
+
+.range:focus-visible {
+  outline: none;
+}
+
+.range:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* A gentle pulse for an agent at work; still for those who ask for less motion. */
+@keyframes working {
+  0%,
+  100% {
+    opacity: 1;
   }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.working-dot {
+  animation: working 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .working-dot {
+    animation: none;
+  }
+
+  * {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The modal dialog's backdrop. */
+dialog::backdrop {
+  background: rgb(20 18 14 / 0.45);
+  backdrop-filter: blur(2px);
 }

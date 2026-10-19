@@ -1,7 +1,9 @@
 import json
 import logging
 import re
+import time
 import uuid
+from collections import Counter
 from pathlib import Path
 from typing import Literal
 
@@ -9,7 +11,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
@@ -26,6 +28,7 @@ from llm import (
     reasoning,
     takes_reasoning_effort,
 )
+from progress import summarize
 from proposal import Proposal
 from report_pdf import render_pdf
 from reports import (
@@ -113,6 +116,7 @@ async def health():
 
 class Scenario(BaseModel):
     name: str = Field(description="The scenario file's name, without .json.")
+    title: str = Field(description="A short title to show for it.")
     prompt: str
     context: RequestContext | None = None
     follow_up: str | None = Field(None, description="A follow-up to send after the first request.")
@@ -121,10 +125,36 @@ class Scenario(BaseModel):
 @app.get("/scenarios", response_model=list[Scenario])
 async def list_scenarios():
     """The example startup scenarios (scenarios/*.json) a request can start from."""
-    return [
-        Scenario(name=path.stem, **json.loads(path.read_text(encoding="utf-8")))
-        for path in sorted(SCENARIO_DIR.glob("*.json"))
-    ]
+    scenarios = []
+    for path in sorted(SCENARIO_DIR.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data.setdefault("title", path.stem.replace("_", " ").capitalize())
+        scenarios.append(Scenario(name=path.stem, **data))
+    return scenarios
+
+
+def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
+    """The session, the graph's input and its config for one request."""
+    session_id = request.session_id or str(uuid.uuid4())
+    state = {"request": request.prompt}
+    if request.context:
+        state["context"] = request.context
+    return session_id, state, {"configurable": {"thread_id": session_id}}
+
+
+def _finish(session_id: str, result: dict) -> EvaluateResponse:
+    """Record the session's report and answer with its results."""
+    store.record(session_id, SessionResults.from_state(result))
+    return EvaluateResponse(
+        session_id=session_id,
+        objective=result["plan"].objective,
+        assignments=result["assignments"],
+        analyses=result["analyses"],
+        review_history=result["review_history"],
+        resolutions=result.get("resolutions", []),
+        metrics=result.get("metrics", {}),
+        final_strategy=result["final_strategy"],
+    )
 
 
 @app.post("/evaluate", response_model=EvaluateResponse)
@@ -134,12 +164,7 @@ async def evaluate(request: EvaluateRequest):
     Missing credentials return 503. An LLM call that still fails after its
     retries returns 502, so a provider problem never shows up as a 500.
     """
-    session_id = request.session_id or str(uuid.uuid4())
-    state = {"request": request.prompt}
-    if request.context:
-        state["context"] = request.context
-
-    config = {"configurable": {"thread_id": session_id}}
+    session_id, state, config = _start(request)
     try:
         # ainvoke runs the nodes in worker threads, so a run that takes minutes
         # does not block the event loop, and other requests are still served.
@@ -151,17 +176,63 @@ async def evaluate(request: EvaluateRequest):
     except LLM_ERRORS as error:
         logger.warning("Evaluation failed on an LLM call: %s", error)
         raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
+    return _finish(session_id, result)
 
-    store.record(session_id, SessionResults.from_state(result))
-    return EvaluateResponse(
-        session_id=session_id,
-        objective=result["plan"].objective,
-        assignments=result["assignments"],
-        analyses=result["analyses"],
-        review_history=result["review_history"],
-        resolutions=result.get("resolutions", []),
-        metrics=result.get("metrics", {}),
-        final_strategy=result["final_strategy"],
+
+def _event(name: str, data: dict) -> str:
+    return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.post("/evaluate/stream", response_class=StreamingResponse, responses={200: {"content": {"text/event-stream": {}}}})
+async def evaluate_stream(request: EvaluateRequest):
+    """Run the founding team like /evaluate, reporting its progress as it goes.
+
+    The answer is a stream of server-sent events: `start` when an agent begins
+    (`node`, and `at`, the seconds since the request began), `done` when it
+    finishes (with a `summary` of what it did and the figures behind it), then
+    one `result` with what /evaluate returns. A failure arrives as an `error`
+    event (`status` 503 or 502, as /evaluate would answer, and `detail`), since
+    the response has already begun.
+    """
+    session_id, state, config = _start(request)
+
+    async def events():
+        began = time.perf_counter()
+        runs: Counter[str] = Counter()
+        given: dict[str, dict] = {}  # the state each running node was given
+
+        def at() -> float:
+            return round(time.perf_counter() - began, 1)
+
+        try:
+            with reasoning(**_efforts(request.reasoning)):
+                async for _, task in graph.astream(state, config, stream_mode=["tasks"]):
+                    node = task["name"]
+                    if "input" in task:
+                        runs[node] += 1
+                        given[node] = task["input"]
+                        yield _event("start", {"node": node, "at": at()})
+                    elif not task.get("error"):
+                        summary = summarize(node, task.get("result"), runs[node], given.get(node))
+                        yield _event("done", {"node": node, "at": at(), **summary})
+            response = _finish(session_id, (await graph.aget_state(config)).values)
+        except LLMNotConfigured as error:
+            yield _event("error", {"status": 503, "detail": str(error)})
+            return
+        except LLM_ERRORS as error:
+            logger.warning("Evaluation failed on an LLM call: %s", error)
+            yield _event("error", {"status": 502, "detail": f"The LLM call failed: {error}"})
+            return
+        except Exception:  # the status is already sent, so say what happened instead
+            logger.exception("Evaluation failed")
+            yield _event("error", {"status": 500, "detail": "The evaluation failed unexpectedly."})
+            return
+        yield _event("result", response.model_dump(mode="json"))
+
+    # No caching or proxy buffering, so each event reaches the browser as it happens.
+    return StreamingResponse(
+        events(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

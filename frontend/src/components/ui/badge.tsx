@@ -1,15 +1,33 @@
-// A small label: the source of a section, a verdict, a state.
+// A small label for a state: a verdict, a rating, "edited".
 
 const TONES = {
-  blue: "bg-accent-soft/70 text-navy dark:bg-accent/20 dark:text-accent-soft",
-  green: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-  amber: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  red: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
-  gray: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+  neutral: "bg-sunken text-ink-2",
+  primary: "bg-primary-soft text-primary",
+  good: "bg-good-soft text-good",
+  warn: "bg-warn-soft text-warn",
+  bad: "bg-bad-soft text-bad",
 };
 
 export type Tone = keyof typeof TONES;
 
-export function Badge({ children, tone = "blue" }: { children: React.ReactNode; tone?: Tone }) {
-  return <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${TONES[tone]}`}>{children}</span>;
+export function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone?: Tone }) {
+  return (
+    <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs leading-4 font-medium ${TONES[tone]}`}>
+      {children}
+    </span>
+  );
+}
+
+// A review score out of five, as five marks, with the number for those who can't see them.
+export function Score({ score }: { score: number }) {
+  return (
+    <span className="inline-flex items-center gap-1.5" title={`Score ${score} of 5`}>
+      <span aria-hidden className="flex gap-0.5">
+        {[1, 2, 3, 4, 5].map((mark) => (
+          <span key={mark} className={`h-2.5 w-1.5 rounded-[1px] ${mark <= score ? "bg-ink" : "bg-rule-strong"}`} />
+        ))}
+      </span>
+      <span className="text-xs text-ink-3 tabular">{score}/5</span>
+    </span>
+  );
 }

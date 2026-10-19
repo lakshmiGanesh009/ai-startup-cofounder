@@ -334,6 +334,20 @@ def test_the_proposal_pdf_draws_charts_for_any_figures():
         assert render_pdf(report).startswith(b"%PDF")
 
 
+def test_a_roadmap_phase_of_under_a_month_still_draws():
+    from report_pdf import _months
+
+    first, *rest = SAMPLE.technical.roadmap
+    technical = SAMPLE.technical.model_copy(
+        update={"roadmap": [first.model_copy(update={"start_month": 1, "duration_months": 0}), *rest]}
+    )
+    report = _proposal_report()
+    report = report.model_copy(update={"proposal": report.proposal.model_copy(update={"technical": technical})})
+
+    assert render_pdf(report).startswith(b"%PDF")
+    assert [_months(1, 0), _months(5, 1), _months(1, 4)] == ["1", "5", "1-4"]
+
+
 def test_the_chief_of_staff_is_told_to_face_weak_returns():
     from agents.proposal_writer import metrics_text
 

@@ -1,4 +1,5 @@
 {
+  "title": "Follow-up scheduling for small clinics",
   "prompt": "Evaluate this startup idea in the AI healthcare space: an assistant that drafts and schedules patient follow-up appointments from clinical notes.",
   "context": {
     "target_market": "Small outpatient clinics in the US",

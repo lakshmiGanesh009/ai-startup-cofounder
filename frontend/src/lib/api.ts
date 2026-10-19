@@ -60,6 +60,7 @@ export type Health = { status: string; service: string; reasoning: ReasoningSett
 
 export type Scenario = {
   name: string;
+  title: string;
   prompt: string;
   context: RequestContext | null;
   follow_up: string | null;
@@ -119,6 +120,82 @@ export function evaluate(body: EvaluateRequest): Promise<EvaluateResponse> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+// One step of an evaluation, as /evaluate/stream reports it: an agent began
+// (`start`) or finished (`done`, with what it did). `at` is seconds since the
+// request began. The figures depend on the step (progress.py).
+export type Step = {
+  type: "start" | "done";
+  node: string;
+  at: number;
+  summary?: string;
+  objective?: string;
+  assigned?: Specialist[];
+  words?: number;
+  revision?: boolean;
+  failed?: boolean;
+  reviews?: Partial<Record<Specialist, { approved: boolean; score: number }>>;
+  conflicts?: number;
+  decisions?: number;
+  revise?: Specialist[];
+};
+
+function parseEvent(block: string): { name: string; data: Record<string, unknown> } | null {
+  let name = "message";
+  let data = "";
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) name = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  }
+  if (!data) return null;
+  return { name, data: JSON.parse(data) as Record<string, unknown> };
+}
+
+// Runs an evaluation like evaluate(), calling `onStep` as each agent begins and
+// finishes, and resolving with the same result.
+export async function evaluateStream(body: EvaluateRequest, onStep: (step: Step) => void): Promise<EvaluateResponse> {
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}/evaluate/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(`Could not reach the backend at ${API_URL}.`);
+  }
+  if (!response.ok || !response.body) {
+    throw new ApiError(`The backend returned ${response.status}: ${await errorMessage(response)}`, response.status);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      throw new ApiError("The connection to the backend was lost before the evaluation finished.");
+    }
+    if (chunk.done) break;
+    buffer += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, "\n");
+    let end: number;
+    while ((end = buffer.indexOf("\n\n")) >= 0) {
+      const event = parseEvent(buffer.slice(0, end));
+      buffer = buffer.slice(end + 2);
+      if (!event) continue;
+      if (event.name === "result") return event.data as unknown as EvaluateResponse;
+      if (event.name === "error") {
+        const status = Number(event.data.status) || null;
+        throw new ApiError(`The backend returned ${status}: ${String(event.data.detail)}`, status);
+      }
+      if (event.name === "start" || event.name === "done") {
+        onStep({ ...(event.data as Omit<Step, "type">), type: event.name });
+      }
+    }
+  }
+  throw new ApiError("The connection to the backend was lost before the evaluation finished.");
 }
 
 // ---- Reports (reports.py, proposal.py) ----

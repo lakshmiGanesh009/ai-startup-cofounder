@@ -26,51 +26,49 @@ export function ReasoningSliders() {
   const efforts = health?.reasoning.efforts.length ? health.reasoning.efforts : [...EFFORTS];
 
   return (
-    <section aria-labelledby="reasoning-heading" className="space-y-4">
-      <h2 id="reasoning-heading" className="text-sm font-semibold">
+    <section aria-labelledby="reasoning-heading">
+      <h2 id="reasoning-heading" className="kicker">
         Reasoning
       </h2>
-      {ROLES.map(({ role, label, help }) => {
-        const current = reasoning?.[role] ?? health?.reasoning[role] ?? "minimal";
-        const index = Math.max(0, efforts.indexOf(current));
-        return (
-          <div key={role}>
-            <div className="flex items-baseline justify-between text-sm" title={help}>
-              <label htmlFor={`effort-${role}`}>{label}</label>
-              <span aria-hidden className="font-medium text-accent-strong dark:text-accent-soft">
-                {efforts[index]}
-              </span>
+      <div className="mt-3 space-y-4">
+        {ROLES.map(({ role, label, help }) => {
+          const current = reasoning?.[role] ?? health?.reasoning[role] ?? "minimal";
+          const index = Math.max(0, efforts.indexOf(current));
+          const fill = `${(index / Math.max(efforts.length - 1, 1)) * 100}%`;
+          return (
+            <div key={role} title={help}>
+              <div className="flex items-baseline justify-between gap-2">
+                <label htmlFor={`effort-${role}`} className="text-[13px] font-medium text-ink">
+                  {label}
+                </label>
+                <span aria-hidden className="text-xs text-ink-2">
+                  {efforts[index]}
+                  <span className="text-ink-3"> · {SECONDS_PER_CALL[efforts[index]]}</span>
+                </span>
+              </div>
+              <input
+                id={`effort-${role}`}
+                type="range"
+                min={0}
+                max={efforts.length - 1}
+                step={1}
+                value={index}
+                disabled={!adjustable}
+                aria-valuetext={efforts[index]}
+                aria-describedby="reasoning-note"
+                onChange={(event) => setEffort(role, efforts[Number(event.target.value)])}
+                className="range mt-1"
+                style={{ "--fill": fill } as React.CSSProperties}
+              />
             </div>
-            <input
-              id={`effort-${role}`}
-              type="range"
-              min={0}
-              max={efforts.length - 1}
-              step={1}
-              value={index}
-              disabled={!adjustable}
-              aria-valuetext={efforts[index]}
-              aria-describedby="reasoning-note"
-              onChange={(event) => setEffort(role, efforts[Number(event.target.value)])}
-              className="mt-1 w-full accent-accent disabled:opacity-40"
-            />
-            <div aria-hidden className="flex justify-between text-[10px] text-zinc-400">
-              {efforts.map((effort) => (
-                <span key={effort}>{effort}</span>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-      <p id="reasoning-note" className="text-xs leading-relaxed text-zinc-500">
+          );
+        })}
+      </div>
+      <p id="reasoning-note" className="mt-2 text-xs leading-relaxed text-ink-3">
         {status === "checking" && "Checking what the backend offers…"}
         {status === "down" && "Unavailable until the backend answers."}
         {status === "up" && !adjustable && "This provider takes no reasoning setting; only Azure OpenAI does."}
-        {status === "up" &&
-          adjustable &&
-          `Higher reasoning gives more considered answers but slower calls (${efforts
-            .map((effort) => `${effort} ${SECONDS_PER_CALL[effort]}`)
-            .join(", ")} a call). ${evaluationWait(reasoning)}`}
+        {status === "up" && adjustable && `More reasoning, more considered answers, slower calls. ${evaluationWait(reasoning)}`}
       </p>
     </section>
   );

@@ -1,32 +1,35 @@
 "use client";
 
-// What the PDF pop-up shows: the inline prompt that asks the team to revise
-// the proposal, the download, and the document itself in the browser's own PDF
-// viewer. The PDF is fetched again whenever the report's version changes.
+// The PDF pop-up's contents: on the left, the prompt that asks the team to
+// revise the proposal, and the download; on the right, the document in the
+// browser's own PDF viewer. The PDF is fetched again whenever the report's
+// version changes.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Progress } from "@/components/evaluate/working";
+import { Button, buttonClass } from "@/components/ui/button";
+import { inputClass, Label } from "@/components/ui/field";
+import { DownloadIcon } from "@/components/ui/icons";
+import { Notice, type Tone } from "@/components/ui/notice";
+import { Progress } from "@/components/ui/progress";
 import { ApiError, type PartKey, type Reasoning, type Report, reportPdf, reviseProposal } from "@/lib/api";
 import { PART_AGENTS, PART_TITLES } from "@/lib/proposal";
 import { proposalWait } from "@/lib/team";
 
 type Pdf = { version: number; url: string } | { version: number; error: string };
-type Notice = { tone: "success" | "warning" | "error"; text: string };
+type Message = { tone: Tone; text: string };
 
-const NOTICE_STYLE = {
-  success: "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200",
-  warning: "bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-  error: "bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200",
-};
+const PARTS = Object.keys(PART_TITLES) as PartKey[];
 
 export function PdfPanel({
   report,
   reasoning,
+  focusPrompt = false,
   onChanged,
 }: {
   report: Report;
   reasoning: Reasoning | null;
+  focusPrompt?: boolean;
   // Called with the revised report, or with nothing when it changed elsewhere.
   onChanged: (report: Report | null) => void;
 }) {
@@ -34,7 +37,12 @@ export function PdfPanel({
   const [part, setPart] = useState<PartKey | "whole">("whole");
   const [instruction, setInstruction] = useState("");
   const [revising, setRevising] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+  const prompt = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (focusPrompt) prompt.current?.focus();
+  }, [focusPrompt]);
 
   useEffect(() => {
     let url: string | null = null;
@@ -57,26 +65,32 @@ export function PdfPanel({
   async function revise(event: React.FormEvent) {
     event.preventDefault();
     if (!instruction.trim()) {
-      setNotice({ tone: "warning", text: "Say what to change." });
+      setMessage({ tone: "warn", text: "Say what to change." });
       return;
     }
-    setNotice(null);
+    setMessage(null);
     setRevising(true);
     try {
-      const result = await reviseProposal(report.session_id, report.version, instruction.trim(), part === "whole" ? null : part, reasoning);
+      const result = await reviseProposal(
+        report.session_id,
+        report.version,
+        instruction.trim(),
+        part === "whole" ? null : part,
+        reasoning,
+      );
       setInstruction("");
-      setNotice(
+      setMessage(
         result.failed.length
-          ? { tone: "warning", text: `Could not revise: ${result.failed.join(", ")}. They keep their text.` }
-          : { tone: "success", text: "The proposal was revised." },
+          ? { tone: "warn", text: `Could not revise: ${result.failed.join(", ")}. They keep their text.` }
+          : { tone: "good", text: "The proposal was revised." },
       );
       onChanged(result.report);
     } catch (error) {
       if (error instanceof ApiError && error.status === 409) {
-        setNotice({ tone: "warning", text: "The report changed elsewhere, so it has been reloaded. Make the request again." });
+        setMessage({ tone: "warn", text: "The report changed elsewhere, so it has been reloaded. Make the request again." });
         onChanged(null);
       } else {
-        setNotice({ tone: "error", text: (error as Error).message });
+        setMessage({ tone: "bad", text: (error as Error).message });
       }
     } finally {
       setRevising(false);
@@ -87,86 +101,94 @@ export function PdfPanel({
   const kind = report.proposal ? "investment-proposal" : "launch-report";
 
   return (
-    <div className="space-y-4">
-      {report.proposal ? (
-        <form onSubmit={revise} aria-label="Ask the team to revise the proposal" className="space-y-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="font-semibold">Ask the team to revise the proposal</p>
-          <div className="grid gap-3 sm:grid-cols-[16rem_1fr]">
-            <div>
-              <label htmlFor="revise-part" className="mb-1 block text-sm">
-                Part
-              </label>
-              <select
-                id="revise-part"
-                value={part}
-                onChange={(event) => setPart(event.target.value as PartKey | "whole")}
-                className="w-full rounded-md border border-zinc-300 bg-surface px-2.5 py-2 text-sm dark:border-zinc-700"
-              >
-                <option value="whole">The whole proposal</option>
-                {(Object.keys(PART_TITLES) as PartKey[]).map((key) => (
-                  <option key={key} value={key}>
-                    {PART_TITLES[key]} ({PART_AGENTS[key]})
-                  </option>
+    <div className="grid grid-cols-1 h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[23rem_minmax(0,1fr)] lg:grid-rows-1">
+      <div className="flex min-h-0 flex-col gap-5 overflow-y-auto border-b border-rule p-5 lg:border-r lg:border-b-0">
+        {report.proposal ? (
+          <form onSubmit={revise} aria-label="Ask the team to revise the proposal" className="space-y-5">
+            <fieldset>
+              <legend className="kicker">Ask the team to revise</legend>
+              <div className="mt-3 space-y-0.5">
+                {(["whole", ...PARTS] as const).map((key) => (
+                  <label
+                    key={key}
+                    className={`flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 text-sm ${
+                      part === key ? "bg-sunken" : "hover:bg-sunken/60"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="revise-part"
+                      value={key}
+                      checked={part === key}
+                      onChange={() => setPart(key)}
+                      className="mt-1 accent-[var(--primary)]"
+                    />
+                    <span>
+                      <span className="block text-ink">{key === "whole" ? "The whole proposal" : PART_TITLES[key]}</span>
+                      <span className="block text-xs text-ink-3">
+                        {key === "whole" ? "Every agent revises its part" : PART_AGENTS[key]}
+                      </span>
+                    </span>
+                  </label>
                 ))}
-              </select>
-            </div>
+              </div>
+            </fieldset>
             <div>
-              <label htmlFor="revise-instruction" className="mb-1 block text-sm">
-                What to change
-              </label>
+              <Label htmlFor="revise-instruction">What to change</Label>
               <textarea
+                ref={prompt}
                 id="revise-instruction"
-                rows={2}
+                rows={4}
                 value={instruction}
                 onChange={(event) => setInstruction(event.target.value)}
-                placeholder="Make the year-one figures more conservative and add a referral channel."
-                className="w-full rounded-md border border-zinc-300 bg-surface px-3 py-2 text-sm dark:border-zinc-700"
+                placeholder="Make the year-one figures more conservative, and add a referral channel."
+                className={`${inputClass} leading-relaxed`}
               />
             </div>
-          </div>
-          <button type="submit" disabled={revising} className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-50">
-            Revise
-          </button>
-        </form>
-      ) : (
-        <p className="rounded-md bg-accent-soft/40 px-4 py-3 text-sm dark:bg-accent/10">
-          This is the team&apos;s report. Write the investment proposal to get the full document with charts, and to ask the team for changes here.
-        </p>
-      )}
-      {revising && (
-        <Progress
-          title={part === "whole" ? "Every agent is revising its part." : `The ${PART_AGENTS[part]} is revising its part.`}
-          wait={proposalWait(reasoning)}
-          stages={[
-            part === "whole" ? "Each agent applies your instruction to its part" : `The ${PART_TITLES[part]} part is rewritten`,
-            "The parts built on it are brought into line",
-            "The PDF is drawn again",
-          ]}
-        />
-      )}
-      {notice && (
-        <p role={notice.tone === "success" ? "status" : "alert"} className={`rounded-md px-4 py-3 text-sm ${NOTICE_STYLE[notice.tone]}`}>
-          {notice.text}
-        </p>
-      )}
-      {!current && <p className="text-sm text-zinc-500">Drawing the PDF…</p>}
-      {current && "error" in current && (
-        <p role="alert" className={`rounded-md px-4 py-3 text-sm ${NOTICE_STYLE.error}`}>
-          The PDF could not be made. {current.error}
-        </p>
-      )}
-      {current && "url" in current && (
-        <>
+            <Button type="submit" variant="primary" disabled={revising} className="w-full">
+              Revise
+            </Button>
+          </form>
+        ) : (
+          <p className="text-sm leading-relaxed text-ink-2">
+            This is the team&apos;s report. Write the investment proposal to get the full document with charts, and to
+            ask the team for changes here.
+          </p>
+        )}
+        {revising && (
+          <Progress
+            title={part === "whole" ? "Every agent is revising its part." : `The ${PART_AGENTS[part]} is revising its part.`}
+            wait={proposalWait(reasoning)}
+            stages={[
+              part === "whole" ? "Each agent applies your instruction to its part" : `The ${PART_TITLES[part]} part is rewritten`,
+              "The parts built on it are brought into line",
+              "The PDF is drawn again",
+            ]}
+          />
+        )}
+        {message && <Notice tone={message.tone}>{message.text}</Notice>}
+        {current && "url" in current && (
           <a
             href={current.url}
             download={`${kind}-${report.session_id.slice(0, 8)}.pdf`}
-            className="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+            className={buttonClass("secondary", "md", "mt-auto")}
           >
+            <DownloadIcon />
             Download PDF
           </a>
-          <iframe src={current.url} title="The report as a PDF" className="h-[70dvh] w-full rounded-md border border-zinc-200 dark:border-zinc-800" />
-        </>
-      )}
+        )}
+      </div>
+      <div className="flex min-h-[60dvh] bg-sunken lg:min-h-0">
+        {!current && <p className="m-auto text-sm text-ink-3">Drawing the PDF…</p>}
+        {current && "error" in current && (
+          <Notice tone="bad" className="m-auto max-w-md">
+            The PDF could not be made. {current.error}
+          </Notice>
+        )}
+        {current && "url" in current && (
+          <iframe src={current.url} title="The report as a PDF" className="h-full min-h-[60dvh] w-full border-0 lg:min-h-0" />
+        )}
+      </div>
     </div>
   );
 }

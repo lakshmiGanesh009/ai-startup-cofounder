@@ -6,6 +6,10 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
+import { inputClass } from "@/components/ui/field";
+import { CloseIcon } from "@/components/ui/icons";
+import { Notice } from "@/components/ui/notice";
 import type { PartKey } from "@/lib/api";
 
 type Kind = "text" | "long" | "number" | "choice";
@@ -165,8 +169,8 @@ export const PART_FIELDS: Record<PartKey, FieldSpec[]> = {
 type Data = Record<string, unknown>;
 type Row = Record<string, unknown>;
 
-const control =
-  "w-full rounded-md border border-zinc-300 bg-surface px-2.5 py-1.5 text-sm focus:border-accent focus:ring-2 focus:ring-accent/30 focus:outline-none dark:border-zinc-700";
+const compact =
+  "block w-full rounded-[5px] border border-rule-strong bg-surface px-2 py-1.5 text-[13px] text-ink focus:border-focus focus:ring-2 focus:ring-focus/20 focus:outline-none";
 
 function toNumber(text: string): number {
   return text.trim() === "" ? Number.NaN : Number(text);
@@ -179,7 +183,7 @@ function Input({
   options,
   value,
   onChange,
-  labelHidden = false,
+  inTable = false,
 }: {
   id: string;
   label: string;
@@ -187,11 +191,12 @@ function Input({
   options?: readonly string[];
   value: unknown;
   onChange: (value: unknown) => void;
-  labelHidden?: boolean;
+  inTable?: boolean;
 }) {
   const text = value === null || value === undefined || Number.isNaN(value) ? "" : String(value);
+  const style = inTable ? compact : inputClass;
   const labelElement = (
-    <label htmlFor={id} className={labelHidden ? "sr-only" : "mb-1 block text-sm font-medium"}>
+    <label htmlFor={id} className={inTable ? "sr-only" : "mb-1.5 block text-[13px] font-medium text-ink"}>
       {label}
     </label>
   );
@@ -199,7 +204,7 @@ function Input({
     return (
       <div>
         {labelElement}
-        <select id={id} value={text} onChange={(event) => onChange(event.target.value)} className={control}>
+        <select id={id} value={text} onChange={(event) => onChange(event.target.value)} className={style}>
           {options?.map((option) => (
             <option key={option}>{option}</option>
           ))}
@@ -208,11 +213,17 @@ function Input({
     );
   }
   if (kind === "long") {
-    const lines = text.split("\n").reduce((sum, line) => sum + 1 + Math.floor(line.length / 100), 0);
+    const lines = text.split("\n").reduce((sum, line) => sum + 1 + Math.floor(line.length / 90), 0);
     return (
       <div>
         {labelElement}
-        <textarea id={id} rows={Math.min(14, Math.max(3, lines))} value={text} onChange={(event) => onChange(event.target.value)} className={control} />
+        <textarea
+          id={id}
+          rows={Math.min(16, Math.max(3, lines))}
+          value={text}
+          onChange={(event) => onChange(event.target.value)}
+          className={`${style} leading-relaxed`}
+        />
       </div>
     );
   }
@@ -225,41 +236,57 @@ function Input({
         step="any"
         value={text}
         onChange={(event) => onChange(kind === "number" ? toNumber(event.target.value) : event.target.value)}
-        className={control}
+        className={`${style} ${kind === "number" ? "tabular" : ""}`}
       />
     </div>
   );
 }
 
 function blank(columns: Column[]): Row {
-  return Object.fromEntries(columns.map((column) => [column.key, column.kind === "number" ? 0 : column.kind === "choice" ? column.options?.[0] : ""]));
+  return Object.fromEntries(
+    columns.map((column) => [column.key, column.kind === "number" ? 0 : column.kind === "choice" ? column.options?.[0] : ""]),
+  );
 }
 
-function TableEditor({ id, label, columns, rows, onChange }: { id: string; label: string; columns: Column[]; rows: Row[]; onChange: (rows: Row[]) => void }) {
+function TableEditor({
+  id,
+  label,
+  columns,
+  rows,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  columns: Column[];
+  rows: Row[];
+  onChange: (rows: Row[]) => void;
+}) {
   return (
     <fieldset>
-      <legend className="mb-2 text-sm font-medium">{label}</legend>
-      <div className="overflow-x-auto">
+      <legend className="mb-2 text-[13px] font-medium text-ink">{label}</legend>
+      <div className="overflow-x-auto rounded-md border border-rule">
         <table className="w-full text-sm">
-          <thead className="text-xs text-zinc-500">
+          <thead className="bg-sunken/60">
             <tr>
               {columns.map((column) => (
-                <th key={column.key} className="px-1 pb-1 text-left font-medium">
+                <th key={column.key} className="px-1.5 py-1.5 text-left text-xs font-medium text-ink-3">
                   {column.label}
                 </th>
               ))}
-              <th className="sr-only">Remove</th>
+              <th className="w-8">
+                <span className="sr-only">Remove</span>
+              </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-rule">
             {rows.map((row, index) => (
               <tr key={index}>
                 {columns.map((column) => (
-                  <td key={column.key} className="px-1 py-0.5 align-top">
+                  <td key={column.key} className="px-1 py-1 align-top">
                     <Input
                       id={`${id}-${index}-${column.key}`}
                       label={`${label}, row ${index + 1}: ${column.label}`}
-                      labelHidden
+                      inTable
                       kind={column.kind === "long" ? "text" : column.kind}
                       options={column.options}
                       value={row[column.key]}
@@ -267,14 +294,14 @@ function TableEditor({ id, label, columns, rows, onChange }: { id: string; label
                     />
                   </td>
                 ))}
-                <td className="px-1 py-0.5 align-top">
+                <td className="px-1 py-1 align-top">
                   <button
                     type="button"
                     aria-label={`Remove row ${index + 1} of ${label}`}
                     onClick={() => onChange(rows.filter((_, i) => i !== index))}
-                    className="rounded px-2 py-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-red-700 dark:hover:bg-zinc-800"
+                    className="rounded p-1.5 text-ink-3 hover:bg-bad-soft hover:text-bad"
                   >
-                    ✕
+                    <CloseIcon className="size-3.5" />
                   </button>
                 </td>
               </tr>
@@ -285,7 +312,7 @@ function TableEditor({ id, label, columns, rows, onChange }: { id: string; label
       <button
         type="button"
         onClick={() => onChange([...rows, blank(columns)])}
-        className="mt-2 rounded-md border border-dashed border-zinc-300 px-3 py-1 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        className="mt-2 text-[13px] font-medium text-link hover:underline"
       >
         Add a row
       </button>
@@ -315,7 +342,7 @@ export function EditForm({
   return (
     <form
       aria-label={`Edit ${part}`}
-      className="space-y-5"
+      className="space-y-7"
       onSubmit={async (event) => {
         event.preventDefault();
         setSaving(true);
@@ -340,29 +367,45 @@ export function EditForm({
         if (field.kind === "size") {
           const size = draft[field.key] as Row;
           return (
-            <fieldset key={field.key} className="grid gap-3 sm:grid-cols-[12rem_1fr]">
-              <legend className="mb-1 text-sm font-medium">{field.label}</legend>
-              <Input id={`${id}-value`} label="Value ($ a year)" kind="number" value={size.value_usd} onChange={(next) => set(field.key, { ...size, value_usd: next })} />
-              <Input id={`${id}-basis`} label="Basis" kind="text" value={size.basis} onChange={(next) => set(field.key, { ...size, basis: next })} />
+            <fieldset key={field.key}>
+              <legend className="mb-2 text-[13px] font-medium text-ink">{field.label}</legend>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
+                <Input
+                  id={`${id}-value`}
+                  label="Value ($ a year)"
+                  kind="number"
+                  value={size.value_usd}
+                  onChange={(next) => set(field.key, { ...size, value_usd: next })}
+                />
+                <Input
+                  id={`${id}-basis`}
+                  label="Basis"
+                  kind="text"
+                  value={size.basis}
+                  onChange={(next) => set(field.key, { ...size, basis: next })}
+                />
+              </div>
             </fieldset>
           );
         }
         return (
-          <Input key={field.key} id={id} label={field.label} kind={field.kind} options={field.options} value={draft[field.key]} onChange={(next) => set(field.key, next)} />
+          <Input
+            key={field.key}
+            id={id}
+            label={field.label}
+            kind={field.kind}
+            options={field.options}
+            value={draft[field.key]}
+            onChange={(next) => set(field.key, next)}
+          />
         );
       })}
-      {problem && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950 dark:text-red-200">
-          {problem}
-        </p>
-      )}
-      <div className="flex gap-2">
-        <button type="submit" disabled={saving} className="rounded-md bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-strong disabled:opacity-50">
+      {problem && <Notice tone="bad">{problem}</Notice>}
+      <div className="sticky bottom-0 -mx-1 flex gap-2 border-t border-rule bg-paper/95 px-1 py-3 backdrop-blur">
+        <Button type="submit" variant="primary" disabled={saving}>
           {saving ? "Saving…" : "Save changes"}
-        </button>
-        <button type="button" onClick={onCancel} className="rounded-md border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
-          Cancel
-        </button>
+        </Button>
+        <Button onClick={onCancel}>Cancel</Button>
       </div>
     </form>
   );

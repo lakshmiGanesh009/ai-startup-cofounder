@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 
 import { Sidebar } from "@/components/sidebar";
 import { BackendProvider } from "@/lib/backend";
@@ -16,19 +16,32 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// The serif for the documents the agents write: strategies, reports, proposals.
+const newsreader = Newsreader({
+  variable: "--font-newsreader",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["opsz"],
+});
+
 export const metadata: Metadata = {
-  title: "AI Startup Co-Founder Team",
-  description: "A multi-agent founding team that evaluates startup ideas",
+  title: "Co-Founder · An AI founding team",
+  description: "A multi-agent founding team that evaluates startup ideas and writes them up as investment proposals",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} h-full antialiased`}
+    >
       <body className="min-h-full">
         <BackendProvider>
           <div className="flex min-h-dvh flex-col lg:flex-row">
             <Sidebar />
-            <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 sm:px-8">{children}</main>
+            <main className="w-full min-w-0 flex-1 px-4 py-8 sm:px-8 lg:px-12 lg:py-10">
+              <div className="mx-auto max-w-[76rem]">{children}</div>
+            </main>
           </div>
         </BackendProvider>
       </body>
