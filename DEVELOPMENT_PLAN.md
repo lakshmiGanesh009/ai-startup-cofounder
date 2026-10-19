@@ -94,6 +94,7 @@ graph TD
 | 17 | Investment proposal, charts and reasoning sliders | Synthesis into a cohesive strategy document; structured outputs | Done |
 | 18 | UI design pass and live progress | Live walkthrough; agent communication made visible | Done |
 | 19 | Decision templates, web research and clarifying questions | Context-aware analysis; manager-led delegation that asks before it assumes | Done |
+| 20 | Deep research and competitor profiles for the specialists | Specialised agents grounded in current, cited evidence | Done |
 
 ## Live verification
 
@@ -119,6 +120,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 17 | Two scenarios evaluated, their proposals written and revised against Azure OpenAI; the PDFs read page by page; the Reports page in headless Chrome | Pass after fixes: writing takes 57–82 s and a one-part revision 40–54 s. The live runs moved the projections' arithmetic into code, added the figure checks and the financial case, retried a content-filtered reply, and fixed an IRR above 1,000% shown as "none" (see [docs/performance.md](docs/performance.md)). In the browser, 27 of 27 checks: the sliders, a tab per section, no inner scroll boxes, an edit saved, and the PDF pop-up's revision adding the requested risk, with no console errors from the app. |
 | 18 | The redesigned pages in headless Chrome against Azure OpenAI, light, dark and at phone width, read screenshot by screenshot | Pass after fixes: evaluations streamed their steps live and finished in 90–142 s; proposals took 69–73 s. The first pass found a sideways scroll on phones, "Sent back" on a report still short after its one revision, the agents' section labels set as plain text, "0.0% of TAM", a "0 mo" roadmap phase, "Revise with the team" leaving the prompt unfocused, and an FTE total of 2.1500000000000004; each is fixed, with a test. The second pass: 11 of 11 checks, with no console errors. |
 | 19 | Briefs prepared against Azure OpenAI and Tavily (a thin brief, the detailed healthcare scenario, a pricing template); the whole flow in headless Chrome; the team run on a researched brief | Pass after fixes: a brief is researched and checked in 26–62 s (two to four searches of about 2 s each; the rest is the Chief of Staff, and an Azure call that stalls adds its retry), with 7–8 cited facts from 7–12 sources and three questions. In the browser, 16 of 16 checks, light, dark and at phone width: a fact left out is not sent and its source drops from the report, and the report and its PDF list the research with linked sources. The live runs changed three things: the questions asked the founder to choose what the team should decide, so they now ask only for facts only the founder knows; only two of four specialists cited the research and the strategy dropped every citation, so the specialists are told to use and cite it and the strategy to keep the citations (after: 2, 5 and 6 citations); and Tavily's "[PDF]" title marker, which read like a citation, is removed. |
+| 20 | Tavily's Research API on two sample tasks; then the go-to-market risk scenario with deep research, against Tavily and Azure OpenAI in headless Chrome | Pass after fixes: an area report took 70 s and 80 credits, a competitor profile 22 s and 22 credits. The evaluation researched four areas and profiled Expensify, Dext and QuickBooks in 94 s, citing 72 sources for 209 credits, and finished in 205 s; the specialists cited the research 29 times and the strategy 14. 11 of 11 browser checks, with no console errors. The samples showed that Tavily needs a description on every field of an output schema, that a report repeats its sources in a closing list, now dropped, and that a profile cites loosely ("(source9)"), now renumbered; a profile that cites nothing lists all its sources, now shown as a range. |
 
 ### Fixed during live verification
 
@@ -573,13 +575,36 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - A brief can be filled in from a template, researched with sources the founder can check, its questions answered or skipped, and the team's work and report reflect the answers and the facts kept.
 
+### Step 20 - Deep research and competitor profiles for the specialists (Done)
+
+**Goal:** each specialist can work from current research on its own area, and Marketing and Finance from profiles of the main competitors, all cited to their sources, when the founder asks for it.
+
+**Decided with the user:** Tavily's Research API with the `mini` model; a switch, off by default, since a run costs about 150-450 of the free plan's 1,000 monthly credits; up to three competitors profiled. Tavily has no company-research endpoint, so a profile is a research task with an output schema.
+
+**Built:**
+
+- `search.py`: Tavily research tasks, started then awaited (`POST /research`, `GET /research/{id}`), run at the same time; a refusal, a failed task or one past `RESEARCH_TIMEOUT` is reported, not raised to the request. The report's own reference list is dropped, since its sources come as data.
+- `deep_research.py` and a `research` step in the graph after the plan: competitors named by the Chief of Staff, a task per assigned area and per competitor, and one numbering of sources for the session, the reports' citations renumbered to match.
+- `agents/specialist.py`: each specialist reads its area's report; Marketing and Finance also the profiles. `main.py`: `deep_research` on the request, `research` on the response; the stream reports the step; the report and PDF include the research.
+- `frontend/`: the switch with its cost, the Research stage in the live view, and the result's Research tab with each area's report, the competitor profiles and every source, and the credits used.
+
+**Check:**
+
+- Automated: the research client's start, wait, refusals, failure, timeout and lost connection against a mock transport; sources numbered once across reports and the brief; each specialist's prompt; the profiles only for Marketing and Finance; a follow-up reusing the research and researching only new areas; failures leaving the team to work; the report section; the switch, the live stage and the Research tab.
+- Live: one researched evaluation against Tavily and Azure OpenAI, timed and costed, with the specialists' citations checked.
+
+**Done when:**
+
+- With the switch on, each specialist's report rests on cited, current research for its area, the competitors are profiled with sources, and the founder can see it all and what it cost.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-19
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-20
 progress.py                Step summaries for the stream      Step 18
 brief.py                   Preparing a brief                  Step 19
-search.py                  Web search (Tavily)                Step 19
+search.py                  Tavily search and research         Steps 19-20
+deep_research.py           Deep research for the specialists  Step 20
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward

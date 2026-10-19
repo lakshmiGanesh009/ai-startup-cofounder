@@ -14,6 +14,7 @@ Dotted edges are conditional; solid edges are fixed.
 graph TD;
 	__start__([start]):::first
 	plan(plan)
+	research(research)
 	review(review)
 	critique(critique)
 	resolve(resolve)
@@ -33,8 +34,13 @@ graph TD;
 	marketing -.-> synthesis;
 	plan -.-> finance;
 	plan -.-> marketing;
+	plan -.-> research;
 	plan -.-> risk;
 	plan -.-> technical;
+	research -.-> finance;
+	research -.-> marketing;
+	research -.-> risk;
+	research -.-> technical;
 	resolve -.-> finance;
 	resolve -.-> marketing;
 	resolve -.-> risk;
@@ -147,6 +153,31 @@ founder reviews its outcome before anything is committed to a session.
    before their own estimates and cite each as `[n]`, weighing it as evidence
    rather than settled fact, and the strategy keeps those citations. The report
    gains a "Web Research" section listing the sources by the same numbers.
+
+## Deep research
+
+When a request sets `deep_research` (a switch on the Evaluate page) and a
+Tavily key is set, the plan routes to a `research` step before the specialists
+(`deep_research.py`). One structured call names up to three competitors to
+profile, then Tavily's Research API runs, at the same time, one task per
+assigned specialist, written from its assignment and the founder's brief, and
+one per competitor, answering in a fixed profile schema (product, pricing,
+customers, funding, recent moves, strengths, weaknesses). With the `mini`
+model a task takes 20-90 s and 20-80 credits, so the step adds a minute or two
+and about 150-450 credits.
+
+Each Tavily report numbers its own sources from 1. A `SourceBook` gives every
+page one number for the whole session, after the brief's research, whose
+numbers stand, and the reports' citations are renumbered to match, including
+the loose "(source9)" a profile writes; a page two reports cite gets one
+number. So a specialist's `[n]`, the strategy's and the report's mean the same
+page. Each specialist reads its own area's report, and Marketing and Finance
+the competitor profiles too. The research is kept in the session's state: a
+follow-up reuses it, and one that asks again researches only the newly
+assigned areas. A task that fails, or a profile that comes back without its
+fields, leaves that area or company out and is listed as not researched; it
+never fails the request. The report's "Web Research" section gains each area's
+report, the competitors and the session's sources.
 
 ## Reasoning loop
 
