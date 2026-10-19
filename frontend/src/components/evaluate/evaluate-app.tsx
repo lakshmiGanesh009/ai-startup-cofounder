@@ -121,7 +121,7 @@ function Session() {
   const index = shown === null ? runs.length - 1 : Math.min(shown, runs.length - 1);
   const wait = evaluationWait(reasoning);
 
-  async function send(prompt: string, context: RequestContext, brief?: Brief) {
+  async function send(prompt: string, context: RequestContext, brief?: Brief, deep = false) {
     setError(null);
     setPending({ prompt, steps: [] });
     let seconds: number | undefined;
@@ -132,6 +132,7 @@ function Session() {
           context: Object.keys(context).length ? context : null,
           session_id: latest?.result.session_id ?? null,
           reasoning,
+          ...(deep ? { deep_research: true } : {}),
         },
         (step) => {
           seconds = step.at;
@@ -151,7 +152,7 @@ function Session() {
 
   async function begin(submission: Submission) {
     if (!submission.prepare) {
-      await send(submission.prompt, submission.context);
+      await send(submission.prompt, submission.context, undefined, submission.deep);
       return;
     }
     setError(null);
@@ -247,7 +248,7 @@ function Session() {
                 ...(answers.length ? { answers } : {}),
                 ...(research ? { research } : {}),
               };
-              void send(submission.prompt, context, { answers, research });
+              void send(submission.prompt, context, { answers, research }, submission.deep);
             }}
           />
         </div>

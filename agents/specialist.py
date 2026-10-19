@@ -8,7 +8,7 @@ import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agents.roles import Role
+from agents.roles import COMPANY_READERS, Role
 from llm import get_llm
 from metrics import track
 from state import WorkflowState
@@ -33,6 +33,10 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
         human += f"\n\nYour assignment from the Chief of Staff:\n{task}"
     if context_text:
         human += f"\n\nWhat the founder told us:\n{context_text}"
+    deep = state.get("deep_research")
+    research = deep.for_specialist(role.name, role.name in COMPANY_READERS) if deep else ""
+    if research:
+        human += f"\n\n{research}"
 
     feedback = state.get("revisions", {}).get(role.name) or state.get(
         "critique_revisions", {}

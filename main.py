@@ -42,7 +42,7 @@ from reports import (
     store,
 )
 from search import search_configured
-from state import NodeMetric, RequestContext, Resolution, ReviewResult
+from state import DeepResearch, NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
@@ -87,6 +87,12 @@ class EvaluateRequest(BaseModel):
     context: RequestContext | None = None
     session_id: str | None = None
     reasoning: Reasoning | None = None
+    deep_research: bool = Field(
+        False,
+        description="Research each assigned specialist's area and the main competitors with "
+        "Tavily first (needs TAVILY_API_KEY): about 1-2 minutes and 100-450 Tavily credits more. "
+        "A follow-up reuses its session's research.",
+    )
 
 
 class EvaluateResponse(BaseModel):
@@ -98,6 +104,7 @@ class EvaluateResponse(BaseModel):
     resolutions: list[Resolution]
     metrics: dict[str, NodeMetric]
     final_strategy: str
+    research: DeepResearch | None = Field(None, description="The session's deep research, if any.")
 
 
 @app.get("/health")
@@ -179,7 +186,7 @@ async def prepare(request: PrepareRequest):
 def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
     """The session, the graph's input and its config for one request."""
     session_id = request.session_id or str(uuid.uuid4())
-    state = {"request": request.prompt}
+    state = {"request": request.prompt, "deep": request.deep_research and search_configured()}
     if request.context:
         state["context"] = request.context
     return session_id, state, {"configurable": {"thread_id": session_id}}
@@ -197,6 +204,7 @@ def _finish(session_id: str, result: dict) -> EvaluateResponse:
         resolutions=result.get("resolutions", []),
         metrics=result.get("metrics", {}),
         final_strategy=result["final_strategy"],
+        research=result.get("deep_research"),
     )
 
 

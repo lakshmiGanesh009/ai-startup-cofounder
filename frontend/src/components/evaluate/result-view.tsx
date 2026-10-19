@@ -9,7 +9,9 @@ import { ButtonLink } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/icons";
 import { titleSize } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
-import type { Answer, EvaluateResponse, Research, ReviewResult } from "@/lib/api";
+import { Notice } from "@/components/ui/notice";
+import type { Answer, CompanyProfile, DeepResearch, EvaluateResponse, Research, ReviewResult } from "@/lib/api";
+import { citations } from "@/lib/brief";
 import { formatSeconds, specialistTitle } from "@/lib/team";
 
 // What the founder added to the brief before the team ran: answers to the
@@ -93,20 +95,19 @@ function Summary({ run }: { run: Run }) {
           {conflicts ? `${conflicts} settled by the Chief of Staff.` : "None raised."}
         </p>
       </section>
-      {run.brief && (run.brief.answers.length > 0 || run.brief.research) && (
+      {hasResearch(run) && (
         <section>
-          <h3 className="kicker">The brief</h3>
-          <p className="mt-2 text-sm text-ink-2">
-            {[
-              run.brief.research &&
-                `${run.brief.research.findings.length} facts from the web, ${run.brief.research.sources.length} sources`,
-              run.brief.answers.length > 0 &&
-                `${run.brief.answers.length} ${run.brief.answers.length === 1 ? "answer" : "answers"} from you`,
-            ]
-              .filter(Boolean)
-              .join("; ")}
-            .
-          </p>
+          <h3 className="kicker">Research</h3>
+          <ul className="mt-2 space-y-1 text-sm text-ink-2">
+            {run.brief?.research && <li>{count(run.brief.research.findings.length, "fact")} from the web for the brief</li>}
+            {run.brief && run.brief.answers.length > 0 && <li>{count(run.brief.answers.length, "answer")} from you</li>}
+            {result.research && (
+              <li>
+                Deep research on {count(Object.keys(result.research.areas).length, "area")} and{" "}
+                {count(result.research.companies.length, "competitor")}, {result.research.credits} Tavily credits
+              </li>
+            )}
+          </ul>
         </section>
       )}
       <section>
@@ -159,10 +160,51 @@ function Reports({ result }: { result: EvaluateResponse }) {
   );
 }
 
-function BriefTab({ brief }: { brief: Brief }) {
+function count(number: number, word: string): string {
+  return `${number} ${word}${number === 1 ? "" : "s"}`;
+}
+
+// Whether the run has research to show: the brief's, the founder's answers, or deep research.
+function hasResearch(run: Run): boolean {
+  return Boolean(run.brief?.answers.length || run.brief?.research || run.result.research);
+}
+
+const PROFILE_FIELDS = [
+  ["pricing", "Pricing"],
+  ["customers", "Customers"],
+  ["funding", "Funding"],
+  ["recent_moves", "Recent moves"],
+  ["strengths", "Strengths"],
+  ["weaknesses", "Weaknesses"],
+] as const;
+
+function Competitor({ company }: { company: CompanyProfile }) {
   return (
-    <div className="max-w-3xl space-y-10">
-      {brief.answers.length > 0 && (
+    <li className="rounded-lg border border-rule bg-surface p-4">
+      <p className="font-medium">
+        {company.name}
+        {company.sources.length > 0 && (
+          <span className="ml-1.5 text-xs font-normal text-ink-3 tabular">{citations(company.sources)}</span>
+        )}
+      </p>
+      {company.summary && <p className="mt-1 text-sm text-ink-2">{company.summary}</p>}
+      <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
+        {PROFILE_FIELDS.filter(([key]) => company[key]).map(([key, label]) => (
+          <div key={key} className="contents">
+            <dt className="text-ink-3">{label}</dt>
+            <dd className="text-ink-2">{company[key]}</dd>
+          </div>
+        ))}
+      </dl>
+    </li>
+  );
+}
+
+function ResearchTab({ brief, deep }: { brief?: Brief; deep?: DeepResearch | null }) {
+  const sources = deep?.sources ?? brief?.research?.sources ?? [];
+  return (
+    <div className="max-w-3xl space-y-12">
+      {brief && brief.answers.length > 0 && (
         <section aria-label="Your answers">
           <h4 className="kicker">Your answers to the Chief of Staff</h4>
           <dl className="mt-2 divide-y divide-rule border-y border-rule">
@@ -175,15 +217,56 @@ function BriefTab({ brief }: { brief: Brief }) {
           </dl>
         </section>
       )}
-      {brief.research && (
+      {brief?.research && (
         <section aria-label="Web research">
-          <h4 className="kicker">What the web said</h4>
+          <h4 className="kicker">What the web said before the team started</h4>
           <div className="mt-2">
             <ResearchFindings research={brief.research} prefix="run" />
           </div>
-          <h4 className="mt-8 kicker">Sources</h4>
+        </section>
+      )}
+      {deep && Object.keys(deep.areas).length > 0 && (
+        <section aria-label="Deep research">
+          <h4 className="kicker">Deep research by area</h4>
+          <div className="mt-2 divide-y divide-rule border-y border-rule">
+            {Object.entries(deep.areas).map(([name, report]) => (
+              <details key={name} className="group">
+                <summary className="flex cursor-pointer list-none items-center gap-3 py-3 [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden className="w-3 text-ink-3 transition-transform group-open:rotate-90">
+                    ›
+                  </span>
+                  <span className="font-medium">{specialistTitle(name)}</span>
+                </summary>
+                <div className="pb-6 pl-6">
+                  <Markdown compact labels>
+                    {report ?? ""}
+                  </Markdown>
+                </div>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
+      {deep && deep.companies.length > 0 && (
+        <section aria-label="Competitors">
+          <h4 className="kicker">Competitors</h4>
+          <ul className="mt-3 space-y-3">
+            {deep.companies.map((company) => (
+              <Competitor key={company.name} company={company} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {deep && deep.failed.length > 0 && (
+        <Notice tone="warn">
+          Tavily could not research {deep.failed.map(specialistTitle).join(", ")}; the team worked without it there.
+        </Notice>
+      )}
+      {sources.length > 0 && (
+        <section aria-label="Sources">
+          <h4 className="kicker">Sources</h4>
           <div className="mt-3">
-            <ResearchSources sources={brief.research.sources} prefix="run" />
+            <ResearchSources sources={sources} prefix="run" />
           </div>
         </section>
       )}
@@ -340,8 +423,8 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
           label="The team's work"
           tabs={[
             { label: "Specialist reports", content: <Reports result={result} /> },
-            ...(run.brief && (run.brief.answers.length > 0 || run.brief.research)
-              ? [{ label: "Brief & research", content: <BriefTab brief={run.brief} /> }]
+            ...(hasResearch(run)
+              ? [{ label: "Research", content: <ResearchTab brief={run.brief} deep={result.research} /> }]
               : []),
             { label: "Plan", content: <Plan result={result} /> },
             { label: "Reviews", content: <Reviews result={result} /> },

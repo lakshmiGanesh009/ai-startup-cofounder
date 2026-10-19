@@ -72,6 +72,19 @@ def _summary(node: str, update: dict, runs: int, given: dict) -> dict:
                 for name, review in reviews.items()
             },
         }
+    if node == "research":
+        deep = update["deep_research"]
+        found = [f"{_plural(len(deep.areas), 'area')}", f"{_plural(len(deep.companies), 'competitor')}"]
+        summary = f"Researched {' and '.join(found)} ({_plural(len(deep.sources), 'source')}, {deep.credits} credits)"
+        if deep.failed:
+            summary += f"; could not research {_names(deep.failed)}"
+        return {
+            "summary": summary + ".",
+            "areas": list(deep.areas),
+            "companies": [company.name for company in deep.companies],
+            "credits": deep.credits,
+            "not_researched": deep.failed,
+        }
     if node == "critique":
         count = len(update["conflicts"])
         summary = (

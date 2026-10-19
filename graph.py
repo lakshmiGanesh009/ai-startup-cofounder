@@ -1,6 +1,7 @@
 """LangGraph state machine that wires the agents together.
 
-The Chief of Staff plans, the assigned specialists run in parallel, the Chief of
+The Chief of Staff plans, Tavily researches each assigned specialist's area
+when the request asks for deep research, the assigned specialists run in parallel, the Chief of
 Staff reviews their reports and sends weak ones back once, the specialists
 cross-critique and the Chief of Staff resolves any conflicts, then the approved
 reports are synthesised into one strategy.
@@ -24,13 +25,17 @@ from agents.chief_of_staff import (
 from agents.roles import SPECIALISTS
 from agents.specialist import specialist_node
 from config import DEBUG_MODE, MAX_CRITIQUE_ROUNDS
+from deep_research import research_node
 from state import (
+    CompanyProfile,
     Conflict,
+    DeepResearch,
     DelegationPlan,
     NodeMetric,
     RequestContext,
     Resolution,
     ReviewResult,
+    Source,
     Task,
     WorkflowState,
 )
@@ -48,6 +53,9 @@ _CHECKPOINT_TYPES = [
         Conflict,
         Resolution,
         NodeMetric,
+        DeepResearch,
+        CompanyProfile,
+        Source,
     )
 ]
 
@@ -55,6 +63,15 @@ _CHECKPOINT_TYPES = [
 def _route_to_assigned(state: WorkflowState) -> list[str]:
     """Send the plan to only the specialists it assigned."""
     return list(state["assignments"])
+
+
+def _route_after_plan(state: WorkflowState) -> list[str] | str:
+    """Research first when the request asked for deep research and an assigned
+    specialist's area has none yet; otherwise straight to the specialists."""
+    researched = state.get("deep_research")
+    if state.get("deep") and any(name not in (researched.areas if researched else {}) for name in state["assignments"]):
+        return "research"
+    return _route_to_assigned(state)
 
 
 def _route_after_review(state: WorkflowState) -> list[str] | str:
@@ -95,6 +112,7 @@ def build_graph():
     """Build and compile the workflow graph."""
     builder = StateGraph(WorkflowState)
     builder.add_node("plan", plan_node)
+    builder.add_node("research", research_node)
     builder.add_node("review", review_node)
     builder.add_node("critique", critique_node)
     builder.add_node("resolve", resolve_node)
@@ -106,7 +124,8 @@ def build_graph():
         )
 
     builder.add_edge(START, "plan")
-    builder.add_conditional_edges("plan", _route_to_assigned, SPECIALIST_NAMES)
+    builder.add_conditional_edges("plan", _route_after_plan, ["research", *SPECIALIST_NAMES])
+    builder.add_conditional_edges("research", _route_to_assigned, SPECIALIST_NAMES)
     builder.add_conditional_edges(
         "review", _route_after_review, [*SPECIALIST_NAMES, "critique", "synthesis"]
     )

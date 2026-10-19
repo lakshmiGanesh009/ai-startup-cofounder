@@ -8,6 +8,10 @@ the brief plus the length limit for reports.
 
 from dataclasses import dataclass
 
+# The specialists who read the deep research's competitor profiles (deep_research.py):
+# they price and position against those companies.
+COMPANY_READERS = ("marketing", "finance")
+
 # The length each report is asked to keep to; the model treats it as a target
 # rather than a hard cap. Long reports were the main cost of a run: the
 # specialist writes each one, and review, critique and synthesis all read them.

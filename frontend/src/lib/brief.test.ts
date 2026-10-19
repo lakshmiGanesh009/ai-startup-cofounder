@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 
-import { domain, fillTemplate, keepFindings, missingField } from "@/lib/brief";
+import { citations, domain, fillTemplate, keepFindings, missingField } from "@/lib/brief";
 import { PREPARED, TEMPLATES } from "@/test/backend";
 
 const [idea] = TEMPLATES;
@@ -43,4 +43,11 @@ describe("the research the founder keeps", () => {
 test("a source shows its site", () => {
   expect(domain("https://www.ama-assn.org/survey?x=1")).toBe("ama-assn.org");
   expect(domain("not a url")).toBe("not a url");
+});
+
+test("a run of sources reads as a range", () => {
+  expect(citations([40, 38, 39])).toBe("[38]–[40]");
+  expect(citations([2, 3])).toBe("[2][3]");
+  expect(citations([2, 7, 3])).toBe("[2][3][7]");
+  expect(citations([])).toBe("");
 });

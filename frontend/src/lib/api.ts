@@ -22,6 +22,30 @@ export type Research = { findings: Finding[]; sources: Source[] };
 // The founder's answer to one of the Chief of Staff's questions.
 export type Answer = { question: string; answer: string };
 
+// A competitor as Tavily's research found it; `sources` number the session's sources.
+export type CompanyProfile = {
+  name: string;
+  summary: string;
+  pricing: string;
+  customers: string;
+  funding: string;
+  recent_moves: string;
+  strengths: string;
+  weaknesses: string;
+  sources: number[];
+};
+
+// The session's deep research (deep_research.py): a report per specialist's
+// area, the competitors, and every source, numbered once from 1 (the brief's
+// research keeps its numbers); `failed` names what could not be researched.
+export type DeepResearch = {
+  areas: Partial<Record<Specialist, string>>;
+  companies: CompanyProfile[];
+  sources: Source[];
+  credits: number;
+  failed: string[];
+};
+
 export type RequestContext = {
   target_market?: string | null;
   constraints?: string | null;
@@ -37,6 +61,8 @@ export type EvaluateRequest = {
   // Pass the session_id of an earlier response to send a follow-up.
   session_id?: string | null;
   reasoning?: Reasoning | null;
+  // Research each specialist's area and the main competitors with Tavily first.
+  deep_research?: boolean;
 };
 
 export type ReviewResult = { approved: boolean; score: number; feedback: string };
@@ -57,6 +83,7 @@ export type EvaluateResponse = {
   resolutions: Resolution[];
   metrics: Record<string, NodeMetric>;
   final_strategy: string;
+  research?: DeepResearch | null;
 };
 
 export type ReasoningSettings = {
@@ -203,6 +230,11 @@ export type Step = {
   conflicts?: number;
   decisions?: number;
   revise?: Specialist[];
+  // The research step: what it covered, what it cost, and what it could not research.
+  areas?: Specialist[];
+  companies?: string[];
+  credits?: number;
+  not_researched?: string[];
 };
 
 function parseEvent(block: string): { name: string; data: Record<string, unknown> } | null {

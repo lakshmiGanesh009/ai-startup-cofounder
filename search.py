@@ -1,23 +1,32 @@
-"""Web search for preparing a brief, through Tavily (https://tavily.com).
+"""Web search and research through Tavily (https://tavily.com): quick searches
+for preparing a brief, and research tasks for the specialists' deep research.
 
-Search is optional. Without TAVILY_API_KEY the brief is prepared without it,
-and a failed search never fails the request: the brief goes ahead without the
-results, saying why.
+Both are optional. Without TAVILY_API_KEY a brief is prepared without search
+and the team works without deep research, and a failed search or research
+task never fails the request: the work goes ahead without it, saying why.
 """
 
 import logging
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import httpx
 
-from config import SEARCH_TIMEOUT
+from config import RESEARCH_TIMEOUT, SEARCH_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
 TAVILY_URL = "https://api.tavily.com/search"
+RESEARCH_URL = "https://api.tavily.com/research"
+
+# Tavily's research model: "mini" for targeted research, at 4-110 credits a
+# task (measured: 20-80); "pro" costs 15-250.
+RESEARCH_MODEL = "mini"
+# Seconds between checks on a research task; set to 0 by tests.
+POLL_SECONDS = 3.0
 
 # Results per search, and how much of each result's text the model reads.
 RESULTS_PER_SEARCH = 5
@@ -45,6 +54,13 @@ def search_configured() -> bool:
     return bool(os.getenv("TAVILY_API_KEY"))
 
 
+def _key() -> str:
+    key = os.getenv("TAVILY_API_KEY")
+    if not key:
+        raise SearchFailed("no TAVILY_API_KEY is set")
+    return key
+
+
 def _refusal(response: httpx.Response) -> str:
     reasons = {
         401: "Tavily refused the API key; check TAVILY_API_KEY",
@@ -58,13 +74,10 @@ def _refusal(response: httpx.Response) -> str:
 def search(query: str) -> list[Hit]:
     """The top results for `query`. Raises SearchFailed when there is no key,
     Tavily cannot be reached in time, or it refuses the request."""
-    key = os.getenv("TAVILY_API_KEY")
-    if not key:
-        raise SearchFailed("no TAVILY_API_KEY is set")
     body = {"query": query, "search_depth": "basic", "max_results": RESULTS_PER_SEARCH, "topic": "general"}
     try:
         with httpx.Client(transport=_transport, timeout=SEARCH_TIMEOUT) as client:
-            response = client.post(TAVILY_URL, json=body, headers={"Authorization": f"Bearer {key}"})
+            response = client.post(TAVILY_URL, json=body, headers={"Authorization": f"Bearer {_key()}"})
     except httpx.HTTPError as error:
         raise SearchFailed(f"Tavily could not be reached ({type(error).__name__})") from error
     if response.status_code != 200:
@@ -115,3 +128,80 @@ def search_all(queries: list[str]) -> tuple[list[Hit], str | None]:
     if len(failures) == len(outcomes):
         return [], f"The web search failed: {failures[0]}."
     return list(hits.values()), None
+
+
+@dataclass(frozen=True)
+class Report:
+    """A finished research task: a report citing its sources as [n] (or, with an
+    output schema, its fields), the sources those numbers refer to, 1 first,
+    and the credits it cost."""
+
+    content: str | dict
+    sources: list[tuple[str, str]]
+    credits: int
+
+
+# The reference list a report ends with, which repeats its sources.
+_REFERENCES = re.compile(
+    r"\n+(?:-{3,}\s*\n+)?#{0,6}\s*\**\s*(?:sources|references)\s*:?\s*\**\s*\n(?:\s*[-*]?\s*\[\d+\].*(?:\n|$))+\s*$",
+    re.IGNORECASE,
+)
+
+
+def research(task: str, schema: dict | None = None) -> Report:
+    """Run one Tavily research task and wait for its report.
+
+    Raises SearchFailed when there is no key, Tavily refuses the task or cannot
+    be reached, the task fails, or it takes longer than RESEARCH_TIMEOUT.
+    """
+    body: dict = {"input": task, "model": RESEARCH_MODEL, "citation_format": "numbered", "output_length": "short"}
+    if schema:
+        body["output_schema"] = schema
+    headers = {"Authorization": f"Bearer {_key()}"}
+    deadline = time.monotonic() + RESEARCH_TIMEOUT
+    try:
+        with httpx.Client(transport=_transport, timeout=SEARCH_TIMEOUT) as client:
+            created = client.post(RESEARCH_URL, json=body, headers=headers)
+            if created.status_code not in (200, 201):
+                raise SearchFailed(_refusal(created))
+            task_url = f"{RESEARCH_URL}/{created.json()['request_id']}"
+            while True:
+                if time.monotonic() > deadline:
+                    raise SearchFailed(f"Tavily's research took longer than {RESEARCH_TIMEOUT:.0f} s")
+                time.sleep(POLL_SECONDS)
+                answer = client.get(task_url, params={"include_usage": "true"}, headers=headers)
+                if answer.status_code == 202:
+                    continue
+                if answer.status_code != 200:
+                    raise SearchFailed(_refusal(answer))
+                data = answer.json()
+                if data.get("status") == "failed":
+                    raise SearchFailed("Tavily's research task failed")
+                if data.get("status") == "completed":
+                    break
+    except httpx.HTTPError as error:
+        raise SearchFailed(f"Tavily could not be reached ({type(error).__name__})") from error
+    except (ValueError, KeyError) as error:
+        raise SearchFailed("Tavily's answer could not be read") from error
+    content = data.get("content") or ""
+    if isinstance(content, str):
+        content = _REFERENCES.sub("", content).strip()
+    sources = [(_title(source), source["url"]) for source in data.get("sources") or [] if source.get("url")]
+    return Report(content=content, sources=sources, credits=int((data.get("usage") or {}).get("credits") or 0))
+
+
+def research_all(tasks: dict[str, tuple[str, dict | None]]) -> dict[str, Report | SearchFailed]:
+    """Run research tasks at the same time: each key gets its report, or the
+    reason it failed (logged)."""
+    if not tasks:
+        return {}
+
+    def run(key: str) -> Report | SearchFailed:
+        try:
+            return research(*tasks[key])
+        except SearchFailed as error:
+            logger.warning("Research for %s failed: %s", key, error)
+            return error
+
+    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+        return dict(zip(tasks, pool.map(run, list(tasks))))

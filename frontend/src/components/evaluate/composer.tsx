@@ -11,6 +11,7 @@ import { inputClass, Label } from "@/components/ui/field";
 import { CheckIcon } from "@/components/ui/icons";
 import type { RequestContext, Scenario, Template } from "@/lib/api";
 import { fillTemplate, missingField, type TemplateValues } from "@/lib/brief";
+import { DEEP_RESEARCH_COST } from "@/lib/team";
 
 const FIELDS = [
   ["target_market", "Target market", "Who buys, and where"],
@@ -24,7 +25,14 @@ const EMPTY: Record<Field, string> = { target_market: "", constraints: "", compe
 const BRIEF_CLASS =
   "block w-full resize-y rounded-lg border border-rule-strong bg-surface px-4 py-3.5 font-serif text-[1.125rem] leading-relaxed text-ink placeholder:text-ink-3 focus:border-focus focus:ring-3 focus:ring-focus/20 focus:outline-none";
 
-export type Submission = { prompt: string; context: RequestContext; template: string | null; prepare: boolean };
+export type Submission = {
+  prompt: string;
+  context: RequestContext;
+  template: string | null;
+  // Check the brief with the Chief of Staff first; have Tavily research each specialist's area.
+  prepare: boolean;
+  deep: boolean;
+};
 
 function Choice({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
@@ -66,6 +74,7 @@ export function Composer({
   const [prompt, setPrompt] = useState("");
   const [context, setContext] = useState(EMPTY);
   const [prepare, setPrepare] = useState(true);
+  const [deep, setDeep] = useState(false);
   const [problem, setProblem] = useState<{ field: string; text: string } | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const template = templates.find((each) => each.name === templateName) ?? null;
@@ -105,7 +114,7 @@ export function Composer({
         .map(([key, value]) => [key, value.trim()])
         .filter(([, value]) => value),
     );
-    onSubmit({ prompt: brief, context: filled, template: template?.name ?? null, prepare });
+    onSubmit({ prompt: brief, context: filled, template: template?.name ?? null, prepare, deep: deep && researchAvailable !== false });
   }
 
   const sendOnShortcut = (event: React.KeyboardEvent) => {
@@ -226,6 +235,26 @@ export function Composer({
             {researchAvailable === false
               ? "Web research is off: the server has no TAVILY_API_KEY. The Chief of Staff still checks the brief for anything missing."
               : "The Chief of Staff looks up the market on the web and asks anything it needs to know. You review both before the team starts."}
+          </span>
+        </span>
+      </label>
+
+      <label
+        className={`mt-4 flex items-start gap-3 ${researchAvailable === false ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+      >
+        <input
+          type="checkbox"
+          checked={deep && researchAvailable !== false}
+          disabled={researchAvailable === false}
+          onChange={(event) => setDeep(event.target.checked)}
+          className="mt-1 size-4 accent-[var(--primary)]"
+        />
+        <span>
+          <span className="block text-sm font-medium text-ink">Deep research for each specialist</span>
+          <span className="mt-0.5 block text-sm text-ink-3">
+            {researchAvailable === false
+              ? "Needs a TAVILY_API_KEY on the server."
+              : `Tavily researches each specialist's area and profiles up to three competitors before the team starts. ${DEEP_RESEARCH_COST}`}
           </span>
         </span>
       </label>

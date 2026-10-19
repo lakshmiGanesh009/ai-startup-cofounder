@@ -15,6 +15,7 @@ from langchain_core.messages import AIMessage, SystemMessage
 import llm
 from agents.proposal_writer import SCHEMAS as PROPOSAL_SCHEMAS
 from brief import BriefReview, Question, SearchPlan
+from deep_research import Competitor, Competitors
 from state import (
     DelegationPlan,
     Finding,
@@ -75,7 +76,8 @@ class FakeModel:
 
     Preparing a brief, the searches come from `search_plan` and the Chief of
     Staff's reading from `brief_review` (by default two cited facts and one
-    question); `brief_prompts` keeps what each call was given.
+    question); `brief_prompts` keeps what each call was given. For deep
+    research, the Chief of Staff names the `competitors` (by default one).
 
     `synthesis_calls` and `specialist_calls` record how often each ran, `fail`
     names specialists whose call raises, and `delay` makes every call take that
@@ -110,6 +112,7 @@ class FakeModel:
                                 suggestions=["Under $15k", "$15k-$50k", "Over $50k"])],
         )
         self.brief_prompts: list[tuple[str, str]] = []
+        self.competitors = Competitors(companies=[Competitor(name="Klara", what="patient messaging for clinics")])
 
     def _plan_for(self, prompt: str) -> DelegationPlan:
         return self.plan
@@ -121,6 +124,10 @@ class FakeModel:
     def _brief_review_for(self, prompt: str) -> BriefReview:
         self.brief_prompts.append(("review", prompt))
         return self.brief_review
+
+    def _competitors_for(self, prompt: str) -> Competitors:
+        self.brief_prompts.append(("competitors", prompt))
+        return self.competitors
 
     def _review_for(self, report: str) -> ReviewResult:
         # The verdict depends on the report text in the prompt, so a report can be
@@ -171,6 +178,7 @@ class FakeModel:
             Resolutions: self._resolutions_for,
             SearchPlan: self._search_plan_for,
             BriefReview: self._brief_review_for,
+            Competitors: self._competitors_for,
             **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)
@@ -237,6 +245,19 @@ def fake_llm(monkeypatch):
     monkeypatch.setattr("agents.specialist.get_llm", get_llm)
     monkeypatch.setattr("agents.chief_of_staff.get_llm", get_llm)
     return model
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Tavily is never called for real: a test that searches or researches
+    answers through search._transport, or replaces the calls."""
+    import search
+
+    def refuse(request):
+        raise AssertionError(f"A test tried to reach {request.url}")
+
+    monkeypatch.setattr(search, "_transport", httpx.MockTransport(refuse))
+    monkeypatch.setattr(search, "POLL_SECONDS", 0)
 
 
 @pytest.fixture

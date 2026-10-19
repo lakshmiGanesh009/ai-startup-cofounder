@@ -70,9 +70,10 @@ describe("preparing the brief", () => {
       },
     });
     const summary = screen.getByRole("complementary", { name: "The team's reviews" });
-    expect(within(summary).getByText("2 facts from the web, 2 sources; 1 answer from you.")).toBeTruthy();
-    await user.click(screen.getByRole("tab", { name: "Brief & research" }));
-    const tab = screen.getByRole("tabpanel", { name: "Brief & research" });
+    expect(within(summary).getByText("2 facts from the web for the brief")).toBeTruthy();
+    expect(within(summary).getByText("1 answer from you")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "Research" }));
+    const tab = screen.getByRole("tabpanel", { name: "Research" });
     expect(within(tab).getByText("Under $15k")).toBeTruthy();
     expect(within(tab).getByText(/147,000 office-based primary care physicians/)).toBeTruthy();
     expect(within(tab).queryByText(/book follow-ups by phone/)).toBeNull();
@@ -161,7 +162,7 @@ describe("preparing the brief", () => {
     fireEvent.keyDown(within(before).getByRole("button", { name: /^Run the team/ }), { key: "Enter", metaKey: true });
     await screen.findByRole("heading", { name: "Go with conditions" });
     expect(sent[1].body).toMatchObject({ prompt: "An idea", context: null });
-    expect(screen.queryByRole("tab", { name: "Brief & research" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Research" })).toBeNull();
   });
 
   test("a fact left out can be put back, and an answer can be written in", async () => {

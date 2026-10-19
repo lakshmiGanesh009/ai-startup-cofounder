@@ -22,8 +22,10 @@ LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "120"))
 LLM_TIMEOUT_HIGH = float(os.getenv("LLM_TIMEOUT_HIGH", "300"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
-# Seconds to wait for one web search (Tavily) while a brief is prepared.
+# Seconds to wait for one web search (Tavily) while a brief is prepared, and
+# for one deep research task, which takes 20-90 s (measured with "mini").
 SEARCH_TIMEOUT = float(os.getenv("SEARCH_TIMEOUT", "20"))
+RESEARCH_TIMEOUT = float(os.getenv("RESEARCH_TIMEOUT", "300"))
 
 # Browser origins allowed to call the API, comma-separated. The default is the
 # Next.js dev server.

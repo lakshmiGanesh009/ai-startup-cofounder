@@ -3,7 +3,7 @@
 
 import { vi } from "vitest";
 
-import type { EvaluateResponse, Health, PreparedBrief, Scenario, Step, Template } from "@/lib/api";
+import type { DeepResearch, EvaluateResponse, Health, PreparedBrief, Scenario, Step, Template } from "@/lib/api";
 
 export const HEALTH: Health = {
   status: "healthy",
@@ -117,6 +117,34 @@ export const RESULT: EvaluateResponse = {
     synthesis: { calls: 1, seconds: 19, tokens: 3400 },
   },
   final_strategy: "## Go with conditions\nLaunch a paid pilot with five clinics.",
+};
+
+// A session's deep research: two areas, one competitor, and one area Tavily could not research.
+export const DEEP: DeepResearch = {
+  areas: {
+    finance: "Scheduling tools cost **$50** a month [2].",
+    marketing: "Small clinics buy through state medical societies [1].",
+  },
+  companies: [
+    {
+      name: "Klara",
+      summary: "Patient messaging for clinics.",
+      pricing: "$15 per user a month [2]",
+      customers: "219 practices [3]",
+      funding: "",
+      recent_moves: "",
+      strengths: "Integrations with EHRs",
+      weaknesses: "Fragmented pricing",
+      sources: [2, 3],
+    },
+  ],
+  sources: [
+    { title: "Medical societies directory", url: "https://societies.example.com" },
+    { title: "Scheduling prices 2026", url: "https://prices.example.com" },
+    { title: "Klara profile", url: "https://klara.example.com" },
+  ],
+  credits: 102,
+  failed: ["risk"],
 };
 
 // What /evaluate/stream reports for RESULT, step by step.

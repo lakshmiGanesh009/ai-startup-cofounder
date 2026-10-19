@@ -6,6 +6,7 @@ delegation plan, the analyses the specialists produce (keyed by specialist
 name), the reviews, conflicts and resolutions, and per-node metrics.
 """
 
+import re
 from typing import Annotated, Literal, TypedDict
 
 from pydantic import BaseModel, Field
@@ -137,6 +138,60 @@ class Research(BaseModel):
         return "\n".join(lines)
 
 
+class CompanyProfile(BaseModel):
+    """A competitor, as Tavily's research found it, citing its sources by number."""
+
+    name: str
+    summary: str = ""
+    pricing: str = ""
+    customers: str = ""
+    funding: str = ""
+    recent_moves: str = ""
+    strengths: str = ""
+    weaknesses: str = ""
+    sources: list[int] = Field(default_factory=list)
+
+    def as_prompt(self) -> str:
+        fields = [
+            ("Pricing", self.pricing), ("Customers", self.customers), ("Funding", self.funding),
+            ("Recent moves", self.recent_moves), ("Strengths", self.strengths), ("Weaknesses", self.weaknesses),
+        ]
+        details = "; ".join(f"{label}: {value}" for label, value in fields if value)
+        cites = "".join(f"[{n}]" for n in self.sources)
+        return f"- {self.name}: {self.summary} {details} {cites}".strip()
+
+
+class DeepResearch(BaseModel):
+    """Tavily's deep research for one session: a cited report per specialist's
+    area, profiles of the main competitors, and every source, numbered once
+    across the session (the brief's research keeps its numbers, 1 first)."""
+
+    areas: dict[str, str] = Field(default_factory=dict)
+    companies: list[CompanyProfile] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
+    credits: int = 0
+    # What could not be researched: specialists' names and competitors' names.
+    failed: list[str] = Field(default_factory=list)
+
+    def cited_sources(self, text: str) -> str:
+        """The sources the [n] in `text` refer to, one per line."""
+        cited = sorted({int(n) for n in re.findall(r"\[(\d+)\]", text) if 0 < int(n) <= len(self.sources)})
+        return "\n".join(f"[{n}] {self.sources[n - 1].title} ({self.sources[n - 1].url})" for n in cited)
+
+    def for_specialist(self, name: str, with_companies: bool) -> str:
+        """What one specialist reads: its area's report and, for the roles that
+        price and position against them, the competitor profiles."""
+        parts = []
+        if self.areas.get(name):
+            parts.append(f"Deep research on your area, by Tavily (cite what you use as [n]):\n{self.areas[name]}")
+        if with_companies and self.companies:
+            parts.append("Competitor profiles, by Tavily:\n" + "\n".join(c.as_prompt() for c in self.companies))
+        if not parts:
+            return ""
+        text = "\n\n".join(parts)
+        return f"{text}\n\nSources:\n{self.cited_sources(text)}"
+
+
 class Answer(BaseModel):
     """The founder's answer to one of the Chief of Staff's questions."""
 
@@ -213,3 +268,7 @@ class WorkflowState(TypedDict, total=False):
     critique_round: int
     metrics: Annotated[dict[str, NodeMetric], _merge_metrics]
     final_strategy: str
+    # Whether this request asked for deep research, and the session's research,
+    # which a follow-up reuses.
+    deep: bool
+    deep_research: DeepResearch

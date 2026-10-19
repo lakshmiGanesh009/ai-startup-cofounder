@@ -16,6 +16,7 @@ describe("what the team is doing now", () => {
     expect(activity([start("critique")])).toBe("The specialists are cross-checking each other's reports.");
     expect(activity([start("resolve")])).toBe("The Chief of Staff is settling the conflicts.");
     expect(activity([start("synthesis")])).toBe("The Chief of Staff is writing the launch strategy.");
+    expect(activity([start("research")])).toBe("Tavily is researching each specialist's area and the main competitors.");
     expect(activity([start("plan"), done("plan")])).toBe("Passing the work on.");
   });
 
@@ -40,7 +41,9 @@ describe("the stages", () => {
     expect(stageState(stage("reports"), early, team)).toBe("working");
     expect(stageState(stage("review"), early, team)).toBe("waiting");
     const all = nodeStates(STEPS);
-    expect(STAGES.map((each) => stageState(each, all, team))).toEqual(["done", "done", "done", "done", "done"]);
+    // These steps had no deep research, so the specialists started straight after the plan.
+    expect(STAGES.map((each) => stageState(each, all, team))).toEqual(["done", "skipped", "done", "done", "done", "done"]);
+    expect(stageState(stage("research"), nodeStates([start("plan"), done("plan"), start("research")]), team)).toBe("working");
   });
 
   test("the cross-check is skipped when the strategy starts without it", () => {

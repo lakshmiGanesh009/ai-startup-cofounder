@@ -49,3 +49,10 @@ export function domain(url: string): string {
     return url;
   }
 }
+
+// Citation numbers as text; a run of three or more reads as a range: "[38]–[48]".
+export function citations(numbers: number[]): string {
+  const sorted = [...numbers].sort((a, b) => a - b);
+  const run = sorted.length > 2 && sorted.every((n, index) => index === 0 || n === sorted[index - 1] + 1);
+  return run ? `[${sorted[0]}]–[${sorted.at(-1)}]` : sorted.map((n) => `[${n}]`).join("");
+}

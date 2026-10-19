@@ -20,7 +20,7 @@ from pydantic import BaseModel, computed_field
 
 from agents.roles import ROLES, SPECIALISTS
 from proposal import InvestmentMetrics, Proposal, figure_checks, investment_metrics
-from state import Research, Resolution
+from state import DeepResearch, Research, Resolution
 
 STRATEGY = "strategy"
 DECISIONS = "decisions"
@@ -45,6 +45,7 @@ class SessionResults(BaseModel):
     analyses: dict[str, str]
     resolutions: list[Resolution]
     research: Research | None = None
+    deep: DeepResearch | None = None
 
     @classmethod
     def from_state(cls, state: dict) -> "SessionResults":
@@ -57,6 +58,7 @@ class SessionResults(BaseModel):
             analyses=state["analyses"],
             resolutions=state.get("resolutions", []),
             research=context.research if context else None,
+            deep=state.get("deep_research"),
         )
 
 
@@ -116,15 +118,41 @@ def decisions_markdown(resolutions: list[Resolution]) -> str:
     )
 
 
-def research_markdown(research: Research) -> str:
-    """The web research's facts, citing their sources by number, then the sources."""
-    facts = "\n".join(
-        f"- {finding.point} {''.join(f'[{n}]' for n in finding.sources)}" for finding in research.findings
-    )
-    sources = "\n".join(
-        f"{number}. [{source.title}]({source.url})" for number, source in enumerate(research.sources, start=1)
-    )
-    return f"{facts}\n\n**Sources**\n\n{sources}"
+def _cites(numbers: list[int]) -> str:
+    return "".join(f"[{n}]" for n in numbers)
+
+
+def _cite_range(numbers: list[int]) -> str:
+    """A run of three or more sources reads as a range: "[38]–[48]"."""
+    ordered = sorted(numbers)
+    if len(ordered) > 2 and ordered == list(range(ordered[0], ordered[-1] + 1)):
+        return f"[{ordered[0]}]–[{ordered[-1]}]"
+    return _cites(ordered)
+
+
+def research_markdown(brief: Research | None, deep: DeepResearch | None = None) -> str:
+    """The research the team worked from, citing its sources by number, then the
+    sources. With deep research: the brief's facts, each area's report and the
+    competitors, under their own headings, and the session's sources."""
+    facts = "\n".join(f"- {finding.point} {_cites(finding.sources)}" for finding in brief.findings) if brief else ""
+    sources = deep.sources if deep else brief.sources if brief else []
+    listed = "\n".join(f"{number}. [{source.title}]({source.url})" for number, source in enumerate(sources, start=1))
+    if not deep:
+        return f"{facts}\n\n**Sources**\n\n{listed}"
+    parts = [f"### Before the team started\n\n{facts}"] if facts else []
+    parts += [f"### {ROLES[name].title}\n\n{report}" for name, report in deep.areas.items()]
+    if deep.companies:
+        parts.append("### Competitors\n\n" + "\n".join(
+            f"- **{company.name}**: {company.summary} "
+            + " ".join(f"{label}: {value}" for label, value in (
+                ("Pricing", company.pricing), ("Customers", company.customers), ("Funding", company.funding),
+                ("Recent moves", company.recent_moves), ("Strengths", company.strengths),
+                ("Weaknesses", company.weaknesses)) if value)
+            + f" {_cite_range(company.sources)}"
+            for company in deep.companies
+        ))
+    parts.append(f"### Sources\n\n{listed}")
+    return "\n\n".join(parts)
 
 
 def build_sections(results: SessionResults) -> list[ReportSection]:
@@ -144,9 +172,10 @@ def build_sections(results: SessionResults) -> list[ReportSection]:
                 body=decisions_markdown(results.resolutions),
             )
         )
-    if results.research and results.research.findings:
+    deep = results.deep if results.deep and (results.deep.areas or results.deep.companies) else None
+    if deep or (results.research and results.research.findings):
         sections.append(
-            ReportSection(key=RESEARCH, title="Web Research", body=research_markdown(results.research))
+            ReportSection(key=RESEARCH, title="Web Research", body=research_markdown(results.research, deep))
         )
     return sections
 
