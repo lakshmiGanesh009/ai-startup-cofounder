@@ -115,7 +115,38 @@ no reasoning. Calls at `high` get a longer timeout (`LLM_TIMEOUT_HIGH`, 300 s).
 2. **Route.** A conditional edge sends the plan to only the assigned
    specialists; the rest make no LLM call.
 3. **Analyse.** Each assigned specialist answers its task, grounded in the
-   request and any context (target market, constraints, competitive landscape).
+   request and any context (target market, constraints, competitive landscape,
+   and once the brief is prepared, the founder's answers and the web research).
+
+## Preparing the brief
+
+Before the graph runs, the founder can have the brief prepared
+(`POST /brief/prepare`, `brief.py`). It happens outside the graph, because the
+founder reviews its outcome before anything is committed to a session.
+
+1. **Template.** A brief can start from a decision template (`templates/*.json`):
+   a sentence with fields to fill in, plus what that kind of decision needs
+   looked up (`research`) and known (`ask`), which guide the two calls below.
+2. **Search.** One structured call at the specialists' effort writes two to
+   four web searches (`SearchPlan`). `search.py` runs them on Tavily at the same
+   time and pools the results, each page once. Search is optional: without
+   `TAVILY_API_KEY`, or when every search fails, the brief goes ahead without
+   results, and `research_note` says why.
+3. **Read.** One structured call at the Chief of Staff's effort reads the brief
+   with the numbered results (`BriefReview`). It keeps up to eight facts that
+   bear on the decision, each citing the results it came from, and asks up to
+   three questions, only for facts only the founder knows (budget, team,
+   traction, goals) that would change the recommendation; never for a choice
+   the team is there to make. Code then drops any fact that cites no real
+   result, and numbers the cited sources 1, 2, 3 in order of first citation.
+4. **Review.** The founder answers or skips each question and leaves out any
+   fact that does not fit. The answers and the facts kept travel with the
+   evaluation in `RequestContext` (`answers`, `research`). `as_prompt()` renders
+   them for every agent: the plan, the specialists, review, critique, synthesis,
+   and later the proposal writers. The specialists are told to use its figures
+   before their own estimates and cite each as `[n]`, weighing it as evidence
+   rather than settled fact, and the strategy keeps those citations. The report
+   gains a "Web Research" section listing the sources by the same numbers.
 
 ## Reasoning loop
 

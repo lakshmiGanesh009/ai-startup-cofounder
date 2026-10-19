@@ -216,6 +216,8 @@ The API listens on http://localhost:8000, with interactive docs at http://localh
 
 - `GET /health` — health check, with the reasoning efforts a request can choose and the configured defaults.
 - `GET /scenarios` — the example scenarios in `scenarios/`, each with a short title, to start a request from.
+- `GET /templates` — the decision templates in `templates/`: evaluate an idea, plan the go-to-market, set the price, get ready to raise, respond to a competitor. Each is a brief to fill in, with what to look up and ask for that decision.
+- `POST /brief/prepare` — prepare a brief before the team runs it. The Chief of Staff plans a few web searches, [Tavily](https://tavily.com) runs them, and the Chief of Staff keeps the facts that bear on the decision, each citing its sources, and asks up to three questions about facts only the founder knows. Body: `prompt`, optional `context`, `template` and `reasoning`. Send the facts the founder keeps and their answers in the evaluation's `context` (`research`, `answers`), and every agent works from them; the report gains a "Web Research" section with the sources. About 10–30 s. Without `TAVILY_API_KEY` the brief is still checked, and `research_note` says why there is no research; a failed search never fails the request.
 - `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), optional `session_id` for a follow-up, and optional `reasoning` (`{"specialist": "low", "chief": "high"}`, each `minimal`, `low`, `medium` or `high`) to override the configured efforts for this request. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. A full evaluation takes about two minutes at the default efforts, 5–10 minutes with the Chief of Staff at `high`. Missing credentials return 503, and an LLM call that still fails after its retries returns 502.
 - `POST /evaluate/stream` — the same evaluation, reported as it happens, as server-sent events. Each step of the graph (`plan`, each specialist, `review`, `critique`, `resolve`, `synthesis`) sends a `start` event and a `done` event; the `done` event carries a one-line summary, such as "Reviewed 4 reports: approved 3, sent back Financial Planning.", and the figures behind it. A `result` event with the body `/evaluate` returns ends the stream. A failure ends it with an `error` event carrying the status `/evaluate` would have returned (503, 502 or 500). The Evaluate page uses this to show the team at work.
 
@@ -249,7 +251,7 @@ npm run dev
 
 It opens on http://localhost:3000, with two pages in the sidebar. It finds the API at `NEXT_PUBLIC_API_URL` in `frontend/.env.local` (http://localhost:8000 by default), and the API must allow its origin in `CORS_ORIGINS` (it does by default).
 
-- **Evaluate** — write a brief, or start from an example, add optional context, and run the team (⌘/Ctrl+Enter sends it). While the team works, the page follows it step by step: what each agent finished, who is working now, the five stages of the work and the time taken. The launch strategy is then set as a memo, with the team's reviews beside it and the specialists' reports, plan, reviews, conflicts and cost below. Follow-ups continue the same session, which is kept in the browser tab, so a reload does not lose it.
+- **Evaluate** — write a brief, fill in a decision template, or start from an example, and add optional context. **Check the brief** has the Chief of Staff research it on the web and ask what it needs to know; you review the facts it found (leaving out any that do not fit), answer or skip its questions, then **Run the team**. Untick "Research it and check the brief first" to run the team straight away (⌘/Ctrl+Enter sends it either way). While the team works, the page follows it step by step: what each agent finished, who is working now, the five stages of the work and the time taken. The launch strategy is then set as a memo, with the team's reviews beside it and the specialists' reports, plan, reviews, conflicts and cost below. Follow-ups continue the same session, which is kept in the browser tab, so a reload does not lose it.
 - **Reports** — each session's report, read on the page as a document. **Write the investment proposal** has the agents write it up following an investment-proposal template; it then reads as numbered chapters, as in the PDF, each with its charts, the agent that wrote it and an **Edit** button. **Open PDF** shows the document in a pop-up, where you can ask the team to revise one part or the whole proposal, and download it; **Revise with the team** opens it with the prompt ready. **More actions** rewrites the proposal or resets the report to the latest results, after asking.
 
 The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time. See [frontend/README.md](frontend/README.md) for more.
@@ -274,13 +276,15 @@ Tests use a fake model, and the frontend's a fake backend, so they need no crede
 
 ### Configuration
 
-Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default).
+Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default). `TAVILY_API_KEY` turns on web research for preparing a brief (a free key from [tavily.com](https://tavily.com) gives about 1,000 searches a month; a brief uses two to four), and `SEARCH_TIMEOUT` bounds each search (20 s).
 
 ### Project structure
 
 ```
-main.py                    FastAPI app: /health, /evaluate, /evaluate/stream, /reports
+main.py                    FastAPI app: /health, /templates, /brief/prepare, /evaluate, /evaluate/stream, /reports
 progress.py                What each step of the graph did, for the streamed evaluation
+brief.py                   Preparing a brief: the templates, web research and questions
+search.py                  Web search (Tavily) for a brief's research
 config.py                  Environment settings and loop/LLM limits
 llm.py                     Chat model client (Azure OpenAI or OpenAI)
 state.py                   Shared workflow state and structured models
@@ -296,6 +300,7 @@ report_pdf.py              Renders a report or proposal as a PDF
 report_charts.py           The PDF's charts and visual blocks
 assets/fonts/              DejaVu Sans, the PDF's font
 scenarios/                 Startup scenarios for the demo and tests
+templates/                 Decision templates to write a brief from
 demo.py                    Scenario walkthrough script
 frontend/                  Next.js frontend (Evaluate and Reports pages)
 tests/                     Automated tests

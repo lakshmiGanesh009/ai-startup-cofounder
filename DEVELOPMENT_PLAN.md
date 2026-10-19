@@ -93,6 +93,7 @@ graph TD
 | 16 | Sharper prompts, deeper Chief of Staff reasoning | Delegation and synthesis effectiveness, reflection and self-correction | Done |
 | 17 | Investment proposal, charts and reasoning sliders | Synthesis into a cohesive strategy document; structured outputs | Done |
 | 18 | UI design pass and live progress | Live walkthrough; agent communication made visible | Done |
+| 19 | Decision templates, web research and clarifying questions | Context-aware analysis; manager-led delegation that asks before it assumes | Done |
 
 ## Live verification
 
@@ -117,6 +118,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 16 | The three scenarios with the Chief of Staff at `medium` and at `high`, against the old prompts; the Reports flow in headless Chrome | Pass: evaluations take 89–130 s at `medium` (50–56 s before) and 5–9.5 minutes at `high`; `medium` was chosen. `xhigh` is accepted but does no reasoning on `gpt-5-mini`. Review caught two weak reports that came back improved; decisions and the strategy are concrete and consistent. The Reports flow passed 14 of 14 checks. |
 | 17 | Two scenarios evaluated, their proposals written and revised against Azure OpenAI; the PDFs read page by page; the Reports page in headless Chrome | Pass after fixes: writing takes 57–82 s and a one-part revision 40–54 s. The live runs moved the projections' arithmetic into code, added the figure checks and the financial case, retried a content-filtered reply, and fixed an IRR above 1,000% shown as "none" (see [docs/performance.md](docs/performance.md)). In the browser, 27 of 27 checks: the sliders, a tab per section, no inner scroll boxes, an edit saved, and the PDF pop-up's revision adding the requested risk, with no console errors from the app. |
 | 18 | The redesigned pages in headless Chrome against Azure OpenAI, light, dark and at phone width, read screenshot by screenshot | Pass after fixes: evaluations streamed their steps live and finished in 90–142 s; proposals took 69–73 s. The first pass found a sideways scroll on phones, "Sent back" on a report still short after its one revision, the agents' section labels set as plain text, "0.0% of TAM", a "0 mo" roadmap phase, "Revise with the team" leaving the prompt unfocused, and an FTE total of 2.1500000000000004; each is fixed, with a test. The second pass: 11 of 11 checks, with no console errors. |
+| 19 | Briefs prepared against Azure OpenAI and Tavily (a thin brief, the detailed healthcare scenario, a pricing template); the whole flow in headless Chrome; the team run on a researched brief | Pass after fixes: a brief is researched and checked in 26–62 s (two to four searches of about 2 s each; the rest is the Chief of Staff, and an Azure call that stalls adds its retry), with 7–8 cited facts from 7–12 sources and three questions. In the browser, 16 of 16 checks, light, dark and at phone width: a fact left out is not sent and its source drops from the report, and the report and its PDF list the research with linked sources. The live runs changed three things: the questions asked the founder to choose what the team should decide, so they now ask only for facts only the founder knows; only two of four specialists cited the research and the strategy dropped every citation, so the specialists are told to use and cite it and the strategy to keep the citations (after: 2, 5 and 6 citations); and Tavily's "[PDF]" title marker, which read like a citation, is removed. |
 
 ### Fixed during live verification
 
@@ -548,11 +550,36 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - The pages read as a designed product, the wait shows the team's progress step by step, and nothing scrolls sideways on a phone.
 
+### Step 19 - Decision templates, web research and clarifying questions (Done)
+
+**Goal:** a founder can start from a template for the decision they face, and before the team runs, the Chief of Staff researches the brief on the web and asks what it needs to know, so the team works from facts with sources and from the founder's own answers instead of assumptions.
+
+**Decided with the user:** Tavily for search (the Google Custom Search API is closed to new users and ends on 1 January 2027); research once, before the team starts, reviewed by the founder; questions only when something is missing; decision templates.
+
+**Built:**
+
+- `templates/*.json`, `GET /templates`: five decision templates (evaluate an idea, plan the go-to-market, set the price, get ready to raise, respond to a competitor), each a sentence with fields to fill in, what to look up and what to ask.
+- `search.py`: Tavily search, run in parallel and pooled; no key, a refusal (401, 429, 432, 433) or a timeout leaves the brief without research, with the reason.
+- `brief.py`, `POST /brief/prepare`: the searches planned at the specialists' effort; the Chief of Staff reads the results, keeps up to eight cited facts and asks up to three questions, only for facts only the founder knows. Facts citing no real result are dropped in code, and the sources renumbered.
+- `state.py`: `RequestContext` carries the founder's `answers` and the `research` kept, rendered into every agent's prompt; `reports.py` adds a "Web Research" section with the sources, also in the PDF.
+- `frontend/`: the templates in the composer with a preview of the brief; "Check the brief"; "Before the team starts", with the questions (likely answers to pick, or the founder's own words), the facts (each can be left out), the sources and the searches; "Run the team"; the result's "Brief & research" tab. The brief stays in the page for editing after a review or a failure.
+
+**Check:**
+
+- Automated: Tavily's request and its refusals against a mock transport; the searches pooled; the facts kept, capped and renumbered; questions capped; the research off or failing, with its reason; the templates' fields matching their sentences; the endpoint's errors and efforts; the answers and research reaching every agent and the report; the page's template, review, leave-out, answers, keyboard and failure paths.
+- Live: briefs prepared against Azure OpenAI with and without a Tavily key; the whole flow in headless Chrome, light, dark and at phone width.
+
+**Done when:**
+
+- A brief can be filled in from a template, researched with sources the founder can check, its questions answered or skipped, and the team's work and report reflect the answers and the facts kept.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17, 18
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-19
 progress.py                Step summaries for the stream      Step 18
+brief.py                   Preparing a brief                  Step 19
+search.py                  Web search (Tavily)                Step 19
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward
@@ -569,6 +596,7 @@ report_charts.py           The PDF's charts                   Step 17
 assets/fonts/              The PDF's font                     Step 15
 tests/                     Automated tests                    every step
 scenarios/                 Startup scenarios                  Step 9
+templates/                 Decision templates                 Step 19
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
 frontend/                  Next.js frontend                   Steps 13-14, 18

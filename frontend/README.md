@@ -1,6 +1,6 @@
 # Frontend (Next.js)
 
-The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has two pages: **Evaluate**, to run the founding team on an idea, follow it as it works and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
+The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has two pages: **Evaluate**, to prepare a brief with the Chief of Staff, run the founding team on it, follow it as it works and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
 
 Created with `create-next-app` 16.4.2: TypeScript, App Router, Tailwind CSS and ESLint, with the code under `src/`.
 
@@ -29,9 +29,10 @@ The sidebar shows whether the browser can reach the backend. If it can't, check 
 
 ## The Evaluate page
 
-- **The brief** is the idea, or the decision you want the team to make; **Context** adds the target market, constraints and competition. **Or start from an example** fills both from the scenarios the API serves (`GET /scenarios`). **Evaluate** (or ⌘/Ctrl+Enter) sends it.
+- **What do you need decided?** offers the decision templates the API serves (`GET /templates`): pick one and fill in its few fields, and the page shows the brief they make; or write **your own brief**. **Context** adds the target market, constraints and competition. **Or start from an example** fills both from the scenarios (`GET /scenarios`).
+- **Check the brief** (or ⌘/Ctrl+Enter) has the Chief of Staff prepare it (`POST /brief/prepare`, about half a minute): it searches the web with Tavily, then shows what it found under **Before the team starts**: the facts, each citing its sources (leave out any that do not fit your case), the sources and searches, and up to three questions about facts only you know, with likely answers to pick or your own words. **Run the team** sends the brief with your answers and the facts you kept. Without a search key on the server, the brief is still checked, and the page says research is off. Untick **Research it and check the brief first** to run the team straight away.
 - While the team works (about two minutes at the default efforts), the page follows it through the streamed evaluation (`POST /evaluate/stream`): a log of what each agent finished, with the time, a line saying who is working now, and the five stages of the work, with each specialist writing, revising or done. A clock shows the time taken.
-- The result is the launch strategy, set as a memo under its objective, with the team's reviews beside it: each specialist's score and verdict, the conflicts the Chief of Staff settled, and the request's model calls, tokens and time. Tabs below hold the specialists' reports, the plan, each round of reviews, the conflicts and their decisions, and the time each step took. Figures the agents marked as assumptions are highlighted.
+- The result is the launch strategy, set as a memo under its objective, with the team's reviews beside it: each specialist's score and verdict, the conflicts the Chief of Staff settled, what the brief carried, and the request's model calls, tokens and time. Tabs below hold the specialists' reports, the brief's answers and research with their sources, the plan, each round of reviews, the conflicts and their decisions, and the time each step took. Figures the agents marked as assumptions are highlighted.
 - A follow-up reuses the session; a scenario's own follow-up is filled in. Each request in the session stays, one click away.
 - The session is kept in the browser tab, so a reload does not lose a result. **Start a new session** clears it.
 - The sidebar's **Reasoning** sliders set how hard the specialists and the Chief of Staff reason for every request. They start at the backend's configured efforts, and this browser remembers a change.
@@ -69,7 +70,9 @@ src/app/globals.css                        Colour tokens (light and dark), docum
 src/app/page.tsx                           The Evaluate page
 src/app/reports/page.tsx                   The Reports page
 src/components/evaluate/evaluate-app.tsx   The session: requests, follow-ups, the live run, errors
-src/components/evaluate/composer.tsx       The first request: the brief, context and examples
+src/components/evaluate/composer.tsx       The first request: a template or the brief, context and examples
+src/components/evaluate/brief-review.tsx   Before the team starts: the questions, and the research to keep
+src/components/evaluate/research.tsx       The research's facts, citing their sources, and the sources
 src/components/evaluate/activity-log.tsx   What the team has done so far, and who is working now
 src/components/evaluate/team-progress.tsx  The five stages of the team's work, idle or live
 src/components/evaluate/result-view.tsx    One result: the strategy memo, the reviews, the team's work
@@ -89,9 +92,10 @@ src/lib/api.ts                             Typed client for the backend, the str
 src/lib/backend.tsx                        The backend's status and the chosen efforts, app-wide
 src/lib/team.ts                            The team: names, stages, what it is doing, how long it takes
 src/lib/proposal.ts                        The proposal's parts, and its metrics in words
+src/lib/brief.ts                           Templates filled in, and the research the founder keeps
 ```
 
-The types in `src/lib/api.ts` mirror the backend's request and response models in `main.py` and `state.py`, and its `Step` the summaries in `progress.py`; change them together.
+The types in `src/lib/api.ts` mirror the backend's request and response models in `main.py`, `state.py` and `brief.py`, and its `Step` the summaries in `progress.py`; change them together.
 
 `npm audit` reports one high-severity advisory, in `braces`, which only the linter uses (through `eslint-config-next`); nothing the browser runs depends on it. `npm audit fix --force` would downgrade `eslint-config-next` to Next.js 14, so it is left until that package updates.
 
