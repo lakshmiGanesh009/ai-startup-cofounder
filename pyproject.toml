@@ -27,11 +27,6 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
 ]
-ui = [
-    "httpx>=0.28.1",
-    "pypdfium2>=5.14.0",
-    "streamlit>=1.66.0",
-]
 
 [tool.coverage.run]
 source = ["."]
