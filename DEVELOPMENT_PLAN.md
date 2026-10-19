@@ -4,7 +4,7 @@ Build sequence for the AI Startup Co-Founder Team capstone. The brief is the top
 
 We build one step at a time. Each step adds one feature, is small enough to review in one sitting, and ends with checks anyone can run.
 
-**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand, Step 16 sharpened every prompt and gave the Chief of Staff deeper reasoning, and Step 17 turned the report into an investment proposal with charts, revisable by instruction from a PDF pop-up, and added reasoning sliders. Next is Step 14, the Next.js UI.
+**Where we are:** Steps 0-11 are done and verified live against Azure OpenAI on 2026-10-16 (see [Live verification](#live-verification)). The live runs found bugs the fake-model tests could not; they are fixed, each with a test. Step 12 made the API about twice as fast, Step 13 added a Streamlit UI and scaffolded the Next.js frontend, Step 15 added written reports: edited beside a live PDF preview, with a detailed version on demand, Step 16 sharpened every prompt and gave the Chief of Staff deeper reasoning, and Step 17 turned the report into an investment proposal with charts, revisable by instruction from a PDF pop-up, and added reasoning sliders. Step 14, the Next.js UI, is under way: its Evaluate page is built, and its Reports page is next. The tests cover 99% of the backend and Streamlit UI, and over 90% of the Next.js frontend; both fail below 80%.
 
 ## How we work
 
@@ -88,7 +88,7 @@ graph TD
 | 11 | Documentation | Architecture diagram, role definitions, workflow, trade-offs | Done |
 | 12 | Faster API | Improved latency, reduction of redundant reasoning calls | Done |
 | 13 | Streamlit UI and Next.js scaffold | Live walkthrough, backend service for a frontend | Done |
-| 14 | Next.js UI | Live walkthrough; replaces the Streamlit UI | Next |
+| 14 | Next.js UI | Live walkthrough; replaces the Streamlit UI | In progress: Evaluate page built, Reports next |
 | 15 | Reports: editor, detailed version and PDF | Synthesis into a cohesive strategy document | Done |
 | 16 | Sharper prompts, deeper Chief of Staff reasoning | Delegation and synthesis effectiveness, reflection and self-correction | Done |
 | 17 | Investment proposal, charts and reasoning sliders | Synthesis into a cohesive strategy document; structured outputs | Done |
@@ -430,15 +430,21 @@ The initial version bounds refinement to a single revision (`max_iterations = 1`
 - A full evaluation and a follow-up work end to end in the Streamlit UI.
 - The Next.js app reaches the backend from the browser.
 
-### Step 14 - Next.js UI (Next)
+### Step 14 - Next.js UI (In progress)
 
 **Goal:** the Next.js frontend does everything the Streamlit UI does, so the Streamlit UI can be retired.
 
-**Build:**
+Built in two parts, each checked by the user before the next.
 
-- `frontend/`: the request form with context, a progress state while the team works, the results (strategy, plan, reports, reviews, conflicts, metrics), and follow-ups in the same session.
-- `frontend/`: the Reports section from Step 15, over the same `/reports` endpoints.
-- Optionally, a streaming endpoint (LangGraph's `astream`) so the UI can show each stage as it finishes instead of one long wait.
+**Part 1, the Evaluate page (built):**
+
+- `main.py`: `GET /scenarios` serves the example scenarios, which a browser cannot read from disk.
+- `frontend/`: the request form with scenarios and context; a progress panel with a running clock while the team works; the results (strategy, plan, reports, reviews, conflicts, metrics) with assumptions highlighted; follow-ups in the same session, the session kept in the browser tab; and a sidebar with the backend's status and the two reasoning sliders.
+- `frontend/`: Vitest and React Testing Library tests against a fake backend, failing below 80% coverage.
+
+**Part 2, the Reports page (next):** the proposal from Steps 15 and 17 over the same `/reports` endpoints: the sections with their charts, editing, the PDF with its revise prompt, and the download.
+
+Optionally, a streaming endpoint (LangGraph's `astream`) so the UI can show each stage as it finishes instead of one long wait.
 
 **Done when:**
 

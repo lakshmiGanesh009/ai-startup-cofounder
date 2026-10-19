@@ -213,6 +213,7 @@ uv run python main.py
 The API listens on http://localhost:8000, with interactive docs at http://localhost:8000/docs.
 
 - `GET /health` — health check, with the reasoning efforts a request can choose and the configured defaults.
+- `GET /scenarios` — the example scenarios in `scenarios/`, to start a request from.
 - `POST /evaluate` — run the founding team. Body: `prompt`, optional `context` (target market, constraints, competitive landscape), optional `session_id` for a follow-up, and optional `reasoning` (`{"specialist": "low", "chief": "high"}`, each `minimal`, `low`, `medium` or `high`) to override the configured efforts for this request. The response holds the objective, the per-specialist assignments and analyses, the review history, any conflict resolutions, per-node metrics, and the final strategy. A full evaluation takes about two minutes at the default efforts, 5–10 minutes with the Chief of Staff at `high`. Missing credentials return 503, and an LLM call that still fails after its retries returns 502.
 
 ```bash
@@ -249,7 +250,7 @@ It opens on http://localhost:8501, with two pages in the sidebar. It finds the A
 
 The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time.
 
-The Next.js frontend in [frontend/](frontend/) is a scaffold that will replace the Streamlit UI: it is wired to the API but has no evaluation UI yet. See [frontend/README.md](frontend/README.md) to run it.
+The Next.js frontend in [frontend/](frontend/) is replacing the Streamlit UI. It has the Evaluate page (scenarios, progress, results, follow-ups and the reasoning sliders) on http://localhost:3000; its Reports page comes next, and until then it links to the Streamlit one. See [frontend/README.md](frontend/README.md) to run it.
 
 ### Demo
 
@@ -262,11 +263,13 @@ uv run python demo.py scenarios/healthcare_scheduling.json
 ### Test
 
 ```bash
-uv run pytest              # backend
-uv run --group ui pytest   # backend and the Streamlit UI
+uv run pytest                     # backend
+uv run --group ui pytest          # backend and the Streamlit UI
+uv run --group ui pytest --cov    # the same, with a coverage report; fails below 80%
+cd frontend && npm test           # the Next.js frontend (npm run test:coverage for coverage)
 ```
 
-Tests use a fake model, so they need no credentials and make no LLM calls. Without the `ui` group the Streamlit UI tests are skipped.
+Tests use a fake model, so they need no credentials and make no LLM calls. Without the `ui` group the Streamlit UI tests are skipped, so measure coverage with it.
 
 ### Configuration
 
@@ -295,7 +298,7 @@ demo.py                    Scenario walkthrough script
 streamlit_app.py           Streamlit UI: navigation and sidebar
 ui/                        Streamlit pages (Evaluate, Reports), the proposal view,
                            the reasoning sliders and the API client
-frontend/                  Next.js frontend (scaffold)
+frontend/                  Next.js frontend (the Evaluate page so far)
 tests/                     Automated tests
 docs/                      Architecture and performance docs
 DEVELOPMENT_PLAN.md        Build sequence and status

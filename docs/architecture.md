@@ -186,9 +186,13 @@ Two clients use the API:
 - **Streamlit UI** (`streamlit_app.py` and `ui/`), the working UI for now, with
   an Evaluate page and a Reports page. It calls the API from the server side, so
   it needs no CORS.
-- **Next.js frontend** (`frontend/`), a scaffold that will replace it. It calls
-  the API from the browser, so the API allows the origins in `CORS_ORIGINS`
-  (`http://localhost:3000` by default).
+- **Next.js frontend** (`frontend/`), which is replacing it: it has the
+  Evaluate page so far, with the Reports page next. It calls the API from the
+  browser, so the API allows the origins in `CORS_ORIGINS`
+  (`http://localhost:3000` by default), and it gets the example scenarios from
+  `GET /scenarios` because a browser cannot read them from disk. A session's
+  requests are kept in the browser tab, and the reasoning efforts in the
+  browser, so a reload loses neither.
 
 ## Reports
 
