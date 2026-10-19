@@ -1,26 +1,51 @@
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #fafaf9;
+  --foreground: #18181b;
+  --surface: #ffffff;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  /* The PDF's blue, so the app and the documents it produces look alike. */
+  --color-accent: #2a78d6;
+  --color-accent-strong: #1c5cab;
+  --color-accent-soft: #cde2fb;
+  --color-navy: #0d366b;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
+    --background: #0b0b0c;
     --foreground: #ededed;
+    --surface: #18181b;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+/* Figures the agents marked as assumptions. */
+mark.assumption {
+  background: #fdecc8;
+  color: #6b4200;
+  border-radius: 0.25rem;
+  padding: 0 0.2rem;
+  font-style: italic;
+}
+
+@media (prefers-color-scheme: dark) {
+  mark.assumption {
+    background: #4a3510;
+    color: #fbd38d;
+  }
 }
