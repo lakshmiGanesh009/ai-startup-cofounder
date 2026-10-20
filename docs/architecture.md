@@ -134,10 +134,11 @@ founder reviews its outcome before anything is committed to a session.
    a sentence with fields to fill in, plus what that kind of decision needs
    looked up (`research`) and known (`ask`), which guide the two calls below.
 2. **Search.** One structured call at the specialists' effort writes two to
-   four web searches (`SearchPlan`). `search.py` runs them on Tavily at the same
-   time and pools the results, each page once. Search is optional: without
-   `TAVILY_API_KEY`, or when every search fails, the brief goes ahead without
-   results, and `research_note` says why.
+   four web searches (`SearchPlan`). They run at the same time, where the
+   founder chose (see [Where research runs](#where-research-runs)), and the
+   results are pooled, each page once. Search is optional: with no provider set
+   up, or when every search fails, the brief goes ahead without results, and
+   `research_note` says why.
 3. **Read.** One structured call at the Chief of Staff's effort reads the brief
    with the numbered results (`BriefReview`). It keeps up to eight facts that
    bear on the decision, each citing the results it came from, and asks up to
@@ -157,13 +158,14 @@ founder reviews its outcome before anything is committed to a session.
 ## Deep research
 
 When a request sets `deep_research` (a switch on the Evaluate page) and a
-Tavily key is set, the plan routes to a `research` step before the specialists
-(`deep_research.py`). One structured call names up to three competitors to
-profile, then Tavily's Research API runs, at the same time, one task per
+research provider is set up, the plan routes to a `research` step before the
+specialists (`deep_research.py`). One structured call names up to three
+competitors to profile, then, at the same time, one research task runs per
 assigned specialist, written from its assignment and the founder's brief, and
 one per competitor, answering in a fixed profile schema (product, pricing,
-customers, funding, recent moves, strengths, weaknesses). With the `mini`
-model a task takes 20-90 s and 20-80 credits, so the step adds a minute or two
+customers, funding, recent moves, strengths, weaknesses). On Azure OpenAI a
+task takes 10-20 s and a few Bing searches, so the step adds about half a
+minute; on Tavily's `mini` model 20-90 s and 20-80 credits, so a minute or two
 and about 150-450 credits.
 
 Each Tavily report numbers its own sources from 1. A `SourceBook` gives every
@@ -178,6 +180,27 @@ assigned areas. A task that fails, or a profile that comes back without its
 fields, leaves that area or company out and is listed as not researched; it
 never fails the request. The report's "Web Research" section gains each area's
 report, the competitors and the session's sources.
+
+## Where research runs
+
+Web research, for the brief and for deep research, runs on one of two
+providers (`providers.py`), which the founder picks in the sidebar and each
+request names (`research_provider`):
+
+- **Azure OpenAI** (`azure_web.py`), the default: the Responses API's
+  `web_search` tool, which searches Bing, on the team's own deployment through
+  Azure's v1 endpoint, at low reasoning (web search does not run at minimal).
+  A search returns the raw results with their snippets; a research task returns
+  a report, or a strict JSON profile, whose citations the model writes as
+  markdown links, which become numbered `[n]`. Azure bills each Bing search,
+  and reports their count, which the page shows. The searches leave Azure's
+  compliance boundary.
+- **Tavily** (`search.py`), for demanding tasks: its Search API for the brief
+  and its Research API for deep research, at the credit costs above.
+
+Both answer in the same shapes (`Hit`, `Report`), so the brief, the research
+step, the source numbering and the page do not depend on which ran. A provider
+that is not set up is never used: a request asking for it gets the default.
 
 ## Reasoning loop
 

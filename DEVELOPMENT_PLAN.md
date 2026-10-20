@@ -95,6 +95,7 @@ graph TD
 | 18 | UI design pass and live progress | Live walkthrough; agent communication made visible | Done |
 | 19 | Decision templates, web research and clarifying questions | Context-aware analysis; manager-led delegation that asks before it assumes | Done |
 | 20 | Deep research and competitor profiles for the specialists | Specialised agents grounded in current, cited evidence | Done |
+| 21 | A switch for where web research runs: Azure OpenAI or Tavily | Cost-aware tool choice; Tavily kept for demanding tasks | Done |
 
 ## Live verification
 
@@ -121,6 +122,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 18 | The redesigned pages in headless Chrome against Azure OpenAI, light, dark and at phone width, read screenshot by screenshot | Pass after fixes: evaluations streamed their steps live and finished in 90–142 s; proposals took 69–73 s. The first pass found a sideways scroll on phones, "Sent back" on a report still short after its one revision, the agents' section labels set as plain text, "0.0% of TAM", a "0 mo" roadmap phase, "Revise with the team" leaving the prompt unfocused, and an FTE total of 2.1500000000000004; each is fixed, with a test. The second pass: 11 of 11 checks, with no console errors. |
 | 19 | Briefs prepared against Azure OpenAI and Tavily (a thin brief, the detailed healthcare scenario, a pricing template); the whole flow in headless Chrome; the team run on a researched brief | Pass after fixes: a brief is researched and checked in 26–62 s (two to four searches of about 2 s each; the rest is the Chief of Staff, and an Azure call that stalls adds its retry), with 7–8 cited facts from 7–12 sources and three questions. In the browser, 16 of 16 checks, light, dark and at phone width: a fact left out is not sent and its source drops from the report, and the report and its PDF list the research with linked sources. The live runs changed three things: the questions asked the founder to choose what the team should decide, so they now ask only for facts only the founder knows; only two of four specialists cited the research and the strategy dropped every citation, so the specialists are told to use and cite it and the strategy to keep the citations (after: 2, 5 and 6 citations); and Tavily's "[PDF]" title marker, which read like a citation, is removed. |
 | 20 | Tavily's Research API on two sample tasks; then the go-to-market risk scenario with deep research, against Tavily and Azure OpenAI in headless Chrome | Pass after fixes: an area report took 70 s and 80 credits, a competitor profile 22 s and 22 credits. The evaluation researched four areas and profiled Expensify, Dext and QuickBooks in 94 s, citing 72 sources for 209 credits, and finished in 205 s; the specialists cited the research 29 times and the strategy 14. 11 of 11 browser checks, with no console errors. The samples showed that Tavily needs a description on every field of an output schema, that a report repeats its sources in a closing list, now dropped, and that a profile cites loosely ("(source9)"), now renumbered; a profile that cites nothing lists all its sources, now shown as a range. |
+| 21 | Azure OpenAI's web search sampled for a search, a report and a profile; then the healthcare scenario researched and run with deep research on Azure OpenAI in headless Chrome | Pass after fixes: a call takes 11-15 s at low reasoning (web search does not run at minimal). The brief was researched in 47 s (7 facts); deep research took 45 s against Tavily's 94 s, covering four areas and Epic Systems, athenahealth and Luma Health from 55 sources and 42 Bing searches, with no Tavily credits; the specialists cited it 51 times and the strategy 12; the evaluation took 157 s. 10 of 10 browser checks, with no console errors. The live run showed Azure's reports closing like a chat (an offer of more help, a prose list of sources) and long profile fields, so the prompts now ask for a finished report and one or two sentences a field, and code strips any closing chat (a report now ends on its last finding; fields run 35-56 words); and the switch's "Azure OpenAI" wrapped in the sidebar, now kept on one line. |
 
 ### Fixed during live verification
 
@@ -597,6 +599,25 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - With the switch on, each specialist's report rests on cited, current research for its area, the competitors are profiled with sources, and the founder can see it all and what it cost.
 
+### Step 21 - A switch for where web research runs: Azure OpenAI or Tavily (Done)
+
+**Goal:** web research runs on Azure OpenAI's own web search by default, on the deployment the team already pays for, and on Tavily only when the founder switches to it for a demanding task.
+
+**Built:**
+
+- `azure_web.py`: searches and research tasks on the Responses API's `web_search` tool (Bing), at low reasoning: the raw results with their snippets for a search; a report, or a strict JSON profile, for research, its markdown-link citations numbered `[n]` with their sources, and the Bing searches counted. A failed call never fails the request.
+- `providers.py`: the choice, Azure OpenAI by default, Tavily when asked and set up; `brief.py` and `deep_research.py` search and research through it, and the research records who ran it and what it cost (Tavily credits, Bing searches). `POST /brief/prepare` and `/evaluate` take `research_provider`; `/health` says which providers are set up.
+- `frontend/`: a **Web research** switch in the sidebar, remembered in the browser, with an unavailable provider disabled; the composer, the brief's review, the live log and the result name the provider and its cost.
+
+**Check:**
+
+- Automated: Azure's searches, reports and profiles from stand-in responses (links to numbers, tracking stripped, searches counted, strict schema, failures); the default and the fallback when a provider is not set up; the brief and deep research on each provider; the switch, its memory and its disabled states; the request carrying the choice.
+- Live: a brief researched and a team run with deep research on Azure OpenAI in headless Chrome, timed, with no Tavily credits spent.
+
+**Done when:**
+
+- Web research runs on Azure OpenAI unless the founder switches to Tavily, and every view says which ran and what it cost.
+
 ## Target layout
 
 ```
@@ -605,6 +626,8 @@ progress.py                Step summaries for the stream      Step 18
 brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20
+providers.py               Where web research runs            Step 21
+azure_web.py               Azure OpenAI's web search          Step 21
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Step 1
 state.py                   Shared workflow state              Step 2 onward
