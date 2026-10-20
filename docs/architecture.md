@@ -289,6 +289,19 @@ browser's `<dialog>`, shown by the browser's own PDF viewer from a blob the page
 fetches. (A Streamlit UI served the same pages until the Next.js one replaced
 it in Step 14.)
 
+## Monitoring
+
+`monitor.py` keeps, in memory, what the API has done since it started: each
+evaluation that ended (its time, model calls, tokens, reviews, conflicts and
+research cost, and each node's metrics), counts of briefs and proposals, and a
+log of the last 300 events. A failed evaluation is counted, but only finished
+ones add their time and cost, so the averages describe complete runs. The streamed evaluation logs each node's start and
+finish with its summary; the briefs, proposals and failures log themselves;
+and a logging handler adds every warning and error, and the model client's
+retries, which mark where Azure stalled. `GET /monitoring` returns it all for
+the How it works page, and `GET /pipeline` describes the pipeline from the
+running code: the graph as Mermaid, the specialists and the rules.
+
 ## Reports
 
 Each session has a written report: the founder's document, separate from the

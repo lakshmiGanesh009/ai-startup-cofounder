@@ -1,6 +1,6 @@
 # Frontend (Next.js)
 
-The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has two pages: **Evaluate**, to prepare a brief with the Chief of Staff, run the founding team on it, follow it as it works and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
+The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has three pages: **Evaluate**, to prepare a brief with the Chief of Staff, run the founding team on it, follow it as it works and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
 
 Created with `create-next-app` 16.4.2: TypeScript, App Router, Tailwind CSS and ESLint, with the code under `src/`.
 
@@ -48,6 +48,12 @@ The sidebar shows whether the browser can reach the backend. If it can't, check 
 - **Open PDF** shows the document in a pop-up, in the browser's PDF viewer, with its download. There, **Ask the team to revise** sends an instruction for one part, or the whole proposal; the parts built on it follow, and the PDF is drawn again. **Revise with the team** opens the pop-up with the prompt ready.
 - **More actions** holds **Rewrite the proposal** and **Reset to the latest results**, which ask before they replace anything. A change refused because the report changed elsewhere reloads it and says so.
 
+## The How it works page
+
+- **The pipeline** explains the system in pictures: the steps from a brief to a decision (each links to its explanation; dashed steps are optional, a hand marks your decisions), the agents and what each reads and writes, the Chief of Staff's five decisions, a matrix of which step reads and writes each part of the shared state, a worked example of the critique, where the facts come from (Azure OpenAI against Tavily, as measured), where your judgement matters, the stack layer by layer, and your path through the app. Its numbers (the approval score, the rounds, the word limits) come from the backend (`GET /pipeline`), so it says what the code does.
+- **Show the diagrams** opens Mermaid drawings of the real LangGraph graph (from the compiled graph), the data flow from your brief to the memo, and the routes the Chief of Staff's decisions take, with their source to copy. Mermaid is loaded only then, draws one diagram at a time, and takes the page's colours, drawing again when the colour scheme changes.
+- **Monitor** is a dashboard of what the API has done since it started (`GET /monitoring`), refreshed every five seconds while it is open: totals (averaged over the evaluations that finished), the average time, calls and tokens of each step, the latest evaluations, and a log you can filter to warnings and errors. Pause stops the refresh.
+
 ## Design
 
 The pages read like the documents they hold. The agents' writing (strategies, reports, the proposal) is set in Newsreader, a serif, and the interface in Geist, with Geist Mono for times and IDs. Colours are tokens in `src/app/globals.css`: warm paper and ink, hairline rules, one navy for primary actions, and a data palette for the charts (blue and orange for two series, a blue ramp for ordered stages, red only for cash below zero). Each has a dark-mode value, chosen rather than inverted. Status colours (good, warning, bad) always sit beside a word. `.doc` sets the agents' markdown; a short line on its own before a list ("Key risks") is set as a heading, since the agents write section labels that way.
@@ -88,6 +94,13 @@ src/components/reports/team-report.tsx     The team's report, read or edited
 src/components/sidebar.tsx                 Pages, backend status and reasoning sliders (a menu on phones)
 src/components/reasoning-sliders.tsx       The two reasoning sliders
 src/components/research-switch.tsx         Where web research runs: Azure OpenAI or Tavily
+src/app/how-it-works/page.tsx              The How it works page
+src/components/how/how-app.tsx             The page: the pipeline and the Monitor, and the diagrams
+src/components/how/pipeline-map.tsx        The pipeline at a glance
+src/components/how/explainer.tsx           The agents, decisions, state, critique, research, judgement, stack
+src/components/how/diagrams.tsx            Mermaid diagrams, loaded on demand
+src/components/how/monitor-view.tsx        The live dashboard and log
+src/lib/how.ts                             The page's steps, state matrix, judgement points, stack and diagrams
 src/components/backend-status.tsx          Whether the browser can reach the API
 src/components/markdown.tsx                The agents' markdown: assumptions highlighted, labels as headings
 src/components/ui/                         Buttons, fields, notices, badges, menu, tabs, dialog, icons,

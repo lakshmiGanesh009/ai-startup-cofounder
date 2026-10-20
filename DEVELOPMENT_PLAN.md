@@ -96,6 +96,7 @@ graph TD
 | 19 | Decision templates, web research and clarifying questions | Context-aware analysis; manager-led delegation that asks before it assumes | Done |
 | 20 | Deep research and competitor profiles for the specialists | Specialised agents grounded in current, cited evidence | Done |
 | 21 | A switch for where web research runs: Azure OpenAI or Tavily | Cost-aware tool choice; Tavily kept for demanding tasks | Done |
+| 22 | How it works: the pipeline explained, its diagrams, and a monitor | Architecture and workflow documentation; logging and monitoring; human oversight | Done |
 
 ## Live verification
 
@@ -123,6 +124,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 19 | Briefs prepared against Azure OpenAI and Tavily (a thin brief, the detailed healthcare scenario, a pricing template); the whole flow in headless Chrome; the team run on a researched brief | Pass after fixes: a brief is researched and checked in 26–62 s (two to four searches of about 2 s each; the rest is the Chief of Staff, and an Azure call that stalls adds its retry), with 7–8 cited facts from 7–12 sources and three questions. In the browser, 16 of 16 checks, light, dark and at phone width: a fact left out is not sent and its source drops from the report, and the report and its PDF list the research with linked sources. The live runs changed three things: the questions asked the founder to choose what the team should decide, so they now ask only for facts only the founder knows; only two of four specialists cited the research and the strategy dropped every citation, so the specialists are told to use and cite it and the strategy to keep the citations (after: 2, 5 and 6 citations); and Tavily's "[PDF]" title marker, which read like a citation, is removed. |
 | 20 | Tavily's Research API on two sample tasks; then the go-to-market risk scenario with deep research, against Tavily and Azure OpenAI in headless Chrome | Pass after fixes: an area report took 70 s and 80 credits, a competitor profile 22 s and 22 credits. The evaluation researched four areas and profiled Expensify, Dext and QuickBooks in 94 s, citing 72 sources for 209 credits, and finished in 205 s; the specialists cited the research 29 times and the strategy 14. 11 of 11 browser checks, with no console errors. The samples showed that Tavily needs a description on every field of an output schema, that a report repeats its sources in a closing list, now dropped, and that a profile cites loosely ("(source9)"), now renumbered; a profile that cites nothing lists all its sources, now shown as a range. |
 | 21 | Azure OpenAI's web search sampled for a search, a report and a profile; then the healthcare scenario researched and run with deep research on Azure OpenAI in headless Chrome | Pass after fixes: a call takes 11-15 s at low reasoning (web search does not run at minimal). The brief was researched in 47 s (7 facts); deep research took 45 s against Tavily's 94 s, covering four areas and Epic Systems, athenahealth and Luma Health from 55 sources and 42 Bing searches, with no Tavily credits; the specialists cited it 51 times and the strategy 12; the evaluation took 157 s. 10 of 10 browser checks, with no console errors. The live run showed Azure's reports closing like a chat (an offer of more help, a prose list of sources) and long profile fields, so the prompts now ask for a finished report and one or two sentences a field, and code strips any closing chat (a report now ends on its last finding; fields run 35-56 words); and the switch's "Azure OpenAI" wrapped in the sidebar, now kept on one line. |
+| 22 | The How it works page in headless Chrome against Azure OpenAI, light, dark and at phone width; the three diagrams drawn by the real Mermaid; the Monitor before and after a real evaluation, read screenshot by screenshot | Pass after fixes: the page took its numbers from `/pipeline`, Mermaid drew all three diagrams, and the Monitor showed a real evaluation (104 s, 2 specialists, 14 model calls, 35,857 tokens, 1 of 2 reports approved, 1 conflict settled) with each step's start, finish, time, calls and tokens. The first pass, 8 of 9 checks, found a 299 px sideways scroll on phones: the state matrix's screen-reader labels escaped its scroll box, which now positions them. The screenshots also showed the diagrams keeping their light colours when the scheme turned dark (they are now drawn again), the latest evaluations table clipped beside the time by step (it now has the full width below 2xl screens), averages written "1.0 calls" (and, by reading the code, failed runs counted into them), "Evaluation Evaluated in" in the log, a squeezed diagrams callout and a clipped table note on phones, the same icon for every layer of the stack, and "Only facts only you know"; each is fixed. The second pass: 12 of 12 checks, with the diagrams' colours and the Monitor at phone width checked too, and no console errors. |
 
 ### Fixed during live verification
 
@@ -618,11 +620,31 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Web research runs on Azure OpenAI unless the founder switches to Tavily, and every view says which ran and what it cost.
 
+### Step 22 - How it works: the pipeline explained, its diagrams, and a monitor (Done)
+
+**Goal:** anyone can see, in the app itself, how the team turns a brief into a decision (the agents, the pipeline, how the Chief of Staff decides, how the critique works, the stack and the user flow), where human judgement matters, and what the API is doing.
+
+**Built:**
+
+- `monitor.py`, `GET /monitoring`: an in-memory record of evaluations (time, calls, tokens, reviews, conflicts, research cost, each node's metrics), briefs and proposals, and a log of the last 300 events; a logging handler adds warnings, errors and the model client's retries. The endpoints record into it.
+- `GET /pipeline`: the graph as Mermaid (from the compiled graph, without its own colours), the specialists, and the rules: the approval score, the revision and critique rounds, the word limits, the questions, facts and competitors.
+- `frontend/`: a **How it works** page. **The pipeline**: the steps at a glance, each linking to its explanation; the agents; the Chief of Staff's five decisions; who reads and writes each part of the state; a worked critique; where the facts come from; seven places your judgement matters; the stack; your path. **Show the diagrams**: the real graph, the data flow and the decision routes, drawn by Mermaid, loaded on demand. **Monitor**: totals (averaged over the evaluations that finished), the time by step, the latest evaluations, and a filterable log, refreshed while open.
+
+**Check:**
+
+- Automated: the monitor's totals, node statistics, ring buffer and log handler; `/pipeline` against the code's own constants; evaluations, briefs, proposals and failures recorded; the page's sections from the backend's numbers; the diagrams drawn (Mermaid stood in for), copied, and shown as source when they cannot be drawn; the Monitor's totals, steps, runs, log filters, refresh and pause, empty and failing states.
+- Live: the page in headless Chrome, light, dark and at phone width; the three diagrams drawn by the real Mermaid; the Monitor before and after a real evaluation.
+
+**Done when:**
+
+- The page explains the system accurately from the running code, its diagrams draw, and the Monitor shows what happened in a real run.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-20
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-22
 progress.py                Step summaries for the stream      Step 18
+monitor.py                 What the API has done              Step 22
 brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20
