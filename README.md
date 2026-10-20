@@ -198,6 +198,12 @@ cp .env.example .env
 
 Fill in `.env` with Azure OpenAI or OpenAI credentials. The provider is chosen by which credentials are set.
 
+Sessions, reports and the Monitor's history are kept in [PostgreSQL](https://www.postgresql.org), so a restart loses none of them. Create the database `.env.example` points `DATABASE_URL` at, or leave `DATABASE_URL` unset to keep everything in memory:
+
+```bash
+createdb cofounder
+```
+
 For the frontend, install its packages with [Node.js](https://nodejs.org/) 20.9 or newer:
 
 ```bash
@@ -214,10 +220,10 @@ uv run python main.py
 
 The API listens on http://localhost:8000, with interactive docs at http://localhost:8000/docs.
 
-- `GET /health` — health check, with the reasoning efforts a request can choose and the configured defaults.
+- `GET /health` — health check, with the reasoning efforts a request can choose and the configured defaults, where web research can run, and where sessions and reports are kept (`storage`: `postgres` or `memory`, and whether it answers; the status is `degraded` while the database does not).
 - `GET /scenarios` — the example scenarios in `scenarios/`, each with a short title, to start a request from.
 - `GET /pipeline` — how the team is set up, for the How it works page: the LangGraph graph as a Mermaid diagram, the specialists, and the rules the Chief of Staff decides by (the approval score, the revision and critique rounds, the word limits), read from the running code.
-- `GET /monitoring` — what the API has done since it started: whether a warning or error was logged in the last 15 minutes, the evaluations running and ended (the median and 95th-percentile time to a decision), briefs and proposals, requests and server errors, the time (median and 95th percentile), model calls and tokens of each step of the graph, review and conflict counts, research costs, and a log of recent events, warnings and errors (Azure's retries among them), each naming its request. Kept in memory, so a restart empties it.
+- `GET /monitoring` — what the API has done since it started: whether a warning or error was logged in the last 15 minutes, the evaluations running and ended (the median and 95th-percentile time to a decision), briefs and proposals, requests and server errors, the time (median and 95th percentile), model calls and tokens of each step of the graph, review and conflict counts, research costs, and a log of recent events, warnings and errors (Azure's retries among them), each naming its request. The statistics count since the API started; the latest evaluations and the log are kept in PostgreSQL, so a restart keeps them (in memory without a database).
 - `GET /metrics` — the same counters and timings for [Prometheus](https://prometheus.io) to scrape, which keeps their history: requests by route and status with their time, evaluations finished and failed with theirs, each step's time, model calls and tokens, reviews, conflicts, research cost, model retries, warnings and errors, and the process's own figures. In the text format, or OpenMetrics when the scraper asks; not in the interactive docs.
 - `GET /templates` — the decision templates in `templates/`: evaluate an idea, plan the go-to-market, set the price, get ready to raise, respond to a competitor. Each is a brief to fill in, with what to look up and ask for that decision.
 - `POST /brief/prepare` — prepare a brief before the team runs it. The Chief of Staff plans a few web searches, Azure OpenAI's own web search (Bing, on the team's deployment) or [Tavily](https://tavily.com) runs them (`research_provider`: `azure`, the default, or `tavily`), and the Chief of Staff keeps the facts that bear on the decision, each citing its sources, and asks up to three questions about facts only the founder knows. Body: `prompt`, optional `context`, `template` and `reasoning`. Send the facts the founder keeps and their answers in the evaluation's `context` (`research`, `answers`), and every agent works from them; the report gains a "Web Research" section with the sources. About 10–30 s. With neither provider set up the brief is still checked, and `research_note` says why there is no research; a failed search never fails the request.
@@ -234,7 +240,7 @@ curl -X POST http://localhost:8000/evaluate \
 
 Send a follow-up by passing the `session_id` from the first response; only the specialists the follow-up affects rerun, and each builds on its earlier report. The follow-up's response reports only its own reviews, resolutions and metrics.
 
-Each session also has a written report, kept by the API (in memory, like the sessions):
+Each session also has a written report, kept by the API with the session (in PostgreSQL, or in memory without a database):
 
 - `GET /reports` — every session's report, newest first.
 - `GET /reports/{session_id}` — the report: a markdown section each for the strategy, the specialists' reports and the decisions on conflicts, with a `version`; once written, the investment `proposal`, its calculated `investment` metrics (revenue and OpEx by year, NPV, IRR, payback, break-even) and any failing `checks` on its figures.
@@ -280,17 +286,18 @@ uv run pytest --cov               # the same, with a coverage report; fails belo
 cd frontend && npm test           # the frontend (npm run test:coverage fails below 80%)
 ```
 
-Tests use a fake model, and the frontend's a fake backend, so they need no credentials and make no LLM calls.
+Tests use a fake model, and the frontend's a fake backend, so they need no credentials and make no LLM calls. They keep sessions and reports in memory, whatever `.env` says; set `TEST_DATABASE_URL` to a database they may empty (`createdb cofounder_test`) and the PostgreSQL tests run too, through a restart of the API, else they are skipped.
 
 ### Configuration
 
-Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `LOG_FORMAT=json` writes each log line as a JSON object for a log collector (`text` by default), and either way each line names its request and session; `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default). Web research runs on Azure OpenAI with the settings above; `TAVILY_API_KEY` adds Tavily as a choice (a free key from [tavily.com](https://tavily.com) gives 1,000 credits a month; a brief's searches use two to four), `SEARCH_TIMEOUT` bounds each search (20 s), and `RESEARCH_TIMEOUT` each deep research task (300 s).
+Set in `.env` (see `.env.example`). `DEBUG_MODE` turns on DEBUG logging and LangGraph's step-by-step traces; `LOG_FORMAT=json` writes each log line as a JSON object for a log collector (`text` by default), and either way each line names its request and session; `DATABASE_URL` names the PostgreSQL database that keeps sessions, reports and the Monitor's history (the API will not start if it cannot reach it; unset, they are kept in memory); `MAX_ITERATIONS` and `MAX_CRITIQUE_ROUNDS` bound the review and critique loops (1 by default); `LLM_TIMEOUT` and `LLM_MAX_RETRIES` govern each LLM call, and `LLM_TIMEOUT_HIGH` replaces the timeout for calls at `high` reasoning. `AZURE_OPENAI_REASONING_EFFORT` sets how hard the four specialists reason, and `AZURE_OPENAI_CHIEF_REASONING_EFFORT` how hard the Chief of Staff reasons for its decisions (planning, review, resolving conflicts, synthesis); higher is slower. They are the defaults: the UI's sliders, or a request's `reasoning`, can choose others. On `gpt-5-mini` the maximum that takes effect is `high`: the API accepts `xhigh`, but the model then does no reasoning at all. `CORS_ORIGINS` lists the browser origins allowed to call the API (the Next.js dev server, http://localhost:3000, by default). Web research runs on Azure OpenAI with the settings above; `TAVILY_API_KEY` adds Tavily as a choice (a free key from [tavily.com](https://tavily.com) gives 1,000 credits a month; a brief's searches use two to four), `SEARCH_TIMEOUT` bounds each search (20 s), and `RESEARCH_TIMEOUT` each deep research task (300 s).
 
 ### Project structure
 
 ```
 main.py                    FastAPI app: /health, /templates, /brief/prepare, /evaluate, /evaluate/stream, /reports
 observability.py           Request IDs, text or JSON logs, and the access log
+persistence.py             Where sessions, reports and the Monitor's history are kept: PostgreSQL or memory
 progress.py                What each step of the graph did, for the streamed evaluation
 monitor.py                 What the API has done, for the Monitor and Prometheus
 brief.py                   Preparing a brief: the templates, web research and questions

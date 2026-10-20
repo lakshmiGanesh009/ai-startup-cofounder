@@ -330,9 +330,12 @@ Four things let an operator follow what the API did, and why.
   evaluation logs each node's start and finish with its summary; the briefs,
   proposals and failures log themselves; and a logging handler adds every
   warning and error, and the model client's retries, which mark where Azure
-  stalled. `GET /monitoring` returns the snapshot for the How it works page's
-  Monitor, and `GET /pipeline` describes the pipeline from the running code: the
-  graph as Mermaid, the specialists and the rules.
+  stalled. The latest evaluations and events are history: with a database they
+  are kept there too (see Persistence) and survive a restart, while the
+  statistics count from the API's start. `GET /monitoring` returns the snapshot
+  for the How it works page's Monitor, and `GET /pipeline` describes the
+  pipeline from the running code: the graph as Mermaid, the specialists and the
+  rules.
 - **Metrics.** The monitor also keeps Prometheus counters, a gauge and
   histograms in a registry of its own, served at `GET /metrics`: requests by
   route and status and their time, evaluations by outcome and their time, those
@@ -340,10 +343,43 @@ Four things let an operator follow what the API did, and why.
   and errors, reviews, conflicts, research cost, briefs and proposals
   (`cofounder_*`), with the process's own figures (on Linux) and Python's.
   Routes are labelled by their template, so a session ID never becomes a label.
-  Prometheus keeps the history the monitor loses on a restart.
+  Prometheus keeps their history; they start from zero with the API.
 
-The monitor, like the sessions, lives in the API's process: run one worker, as
-`main.py` does, or each worker counts only its own requests.
+The monitor's statistics live in the API's process: run one worker, as
+`main.py` does, or each worker counts only its own requests (the sessions,
+reports and history in PostgreSQL are shared).
+
+## Persistence
+
+`persistence.py` keeps what must outlive the API in PostgreSQL when
+`DATABASE_URL` is set, and in the process's memory otherwise, as the tests and a
+quick local run do.
+
+- **Sessions.** The graph's checkpointer is LangGraph's `AsyncPostgresSaver`, on
+  a pool of async connections, with the same serializer and allowed state models
+  as the in-memory saver, so a follow-up after a restart starts from the
+  session's state. The saver belongs to the event loop that opens it, so the API
+  builds the graph on it as it starts.
+- **Reports.** One row a session: its latest results and its report, as JSON
+  (the calculated investment figures and checks are left out and recalculated).
+  Every change reads the row with `FOR UPDATE`, applies the change and writes it
+  back in one transaction, so a save made from an older version is refused even
+  with several workers. The report store (`reports.py`) is the same over memory
+  and PostgreSQL; the report endpoints run in FastAPI's thread pool, so a round
+  trip to the database never holds up the event loop.
+- **The Monitor's history.** Its evaluations and events are written by a thread
+  of their own, in batches, so neither a request nor a log line waits on the
+  database; the latest 1,000 evaluations and 10,000 events are kept. When the
+  API starts it reads back the latest 50 and 300 for the Monitor, whose
+  statistics still count from that start, and logs that it started. If the
+  database stops answering, the history says so once and goes on in memory.
+
+The tables are created by numbered migrations, applied in order under an
+advisory lock so two workers starting at once do not both migrate; LangGraph
+migrates its own. The API opens the database as it starts and will not start
+without it, rather than run and forget; `/health` reports whether it still
+answers. The reports and the history use a small pool of their own for the
+worker threads.
 
 ## Reports
 
@@ -396,7 +432,8 @@ workflow's state, so editing it never changes what the agents produced.
   each with an Edit button. The PDF opens in a pop-up, in the browser's PDF
   viewer, beside the inline prompt that sends a revision.
 
-Reports are kept in memory, like sessions, and are lost when the API restarts.
+Reports are kept with the sessions: in PostgreSQL, so a restart loses none of
+them, or in memory without a database (see Persistence).
 
 ## A request, end to end
 
@@ -425,7 +462,8 @@ follow-up reassigns only the specialists it affects (see
 
 ### Follow-ups
 
-The graph is compiled with a checkpointer keyed by `session_id`. The session's
+The graph is compiled with a checkpointer keyed by `session_id` (PostgreSQL's,
+or LangGraph's in-memory one without a database). The session's
 first request is kept as `venture`. On a follow-up, the plan step sees the
 original request, the follow-up and which specialists already reported, and
 reassigns only the specialists who own what the follow-up changes, usually one
@@ -483,9 +521,11 @@ break follow-ups.
 - **Metrics in code.** NPV, IRR and payback are calculated from the projections
   rather than written by the model, so they always match the figures and are
   recalculated when the founder edits one.
-- **Reports in memory.** Like sessions, reports are lost when the API restarts.
-  Keeping them in a database would survive restarts, at the cost of a storage
-  dependency the project does not otherwise need.
+- **PostgreSQL for what must last.** Sessions, reports and the Monitor's history
+  live in PostgreSQL, so a restart or a deploy loses nothing and several workers
+  could share them. The cost is a database to run, and the API refuses to start
+  without the one it is given rather than quietly forgetting; without
+  `DATABASE_URL` everything stays in memory, as the tests run.
 - **Deeper reasoning for the Chief of Staff by default.** Its decisions (the
   plan, reviews, resolutions and synthesis) are a handful of calls, while the
   specialists make most of them, so reasoning harder there improves the

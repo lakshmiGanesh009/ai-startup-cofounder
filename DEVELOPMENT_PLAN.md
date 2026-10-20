@@ -98,6 +98,7 @@ graph TD
 | 21 | A switch for where web research runs: Azure OpenAI or Tavily | Cost-aware tool choice; Tavily kept for demanding tasks | Done |
 | 22 | How it works: the pipeline explained, its diagrams, and a monitor | Architecture and workflow documentation; logging and monitoring; human oversight | Done |
 | 23 | Observability: request IDs, structured logs, Prometheus metrics and a Monitor that copes with outages | Production logging and monitoring: traceable requests, error rates and latency percentiles, metrics to alert on | Done |
+| 24 | Persistence: sessions, reports and the Monitor's history in PostgreSQL | Production state: nothing lost on a restart or deploy, safe concurrent edits | Done |
 
 ## Live verification
 
@@ -127,6 +128,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 21 | Azure OpenAI's web search sampled for a search, a report and a profile; then the healthcare scenario researched and run with deep research on Azure OpenAI in headless Chrome | Pass after fixes: a call takes 11-15 s at low reasoning (web search does not run at minimal). The brief was researched in 47 s (7 facts); deep research took 45 s against Tavily's 94 s, covering four areas and Epic Systems, athenahealth and Luma Health from 55 sources and 42 Bing searches, with no Tavily credits; the specialists cited it 51 times and the strategy 12; the evaluation took 157 s. 10 of 10 browser checks, with no console errors. The live run showed Azure's reports closing like a chat (an offer of more help, a prose list of sources) and long profile fields, so the prompts now ask for a finished report and one or two sentences a field, and code strips any closing chat (a report now ends on its last finding; fields run 35-56 words); and the switch's "Azure OpenAI" wrapped in the sidebar, now kept on one line. |
 | 22 | The How it works page in headless Chrome against Azure OpenAI, light, dark and at phone width; the three diagrams drawn by the real Mermaid; the Monitor before and after a real evaluation, read screenshot by screenshot | Pass after fixes: the page took its numbers from `/pipeline`, Mermaid drew all three diagrams, and the Monitor showed a real evaluation (104 s, 2 specialists, 14 model calls, 35,857 tokens, 1 of 2 reports approved, 1 conflict settled) with each step's start, finish, time, calls and tokens. The first pass, 8 of 9 checks, found a 299 px sideways scroll on phones: the state matrix's screen-reader labels escaped its scroll box, which now positions them. The screenshots also showed the diagrams keeping their light colours when the scheme turned dark (they are now drawn again), the latest evaluations table clipped beside the time by step (it now has the full width below 2xl screens), averages written "1.0 calls" (and, by reading the code, failed runs counted into them), "Evaluation Evaluated in" in the log, a squeezed diagrams callout and a clipped table note on phones, the same icon for every layer of the stack, and "Only facts only you know"; each is fixed. The second pass: 12 of 12 checks, with the diagrams' colours and the Monitor at phone width checked too, and no console errors. |
 | 23 | The API with `LOG_FORMAT=json` and a real evaluation on Azure OpenAI; `/metrics` scraped; the Monitor in headless Chrome before, during and after it, light, dark and at phone width; then the API stopped and started again under the open Monitor | Pass after fixes: every log line, uvicorn's included, was JSON; the evaluation's access line (`POST /evaluate/stream 200 in 80782 ms`) and its 10 model calls, made in worker threads, carried its request ID and session, and the polled routes stayed out of the INFO log. The browser read the `X-Request-ID` header across origins. The Monitor showed "1 evaluation running now" during the 80 s run, then its median and 95th percentile, and `/metrics` counted it. With the API stopped, the Monitor said so within 5 s and kept the last data; with it restarted, Try now picked it up at once. The first pass passed its 25 checks, but the screenshots showed a green "Healthy" strip beneath the outage warning, the sidebar still "API connected", and each step's figures and the log squeezed on a phone: the warning now stands in for the health, the sidebar checks the backend every 30 s, and on a phone a step's name and a log line's message each take a line of their own. The second pass: 28 of 28 checks, the sidebar following the outage and the recovery too, with no console errors but the outage's refused connections. |
+| 24 | The API on the local PostgreSQL (a scratch database): an evaluation and an edit to its report, then the API stopped and started again; the report, a follow-up on the same session and the Monitor's history checked through the API and in headless Chrome; an API given an unreachable database | Pass: the first evaluation took 123 s with all four specialists. After the restart the edited report came back at version 2 with its edit, and the follow-up (137 s) found its session: it reassigned Financial Planning and Marketing Strategy and carried Technical Feasibility's and Risk & Compliance's reports over, and the edited report was marked outdated rather than overwritten. The Reports page showed the kept report, and the Monitor its history across the restart (two starts in the log, both evaluations) with its statistics counted from the second start. Pointed at an unreachable database, the API exited (status 3) with "Could not reach PostgreSQL at localhost:1/nothing". 11 of 11 checks, with no console errors. Building it found that LangGraph's async saver must be made on the event loop that serves the requests, so the API builds the graph on it as it starts. |
 
 ### Fixed during live verification
 
@@ -660,13 +662,33 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Any request can be followed from the error the founder sees to its log lines, the Monitor shows error rates and percentiles and rides out an outage, and Prometheus can scrape the API.
 
+### Step 24 - Persistence: sessions, reports and the Monitor's history in PostgreSQL (Done)
+
+**Goal:** a restart or a deploy loses nothing: a follow-up still finds its session, a report keeps its edits and proposal, and the Monitor keeps its recent history. The first part of making the app production-ready after observability; security and limits follow in Step 25, Docker later.
+
+**Built:**
+
+- `persistence.py`: with `DATABASE_URL` set, sessions go to LangGraph's `AsyncPostgresSaver` (an async pool, the same serializer and allowed state models), reports to one row a session changed in a transaction that locks the row, and the Monitor's evaluations and events to tables written by a background thread in batches and trimmed to the latest 1,000 and 10,000. Numbered migrations under an advisory lock; the API opens the database as it starts (the saver is built on the serving event loop), will not start without it, and closes it as it stops. Unset, everything stays in memory, as the tests run.
+- `reports.py`: the store keeps its logic and versions over a backend, memory or PostgreSQL. `main.py`: the report endpoints run in the thread pool, the evaluation saves its report off the event loop, `/health` reports the storage (`degraded` while the database does not answer), and the API logs its start.
+- `monitor.py`: the history is read back at start; the statistics, percentiles included, count from that start. `frontend/`: the Monitor says where its history is kept, and the How it works page's stack gains a Storage layer.
+
+**Check:**
+
+- Automated: the store over memory; against a PostgreSQL test database (`TEST_DATABASE_URL`, skipped without one): the migrations applied once, a session and its follow-up across a restart, reports and their version checks across a restart, the history kept, trimmed and read back, a database that cannot be reached stopping the start, the history going on when the database goes down and saying when it is back, and the whole API restarted with its report, follow-up and Monitor history intact.
+- Live: the API on the local PostgreSQL: an evaluation and an edit, then a restart, the follow-up, the report and the Monitor's history checked in headless Chrome; and the API refusing to start with an unreachable database.
+
+**Done when:**
+
+- Restarting the API loses no session, report or recent history, and edits stay safe from overwrites.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-23
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-24
 progress.py                Step summaries for the stream      Step 18
-monitor.py                 What the API has done              Steps 22-23
+monitor.py                 What the API has done              Steps 22-24
 observability.py           Request IDs, logs, access log      Step 23
+persistence.py             PostgreSQL or memory storage       Step 24
 brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20
@@ -682,7 +704,7 @@ agents/specialist.py       Specialist node                    Steps 2, 4, 6
 agents/chief_of_staff.py   Plan, delegate, review, synthesise Steps 4-8
 proposal.py                Investment proposal and metrics    Step 17
 agents/proposal_writer.py  Writes and revises the proposal    Step 17
-reports.py                 Written reports and their store    Steps 15, 17
+reports.py                 Written reports and their store    Steps 15, 17, 24
 report_pdf.py              Report as a PDF                    Steps 15, 17
 report_charts.py           The PDF's charts                   Step 17
 assets/fonts/              The PDF's font                     Step 15
