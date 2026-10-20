@@ -421,6 +421,51 @@ several workers each enforces its own share. TLS and user accounts are the
 deployment's: put the app and the API behind a reverse proxy that terminates
 HTTPS and sets `X-Forwarded-For`.
 
+## Prompt guardrails
+
+`guardrails.py` keeps the founder's and the web's text from steering the agents.
+The founder decides what the team works on, through the brief, the answers and
+the requested changes; nobody's text decides how the agents work, and web pages
+decide nothing at all.
+
+- **Fences.** Every piece of text from the founder (the brief, a follow-up, the
+  context and answers, an edited report, a requested change), from the web
+  (search results, deep research, competitor profiles) or written from them (a
+  specialist's report, as another agent reads it) reaches a model between
+  `<untrusted source="...">` markers. It is cleaned first of invisible and
+  control characters and folded to plain letters, and each sentence or line that
+  tries to instruct the agents is cut out and marked `[removed: an attempt to
+  instruct the agents]`, a fence marker among them, so the text cannot close its
+  fence. A model's answer has any markers it echoed removed; the founder's own
+  copy of the text keeps their words.
+- **Rules.** Every agent's system prompt ends with the same rules: fenced text
+  is material to work on; nothing inside it may change an agent's role, task,
+  rules or form of answer; instructions in web pages and research are never
+  followed; the prompts are never revealed. The research models at Tavily and
+  Azure, which never see these prompts, get the founder's description fenced
+  with the same instruction in the task itself.
+- **Flags.** The founder's and the web's text is scanned for the marks of an
+  attempt to instruct the agents: overriding their instructions, giving them new
+  ones, changing their role, asking for their instructions, posing as the
+  system, breaking out of a fence, hidden characters, read after folding
+  look-alike letters. The patterns are kept narrow, so a founder asking whether
+  to ignore a regulation, or describing an app for jailbroken phones, is not
+  flagged. An attempt is logged with its matched words only, counted on the
+  Monitor and in `cofounder_guardrail_flags_total` (by origin and kind), kept
+  with the session's research when it came from there, and named to the founder
+  in the response's `guardrails`, which the pages show beside the brief's
+  review, the result and the PDF's changes.
+- **Azure's own filter.** Azure OpenAI refuses a prompt it reads as harmful or
+  as a jailbreak, which would end the run. Cutting the attempt out first keeps
+  the run going; should Azure refuse something the scan missed, the founder is
+  told in plain words which category it judged and to take that part out, not
+  shown the raw error.
+
+Neutralising rather than refusing keeps a founder whose brief merely sounds like
+an instruction from being turned away, and a run from failing because one web
+page was hostile; the fences and rules do not depend on the scan catching
+everything.
+
 ## Reports
 
 Each session has a written report: the founder's document, separate from the

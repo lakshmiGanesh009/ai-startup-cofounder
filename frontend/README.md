@@ -19,6 +19,7 @@ cp .env.example .env.local
 ## Security
 
 - **The proxy** (`src/app/api/[...path]/route.ts`) forwards only the API routes the pages use, caps a body at `MAX_REQUEST_BYTES` (1,000,000) before holding it, sends the browser's address on for the API's per-caller limits, and passes back only what a page needs (the type, the file name, the request ID, `Retry-After`), streaming an evaluation's events as they come. An API it cannot reach is a 502 that says so.
+- **Guardrails.** When the API names text that tried to instruct the agents (`guardrails` in its answers; see the root README), a notice says so and where: on the brief's review for a web page, on the result for the brief or the answers, and in the PDF pop-up for a requested change. It was taken out of what the agents read, and the run went on.
 - **Every page** is served with a content security policy (everything from this app; inline scripts for Next and inline styles for the diagrams; eval only in development; the PDF from a blob in a frame; no framing by other sites), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and no camera, microphone or location (`next.config.ts`).
 
 ## Run
@@ -109,6 +110,7 @@ src/components/how/diagrams.tsx            Mermaid diagrams, loaded on demand
 src/components/how/monitor-view.tsx        The live dashboard and log
 src/lib/how.ts                             The page's steps, state matrix, judgement points, stack and diagrams
 src/components/backend-status.tsx          Whether the browser can reach the API
+src/components/guardrail-notice.tsx        What tried to instruct the agents, named to the founder
 src/components/markdown.tsx                The agents' markdown: assumptions highlighted, labels as headings
 src/components/ui/                         Buttons, fields, notices, badges, menu, tabs, dialog, icons,
                                            the page header, the progress panel and the team's mark

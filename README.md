@@ -234,6 +234,8 @@ Every response carries an `X-Request-ID` header: the ID the request sent, if it 
 
 With `API_KEY` set, every route but `/health` needs it, as `Authorization: Bearer <key>` (or `X-API-Key`); `/metrics` too, so give Prometheus the key. The API also limits what one caller can do: a body over `MAX_REQUEST_BYTES` is refused (413); each caller may send `REQUESTS_PER_MINUTE` requests a minute and start `RUNS_PER_HOUR` evaluations, briefs and proposals an hour; and at most `MAX_CONCURRENT_RUNS` run at once. Over a limit the answer is 429 with `Retry-After`. A request may hold only what a brief needs: a prompt or instruction of 8,000 characters, context fields of 4,000, ten answers, twenty facts and fifty sources, each source a web address (422 otherwise).
 
+The founder's text and the web's are the material of the team's work, never instructions to it. Every agent reads them between `<untrusted>` markers that name their source, cleaned of invisible characters and unable to close their markers early, and every agent's system prompt says what the markers mean. The brief, the context, a follow-up, a requested change, an edited report, each web page and each piece of deep research is also scanned for an attempt to instruct the agents (overriding their instructions, changing their role, asking for their instructions, posing as the system, hidden characters): the sentence is cut out of what the agents read and marked as removed, logged by its matched words, counted on the Monitor and in Prometheus, and named in the response's `guardrails` (for `/evaluate`, `/brief/prepare` and the proposal routes), which the pages show; the run goes on, and your own copy of the text keeps your words. Azure OpenAI's own content filter refuses a prompt it reads as harmful or a jailbreak; should it refuse one the scan missed, the error says so in plain words.
+
 ```bash
 curl -X POST http://localhost:8000/evaluate \
   -H "Content-Type: application/json" \
@@ -302,6 +304,7 @@ main.py                    FastAPI app: /health, /templates, /brief/prepare, /ev
 observability.py           Request IDs, text or JSON logs, and the access log
 security.py                The API key, the size and rate limits, and the cap on runs at once
 persistence.py             Where sessions, reports and the Monitor's history are kept: PostgreSQL or memory
+guardrails.py              The founder's and the web's text fenced as data, and attempts to instruct the agents flagged
 progress.py                What each step of the graph did, for the streamed evaluation
 monitor.py                 What the API has done, for the Monitor and Prometheus
 brief.py                   Preparing a brief: the templates, web research and questions
