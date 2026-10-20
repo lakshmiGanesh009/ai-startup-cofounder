@@ -16,6 +16,10 @@ cp .env.example .env.local
 
 `.env.local` holds where the API is (`BACKEND_URL`, http://localhost:8000 by default) and its key (`API_KEY`, the same as the backend's; empty when the backend has none). Only this app's server reads them: the pages call the API through the app's own `/api` route, which forwards each call with the key, so neither reaches the browser.
 
+## Docker
+
+An option beside the local run. `Dockerfile` builds Next.js's standalone server (`next.config.ts` asks for it when `BUILD_STANDALONE` is set, as the Dockerfile does, so `npm run build` and `npm start` work as usual) and runs it as the unprivileged `node` user on port 3000. It reads `BACKEND_URL` and `API_KEY` when it starts, so one image serves any environment; no `.env` file enters the build. `./start.sh docker` or `docker compose up --build`, from the repository root, runs it with the API and PostgreSQL (see the root README).
+
 ## Security
 
 - **The proxy** (`src/app/api/[...path]/route.ts`) forwards only the API routes the pages use, caps a body at `MAX_REQUEST_BYTES` (1,000,000) before holding it, sends the browser's address on for the API's per-caller limits, and passes back only what a page needs (the type, the file name, the request ID, `Retry-After`), streaming an evaluation's events as they come. An API it cannot reach is a 502 that says so.
@@ -30,6 +34,8 @@ Start the backend from the repository root, then the frontend:
 uv run python main.py    # repository root: the API on port 8000
 npm run dev              # frontend/: http://localhost:3000
 ```
+
+Or start both with `./start.sh local` from the repository root, which asks for other ports if these are taken and hands this app's server the API's address and key itself.
 
 The sidebar shows whether the browser can reach the backend, checking again every 30 s while the page is shown, so it follows an outage and the recovery. If it can't, check that the backend is running and that `BACKEND_URL` and `API_KEY` in `.env.local` match it.
 

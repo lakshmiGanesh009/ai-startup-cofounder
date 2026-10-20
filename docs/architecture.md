@@ -466,6 +466,49 @@ an instruction from being turned away, and a run from failing because one web
 page was hostile; the fences and rules do not depend on the scan catching
 everything.
 
+## Deployment
+
+The app runs locally by default: the API with uv and the web app with npm, and
+PostgreSQL if `.env` names one. Docker is an option beside that:
+`docker compose up --build` runs PostgreSQL, the API and the web app in
+containers on one machine, each started once the one it needs is healthy.
+
+- **One launcher.** `./start.sh` asks which way to run and on which ports, or
+  takes `local`, `docker` or `stop`. Locally it starts both servers on
+  127.0.0.1, hands the web app's server the API's address and key, labels each
+  server's lines, and stops both on Ctrl+C or when either stops. In Docker it
+  makes the database's password in `.env` if there is none (asking first), then
+  builds and starts the stack and waits until it is healthy.
+- **The images.** The API's (`Dockerfile`) installs the locked dependencies with
+  uv in one stage and copies only that environment and the code into a slim
+  Python image; the web app's (`frontend/Dockerfile`) builds Next.js's
+  standalone server and copies only it and its static files into a slim Node
+  image. Both run as users without privileges, both have health checks
+  (`/health`, and the home page), and neither holds a key: `.dockerignore` keeps
+  every `.env` file out of the build.
+- **Configuration at start.** The API reads `.env` when its container starts,
+  with `DATABASE_URL` pointed at the Compose database and `LOG_FORMAT=json`; the
+  web app reads `BACKEND_URL` and `API_KEY` when its server starts. One image of
+  each serves any environment.
+- **The network.** The web app and the API are published on 127.0.0.1 only:
+  the browser reaches the API through the web app, Prometheus and checks reach
+  it directly. The database answers on the Compose network only, and its data
+  lives in the `db` volume. `WEB_HOST=0.0.0.0` opens the web app to the network.
+- **Stopping.** uvicorn gives the requests still running 30 s, within Compose's
+  40 s grace; an evaluation it cuts short is recorded as failed, and its
+  session's last checkpoint stays in PostgreSQL.
+- **Scaling.** One API worker: the Monitor's statistics and the rate limits live
+  in the process. Sessions, reports and the history are in PostgreSQL, so more
+  workers or replicas would share them, each counting and limiting its own
+  requests.
+
+TLS, a domain and outside access are the host's: a reverse proxy that terminates
+HTTPS in front of the web app, passing `X-Forwarded-For` and not buffering
+responses, so an evaluation's events stream through. `.gitlab-ci.yml` runs every
+check on each push and merge request, with a PostgreSQL service for the
+persistence tests, and builds both images on the default branch, a job whose
+failure does not fail the pipeline.
+
 ## Reports
 
 Each session has a written report: the founder's document, separate from the

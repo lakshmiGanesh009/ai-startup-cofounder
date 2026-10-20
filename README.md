@@ -212,6 +212,19 @@ npm install
 cp .env.example .env.local
 ```
 
+### Start it
+
+`start.sh` starts the whole app with one command: locally, the default, or in Docker.
+
+```bash
+./start.sh            # asks how to run it and on which ports, then starts it
+./start.sh local      # the API and the web app here; Ctrl+C stops both
+./start.sh docker     # PostgreSQL, the API and the web app in containers
+./start.sh stop       # stops the containers; the data stays
+```
+
+Locally it starts the API and the web app as under [Run the API](#run-the-api) and [Run the UI](#run-the-ui) (the API without reloading on edits), on ports 8000 and 3000 unless you choose others (`--api-port`, `--web-port`; a port in use is asked about again, with the next free one offered), and gives the web app's server the API's address and its key from `.env`, so `frontend/.env.local` needs neither. Each server's lines are labelled; one that fails to start, or stops, is reported and the other stopped with it. In Docker it runs the stack under [Run with Docker](#run-with-docker-optional), after offering to make `POSTGRES_PASSWORD` in `.env` if there is none; run again on a running stack, it offers to rebuild it from the checkout. Without a `.env` it offers to make one from `.env.example`. Either way the app answers on this machine only. It needs bash: on Windows, run it from WSL or Git Bash, or use the commands below.
+
 ### Run the API
 
 ```bash
@@ -275,6 +288,17 @@ The sidebar's **Web research** switch picks where the web research runs: **Azure
 
 The sidebar has two **Reasoning** sliders, for the specialists and for the Chief of Staff. They start at the configured efforts and apply to every request the pages send: higher reasoning gives more considered answers but slower calls (about 4 s a call at `minimal`, 9 s at `medium`, 27 s at `high`). With the specialists at `low`, the proposal's figures come out more consistent, for about a third more time. See [frontend/README.md](frontend/README.md) for more.
 
+### Run with Docker (optional)
+
+Docker is an option beside running the app locally: the API, the web app and PostgreSQL run together with [Docker Compose](https://docs.docker.com/compose/), with nothing to install but Docker. `./start.sh docker` does it for you; by hand:
+
+```bash
+cp .env.example .env          # fill in the model's keys, API_KEY and POSTGRES_PASSWORD
+docker compose up --build     # then open http://localhost:3000
+```
+
+Compose builds two images, the API from `Dockerfile` and the web app from `frontend/Dockerfile`, starts PostgreSQL with its data in the `db` volume, and starts each service once the one it needs is healthy. The web app and the API are published on 127.0.0.1 only: the browser reaches the API through the web app, and Prometheus (`/metrics`, with the key) and checks reach it on 127.0.0.1:8000. The API logs JSON lines (`docker compose logs -f api`), runs one worker, and gives the evaluations still running 30 s to finish when it stops. Keys and passwords are read from `.env` when the containers start and never enter an image, and both images run as users without privileges. `WEB_PORT` and `API_PORT` change the ports, and `WEB_HOST=0.0.0.0` opens the web app to the network; before it faces the internet, put a reverse proxy that terminates HTTPS in front of it.
+
 ### Demo
 
 Walk through a scenario end to end, printing each stage:
@@ -292,6 +316,8 @@ cd frontend && npm test           # the frontend (npm run test:coverage fails be
 ```
 
 Tests use a fake model, and the frontend's a fake backend, so they need no credentials and make no LLM calls. They keep sessions and reports in memory, whatever `.env` says; set `TEST_DATABASE_URL` to a database they may empty (`createdb cofounder_test`) and the PostgreSQL tests run too, through a restart of the API, else they are skipped.
+
+On GitLab, `.gitlab-ci.yml` runs the backend's tests (with a PostgreSQL service, so the persistence tests run too) and the frontend's lint, types, tests and build on every push and merge request, and builds both images on the default branch; that job needs a runner that allows Docker-in-Docker, and, Docker being an option, its failure does not fail the pipeline. `tests/test_start.py` covers the launcher's questions, ports and edits to `.env`.
 
 ### Configuration
 
@@ -329,7 +355,11 @@ assets/fonts/              DejaVu Sans, the PDF's font
 scenarios/                 Startup scenarios for the demo and tests
 templates/                 Decision templates to write a brief from
 demo.py                    Scenario walkthrough script
-frontend/                  Next.js frontend (Evaluate and Reports pages)
+frontend/                  Next.js frontend (Evaluate, Reports and How it works pages)
+start.sh                   Starts the app: locally, or in Docker
+Dockerfile                 The API's image
+docker-compose.yml         PostgreSQL, the API and the web app together
+.gitlab-ci.yml             The checks on every push, and the images on the default branch
 tests/                     Automated tests
 docs/                      Architecture and performance docs
 DEVELOPMENT_PLAN.md        Build sequence and status
