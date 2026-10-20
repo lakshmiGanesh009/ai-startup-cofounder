@@ -283,11 +283,10 @@ an `error` event with the status `/evaluate` would have returned (503, 502 or
 The **Next.js frontend** (`frontend/`) is the UI, with Evaluate, Reports and How
 it works pages. The Evaluate page reads the stream with `fetch` (an
 `EventSource` can only send GETs) and shows the team's progress as it arrives.
-It calls the API from the browser, so the API allows the origins in
-`CORS_ORIGINS` (`http://localhost:3000` by default) and lets them read the
-`X-Request-ID` header, which the page shows with an error; and it gets the
-example scenarios from `GET /scenarios` because a browser cannot read them from
-disk. A
+The browser calls the API through the app's own `/api` route, which adds the
+API's key on the server (see Security), so the API needs no CORS for it; and it
+gets the example scenarios from `GET /scenarios` because a browser cannot read
+them from disk. A page shows the `X-Request-ID` of any error. A
 session's requests are kept in the browser tab, and the reasoning efforts in
 the browser, so a reload loses neither. The PDF opens in a pop-up on the
 browser's `<dialog>`, shown by the browser's own PDF viewer from a blob the page
@@ -380,6 +379,47 @@ migrates its own. The API opens the database as it starts and will not start
 without it, rather than run and forget; `/health` reports whether it still
 answers. The reports and the history use a small pool of their own for the
 worker threads.
+
+## Security
+
+`security.py` checks every request before it reaches a route, inside the request
+middleware, so a refusal still gets its request ID, its access line and its
+count (`cofounder_refused_requests_total`, by reason).
+
+- **The key.** With `API_KEY` set, every route but `/health` needs it
+  (`Authorization: Bearer`, or `X-API-Key`), compared in constant time;
+  otherwise 401. The browser never holds it: the Next.js app's own route
+  (`frontend/src/app/api/[...path]/route.ts`) forwards the pages' calls to
+  `BACKEND_URL` with the key, forwards only the API routes the pages use, caps a
+  body before holding it, and passes back only the headers a page needs,
+  streaming an evaluation's events as they come.
+- **Limits.** A body over `MAX_REQUEST_BYTES` is refused (413), whether it says
+  its length or not. Each caller may send `REQUESTS_PER_MINUTE` requests a
+  minute and start `RUNS_PER_HOUR` runs (evaluations, briefs and proposals) an
+  hour, counted over sliding windows; at most `MAX_CONCURRENT_RUNS` runs go at
+  once, each holding its place until its response ends, a stream included. A run
+  turned away because the team is busy does not count against the caller. Over a
+  limit the answer is 429 with `Retry-After`.
+- **Who a caller is.** Its address, or, for a request that carries the key, the
+  browser address the app's proxy forwards (`X-Forwarded-For`): only the proxy
+  can name another caller, so nobody can spread their requests over made-up
+  addresses or use up someone else's.
+- **What a request may hold.** A prompt or instruction of 8,000 characters,
+  context fields of 4,000, ten answers, twenty facts and fifty sources, each
+  source an http(s) address (every source is shown as a link, so no
+  `javascript:` ones), report sections of 60,000, and session IDs of letters,
+  digits, dashes and underscores, in a body or a path (422).
+- **What the logs keep.** No brief text: a failed search logs its error, not the
+  query, which comes from the brief.
+- **The pages.** Every page is served with a content security policy (scripts,
+  styles, fonts and connections from the app only; the PDF from a blob in a
+  frame; no framing by other sites), `nosniff`, a strict referrer policy, and no
+  camera, microphone or location.
+
+The limits' counts live in the process, like the Monitor's statistics: with
+several workers each enforces its own share. TLS and user accounts are the
+deployment's: put the app and the API behind a reverse proxy that terminates
+HTTPS and sets `X-Forwarded-For`.
 
 ## Reports
 

@@ -99,6 +99,7 @@ graph TD
 | 22 | How it works: the pipeline explained, its diagrams, and a monitor | Architecture and workflow documentation; logging and monitoring; human oversight | Done |
 | 23 | Observability: request IDs, structured logs, Prometheus metrics and a Monitor that copes with outages | Production logging and monitoring: traceable requests, error rates and latency percentiles, metrics to alert on | Done |
 | 24 | Persistence: sessions, reports and the Monitor's history in PostgreSQL | Production state: nothing lost on a restart or deploy, safe concurrent edits | Done |
+| 25 | Security and limits: an API key behind the app's proxy, rate and size limits, a cap on runs at once | Production security: no open API, no key in the browser, no single caller exhausting the model | Done |
 
 ## Live verification
 
@@ -129,6 +130,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 22 | The How it works page in headless Chrome against Azure OpenAI, light, dark and at phone width; the three diagrams drawn by the real Mermaid; the Monitor before and after a real evaluation, read screenshot by screenshot | Pass after fixes: the page took its numbers from `/pipeline`, Mermaid drew all three diagrams, and the Monitor showed a real evaluation (104 s, 2 specialists, 14 model calls, 35,857 tokens, 1 of 2 reports approved, 1 conflict settled) with each step's start, finish, time, calls and tokens. The first pass, 8 of 9 checks, found a 299 px sideways scroll on phones: the state matrix's screen-reader labels escaped its scroll box, which now positions them. The screenshots also showed the diagrams keeping their light colours when the scheme turned dark (they are now drawn again), the latest evaluations table clipped beside the time by step (it now has the full width below 2xl screens), averages written "1.0 calls" (and, by reading the code, failed runs counted into them), "Evaluation Evaluated in" in the log, a squeezed diagrams callout and a clipped table note on phones, the same icon for every layer of the stack, and "Only facts only you know"; each is fixed. The second pass: 12 of 12 checks, with the diagrams' colours and the Monitor at phone width checked too, and no console errors. |
 | 23 | The API with `LOG_FORMAT=json` and a real evaluation on Azure OpenAI; `/metrics` scraped; the Monitor in headless Chrome before, during and after it, light, dark and at phone width; then the API stopped and started again under the open Monitor | Pass after fixes: every log line, uvicorn's included, was JSON; the evaluation's access line (`POST /evaluate/stream 200 in 80782 ms`) and its 10 model calls, made in worker threads, carried its request ID and session, and the polled routes stayed out of the INFO log. The browser read the `X-Request-ID` header across origins. The Monitor showed "1 evaluation running now" during the 80 s run, then its median and 95th percentile, and `/metrics` counted it. With the API stopped, the Monitor said so within 5 s and kept the last data; with it restarted, Try now picked it up at once. The first pass passed its 25 checks, but the screenshots showed a green "Healthy" strip beneath the outage warning, the sidebar still "API connected", and each step's figures and the log squeezed on a phone: the warning now stands in for the health, the sidebar checks the backend every 30 s, and on a phone a step's name and a log line's message each take a line of their own. The second pass: 28 of 28 checks, the sidebar following the outage and the recovery too, with no console errors but the outage's refused connections. |
 | 24 | The API on the local PostgreSQL (a scratch database): an evaluation and an edit to its report, then the API stopped and started again; the report, a follow-up on the same session and the Monitor's history checked through the API and in headless Chrome; an API given an unreachable database | Pass: the first evaluation took 123 s with all four specialists. After the restart the edited report came back at version 2 with its edit, and the follow-up (137 s) found its session: it reassigned Financial Planning and Marketing Strategy and carried Technical Feasibility's and Risk & Compliance's reports over, and the edited report was marked outdated rather than overwritten. The Reports page showed the kept report, and the Monitor its history across the restart (two starts in the log, both evaluations) with its statistics counted from the second start. Pointed at an unreachable database, the API exited (status 3) with "Could not reach PostgreSQL at localhost:1/nothing". 11 of 11 checks, with no console errors. Building it found that LangGraph's async saver must be made on the event loop that serves the requests, so the API builds the graph on it as it starts. |
+| 25 | The API with a fresh key and a cap of one run, behind the app's proxy: direct calls without and with the key, an oversized body, an evaluation run from the browser, a second run while it worked, everything the browser received searched for the key, the security headers, the PDF in its frame, and the metrics | Pass: `/health` answered without the key, `/scenarios` was 401 without it and 200 with it; a body declaring 2 MB was refused (413) from its headers. Through the proxy the evaluation's steps streamed into the page as they finished (the plan at 13 s) and it finished in 128 s; a second run sent meanwhile was refused as busy (429, Retry-After 30, with its request ID). The key appeared in none of the 36 resources the browser received nor in its storage or cookies. The pages carried the content security policy and the other headers, the PDF rendered in its frame under them, and `/metrics` counted the key, size and busy refusals. 13 of 13 checks, with no console errors but the refused run's 429 and no policy violations. The first run of the check showed that the API answers an oversized body from its headers and closes the connection, which a client still sending sees as a broken pipe; browsers and the app's proxy, which caps bodies first, are unaffected. |
 
 ### Fixed during live verification
 
@@ -681,14 +683,34 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Restarting the API loses no session, report or recent history, and edits stay safe from overwrites.
 
+### Step 25 - Security and limits: an API key behind the app's proxy, rate and size limits, a cap on runs (Done)
+
+**Goal:** the API is no longer open to whoever can reach it, its key never reaches a browser, and no single caller, or burst, can exhaust the API or the model deployment. The prompt guardrails, which treat the founder's and the web's text as data, follow as Step 26; Docker later.
+
+**Built:**
+
+- `security.py`: one guard before every route, inside the request middleware so a refusal keeps its request ID, access line and count: the key (`API_KEY`; `Authorization: Bearer` or `X-API-Key`, compared in constant time; `/health` open); the size (`MAX_REQUEST_BYTES`, refused before or as the body is read); per-caller sliding-window rates (`REQUESTS_PER_MINUTE`, `RUNS_PER_HOUR` for evaluations, briefs and proposals), a caller being its address or, with the key, the browser address the app's proxy forwards; and a cap on runs at once (`MAX_CONCURRENT_RUNS`), held until the response ends, a stream included. 401, 413 and 429 with `Retry-After`; refusals counted on the Monitor and in Prometheus.
+- What a request may hold: prompts and instructions, context fields, answers, facts and sources (http(s) only), report sections and session IDs, in bodies and paths (422 with the reason). A failed search no longer logs its query, which comes from the brief.
+- `frontend/`: the pages call the API through the app's own `/api` route, which adds the key on the server, forwards only the routes the pages use, caps bodies, passes the browser's address on and streams events back; `BACKEND_URL` and `API_KEY` replace `NEXT_PUBLIC_API_URL`. Every page carries a content security policy and the usual security headers, and the How it works page's stack gains a Security layer.
+
+**Check:**
+
+- Automated: the rate limiter, the run slots, the key (open health, Bearer and X-API-Key, wrong and missing keys), both kinds of oversized body, the rates of requests and runs, forwarded addresses trusted only with the key, a busy team that does not charge the caller, slots given back after streamed and failed runs, every input limit, and a search failure that keeps the brief out of the log. The proxy: the key added and cookies kept back, only the page's headers returned, events streamed, bodies capped, unknown routes refused, an unreachable API a 502.
+- Live: the API with a key behind the app: an evaluation through the browser, the key absent from everything the browser received, direct calls without and with the key, a run refused while the team is busy, an oversized body, the security headers, and no console errors.
+
+**Done when:**
+
+- The API answers only callers with its key, the browser never sees it, and the limits hold through the app.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-24
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-25
 progress.py                Step summaries for the stream      Step 18
 monitor.py                 What the API has done              Steps 22-24
 observability.py           Request IDs, logs, access log      Step 23
 persistence.py             PostgreSQL or memory storage       Step 24
+security.py                The API key and the limits         Step 25
 brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20

@@ -14,7 +14,12 @@ npm install
 cp .env.example .env.local
 ```
 
-`.env.local` holds the backend's address (`NEXT_PUBLIC_API_URL`, http://localhost:8000 by default). It is built into the browser bundle, so it must never hold a secret.
+`.env.local` holds where the API is (`BACKEND_URL`, http://localhost:8000 by default) and its key (`API_KEY`, the same as the backend's; empty when the backend has none). Only this app's server reads them: the pages call the API through the app's own `/api` route, which forwards each call with the key, so neither reaches the browser.
+
+## Security
+
+- **The proxy** (`src/app/api/[...path]/route.ts`) forwards only the API routes the pages use, caps a body at `MAX_REQUEST_BYTES` (1,000,000) before holding it, sends the browser's address on for the API's per-caller limits, and passes back only what a page needs (the type, the file name, the request ID, `Retry-After`), streaming an evaluation's events as they come. An API it cannot reach is a 502 that says so.
+- **Every page** is served with a content security policy (everything from this app; inline scripts for Next and inline styles for the diagrams; eval only in development; the PDF from a blob in a frame; no framing by other sites), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and no camera, microphone or location (`next.config.ts`).
 
 ## Run
 
@@ -25,7 +30,7 @@ uv run python main.py    # repository root: the API on port 8000
 npm run dev              # frontend/: http://localhost:3000
 ```
 
-The sidebar shows whether the browser can reach the backend, checking again every 30 s while the page is shown, so it follows an outage and the recovery. If it can't, check that the backend is running and that its `CORS_ORIGINS` (in the root `.env`) includes this app's origin, http://localhost:3000 by default.
+The sidebar shows whether the browser can reach the backend, checking again every 30 s while the page is shown, so it follows an outage and the recovery. If it can't, check that the backend is running and that `BACKEND_URL` and `API_KEY` in `.env.local` match it.
 
 ## The Evaluate page
 
@@ -78,6 +83,7 @@ src/app/layout.tsx                         Root layout and fonts: the sidebar an
 src/app/globals.css                        Colour tokens (light and dark), document type (.doc), sliders
 src/app/page.tsx                           The Evaluate page
 src/app/reports/page.tsx                   The Reports page
+src/app/api/[...path]/route.ts             The proxy to the API, which adds its key
 src/components/evaluate/evaluate-app.tsx   The session: requests, follow-ups, the live run, errors
 src/components/evaluate/composer.tsx       The first request: a template or the brief, context and examples
 src/components/evaluate/brief-review.tsx   Before the team starts: the questions, and the research to keep
