@@ -75,7 +75,10 @@ def _summary(node: str, update: dict, runs: int, given: dict) -> dict:
     if node == "research":
         deep = update["deep_research"]
         found = [f"{_plural(len(deep.areas), 'area')}", f"{_plural(len(deep.companies), 'competitor')}"]
-        summary = f"Researched {' and '.join(found)} ({_plural(len(deep.sources), 'source')}, {deep.credits} credits)"
+        costs = ([f"{deep.credits} Tavily credits"] if deep.credits else []) + (
+            [_plural(deep.searches, "web search").replace("searchs", "searches")] if deep.searches else []
+        )
+        summary = f"Researched {' and '.join(found)} ({', '.join([_plural(len(deep.sources), 'source'), *costs])})"
         if deep.failed:
             summary += f"; could not research {_names(deep.failed)}"
         return {
@@ -83,6 +86,8 @@ def _summary(node: str, update: dict, runs: int, given: dict) -> dict:
             "areas": list(deep.areas),
             "companies": [company.name for company in deep.companies],
             "credits": deep.credits,
+            "searches": deep.searches,
+            "provider": deep.providers[-1] if deep.providers else None,
             "not_researched": deep.failed,
         }
     if node == "critique":

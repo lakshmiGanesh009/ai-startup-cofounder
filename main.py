@@ -41,7 +41,7 @@ from reports import (
     SessionResults,
     store,
 )
-from search import search_configured
+import providers
 from state import DeepResearch, NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
@@ -89,9 +89,12 @@ class EvaluateRequest(BaseModel):
     reasoning: Reasoning | None = None
     deep_research: bool = Field(
         False,
-        description="Research each assigned specialist's area and the main competitors with "
-        "Tavily first (needs TAVILY_API_KEY): about 1-2 minutes and 100-450 Tavily credits more. "
-        "A follow-up reuses its session's research.",
+        description="Research each assigned specialist's area and the main competitors on the web "
+        "first: on Azure OpenAI about 20 s and a few dozen Bing searches; on Tavily 1-2 minutes and "
+        "150-450 credits. A follow-up reuses its session's research.",
+    )
+    research_provider: providers.Provider | None = Field(
+        None, description="Where web research runs: azure (the default) or tavily, for demanding tasks."
     )
 
 
@@ -110,8 +113,8 @@ class EvaluateResponse(BaseModel):
 @app.get("/health")
 async def health():
     """Health check, with the reasoning efforts a request can choose, the
-    configured ones it gets by default, and whether a brief can be researched
-    on the web."""
+    configured ones it gets by default, and where web research can run
+    (Azure OpenAI, Tavily) and does by default."""
     return {
         "status": "healthy",
         "service": SERVICE_NAME,
@@ -121,7 +124,10 @@ async def health():
             "specialist": default_effort(SPECIALIST),
             "chief": default_effort(CHIEF),
         },
-        "research": {"available": search_configured(), "provider": "Tavily"},
+        "research": {
+            "providers": providers.available(),
+            "default": providers.default(),
+        },
     }
 
 
@@ -156,12 +162,15 @@ class PrepareRequest(BaseModel):
     context: RequestContext | None = None
     template: str | None = Field(None, description="The template the brief was written from, by name.")
     reasoning: Reasoning | None = None
+    research_provider: providers.Provider | None = Field(
+        None, description="Where the web search runs: azure (the default) or tavily."
+    )
 
 
 @app.post("/brief/prepare", response_model=PreparedBrief)
 async def prepare(request: PrepareRequest):
     """Prepare a brief before the team runs it. The Chief of Staff researches it
-    on the web (when TAVILY_API_KEY is set), keeps the facts that bear on the
+    on the web (Azure OpenAI's web search, or Tavily when asked), keeps the facts that bear on the
     decision with their sources, and asks up to three questions about what is
     missing; none when the brief is enough. Send the facts the founder keeps and
     their answers in the evaluation's `context`. About 20-30 s at the default
@@ -175,7 +184,9 @@ async def prepare(request: PrepareRequest):
             raise HTTPException(status_code=422, detail=f"There is no template called {request.template!r}.")
     try:
         with reasoning(**_efforts(request.reasoning)):
-            return await run_in_threadpool(prepare_brief, request.prompt.strip(), request.context, template)
+            return await run_in_threadpool(
+                prepare_brief, request.prompt.strip(), request.context, template, request.research_provider
+            )
     except LLMNotConfigured as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LLM_ERRORS as error:
@@ -186,7 +197,10 @@ async def prepare(request: PrepareRequest):
 def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
     """The session, the graph's input and its config for one request."""
     session_id = request.session_id or str(uuid.uuid4())
-    state = {"request": request.prompt, "deep": request.deep_research and search_configured()}
+    use = providers.chosen(request.research_provider)
+    state = {"request": request.prompt, "deep": request.deep_research and use is not None}
+    if use:
+        state["research_provider"] = use
     if request.context:
         state["context"] = request.context
     return session_id, state, {"configurable": {"thread_id": session_id}}

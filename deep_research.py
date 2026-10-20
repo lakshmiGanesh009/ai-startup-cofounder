@@ -1,4 +1,5 @@
-"""Deep research for the specialists, by Tavily's Research API (search.py).
+"""Deep research for the specialists, on Azure OpenAI's web search or Tavily's
+Research API (providers.py), as the request chooses.
 
 When a request asks for it, a research step runs between the plan and the
 specialists: one research task per assigned specialist, written from its
@@ -25,7 +26,8 @@ from agents.chief_of_staff import structured_invoke
 from agents.roles import ROLES
 from llm import CHIEF, LLM_ERRORS
 from metrics import track
-from search import Report, SearchFailed, research_all
+from providers import NAMES, chosen, research_all
+from search import Report, SearchFailed
 from state import CompanyProfile, DeepResearch, RequestContext, Source, WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -148,6 +150,7 @@ def research_node(state: WorkflowState) -> dict:
     book = SourceBook(deep.sources)
     brief = _brief(state)
     areas = [name for name in state["assignments"] if name not in deep.areas]
+    use = chosen(state.get("research_provider")) or "tavily"
     metrics: dict = {}
     with track("research", metrics) as tracker:
         competitors: list[Competitor] = []
@@ -160,13 +163,13 @@ def research_node(state: WorkflowState) -> dict:
                 logger.warning("Naming the competitors failed: %s", error)
         tasks = {f"area:{name}": (_area_task(name, state["assignments"][name], brief), None) for name in areas}
         tasks |= {f"company:{company.name}": (_company_task(company, brief), COMPANY_SCHEMA) for company in competitors}
-        reports = research_all(tasks)
+        reports = research_all(tasks, use)
 
     found = dict(deep.areas)
     companies = list(deep.companies)
     tried = {*areas, *(company.name for company in competitors)}
     failed = [name for name in deep.failed if name not in tried]
-    credits = deep.credits
+    credits, searches = deep.credits, deep.searches
     for name in areas:
         report = reports[f"area:{name}"]
         if isinstance(report, SearchFailed) or not isinstance(report.content, str) or not report.content:
@@ -174,6 +177,7 @@ def research_node(state: WorkflowState) -> dict:
             continue
         found[name] = _brackets(report.content, book.renumber(report))
         credits += report.credits
+        searches += report.searches
     for company in competitors:
         report = reports[f"company:{company.name}"]
         if isinstance(report, SearchFailed) or not isinstance(report.content, dict):
@@ -181,9 +185,16 @@ def research_node(state: WorkflowState) -> dict:
             continue
         companies.append(_profile(company, report, book))
         credits += report.credits
+        searches += report.searches
     return {
         "deep_research": DeepResearch(
-            areas=found, companies=companies, sources=book.sources, credits=credits, failed=failed
+            areas=found,
+            companies=companies,
+            sources=book.sources,
+            credits=credits,
+            searches=searches,
+            providers=list(dict.fromkeys([*deep.providers, NAMES[use]])),
+            failed=failed,
         ),
         "metrics": metrics,
     }

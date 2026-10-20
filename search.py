@@ -134,11 +134,12 @@ def search_all(queries: list[str]) -> tuple[list[Hit], str | None]:
 class Report:
     """A finished research task: a report citing its sources as [n] (or, with an
     output schema, its fields), the sources those numbers refer to, 1 first,
-    and the credits it cost."""
+    and what it cost: Tavily credits, or the web searches Azure OpenAI ran."""
 
     content: str | dict
     sources: list[tuple[str, str]]
     credits: int
+    searches: int = 0
 
 
 # The reference list a report ends with, which repeats its sources.

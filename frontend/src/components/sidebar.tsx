@@ -9,6 +9,7 @@ import { useState } from "react";
 
 import { BackendStatus } from "@/components/backend-status";
 import { ReasoningSliders } from "@/components/reasoning-sliders";
+import { ResearchSwitch } from "@/components/research-switch";
 import { CloseIcon, CompassIcon, DocumentIcon, MenuIcon } from "@/components/ui/icons";
 import { TeamMark } from "@/components/ui/team-mark";
 
@@ -84,6 +85,9 @@ export function Sidebar() {
         <Pages onNavigate={() => setOpen(false)} />
         <div className="px-1">
           <ReasoningSliders />
+        </div>
+        <div className="px-1">
+          <ResearchSwitch />
         </div>
         <div className="mt-auto border-t border-rule px-1 pt-4">
           <BackendStatus />

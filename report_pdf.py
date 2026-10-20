@@ -385,7 +385,7 @@ def _source(key: str) -> tuple[str, str]:
     if key == DECISIONS:
         return ("Decided by", _agent("chief"))
     if key == RESEARCH:
-        return ("Found on the web", "with Tavily")
+        return ("Found on", "the web")
     return ("Written by", _agent(key)) if key in ROLES else ("Edited by", "the founder")
 
 

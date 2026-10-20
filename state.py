@@ -169,7 +169,11 @@ class DeepResearch(BaseModel):
     areas: dict[str, str] = Field(default_factory=dict)
     companies: list[CompanyProfile] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
+    # What it cost: Tavily credits, and the web searches Azure OpenAI ran.
     credits: int = 0
+    searches: int = 0
+    # Who researched it: "Azure OpenAI", "Tavily".
+    providers: list[str] = Field(default_factory=list)
     # What could not be researched: specialists' names and competitors' names.
     failed: list[str] = Field(default_factory=list)
 
@@ -268,7 +272,8 @@ class WorkflowState(TypedDict, total=False):
     critique_round: int
     metrics: Annotated[dict[str, NodeMetric], _merge_metrics]
     final_strategy: str
-    # Whether this request asked for deep research, and the session's research,
-    # which a follow-up reuses.
+    # Whether this request asked for deep research, where web research runs
+    # ("azure" or "tavily"), and the session's research, which a follow-up reuses.
     deep: bool
+    research_provider: str
     deep_research: DeepResearch

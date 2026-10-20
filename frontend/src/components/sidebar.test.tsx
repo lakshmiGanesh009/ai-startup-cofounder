@@ -101,3 +101,48 @@ describe("the sidebar", () => {
     expect(() => render(<Orphan />)).toThrow("useBackend must be used inside <BackendProvider>.");
   });
 });
+
+describe("the web research switch", () => {
+  const radio = (name: string) => screen.getByRole<HTMLInputElement>("radio", { name });
+
+  test("starts at the backend's default, Azure OpenAI, and remembers a switch to Tavily", async () => {
+    fakeBackend();
+    const { unmount } = renderSidebar();
+    const group = await screen.findByRole("group", { name: "Web research" });
+    await within(group).findByText(/Bing search through your Azure OpenAI deployment/);
+    expect(radio("Azure OpenAI").checked).toBe(true);
+
+    await userEvent.click(radio("Tavily"));
+
+    expect(radio("Tavily").checked).toBe(true);
+    expect(within(group).getByText("Deeper research for demanding tasks, from your Tavily credits.")).toBeTruthy();
+    expect(window.localStorage.getItem("cofounder-research")).toBe("tavily");
+    unmount();
+
+    renderSidebar();
+    await screen.findByText("Deeper research for demanding tasks, from your Tavily credits.");
+    expect(radio("Tavily").checked).toBe(true);
+  });
+
+  test("a provider the server has not set up cannot be chosen", async () => {
+    window.localStorage.setItem("cofounder-research", "tavily");
+    fakeBackend({ "GET /health": { body: { ...HEALTH, research: { providers: { azure: true, tavily: false }, default: "azure" } } } });
+    renderSidebar();
+
+    expect(await screen.findByText(/Add a TAVILY_API_KEY to use Tavily\./)).toBeTruthy();
+    expect(radio("Tavily").disabled).toBe(true);
+    expect(radio("Azure OpenAI").checked).toBe(true); // the remembered Tavily is not available
+  });
+
+  test("with neither set up, or before the backend answers, it says so", async () => {
+    fakeBackend({ "GET /health": { body: { ...HEALTH, research: { providers: { azure: false, tavily: false }, default: null } } } });
+    const { unmount } = renderSidebar();
+    expect(await screen.findByText("No web research: set up Azure OpenAI, or add a TAVILY_API_KEY.")).toBeTruthy();
+    expect(radio("Azure OpenAI").disabled && radio("Tavily").disabled).toBe(true);
+    unmount();
+
+    fakeBackend({ "GET /health": () => new Promise(() => {}) });
+    renderSidebar();
+    expect(screen.getByText("Shown once the backend answers.")).toBeTruthy();
+  });
+});

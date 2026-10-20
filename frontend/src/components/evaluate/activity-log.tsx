@@ -20,7 +20,7 @@ export function ActivityLog({ steps }: { steps: Step[] }) {
             <time className="pt-px font-mono text-xs text-ink-3 tabular">{formatSeconds(step.at)}</time>
             <div>
               <p>
-                <span className="font-medium text-ink">{actor(step.node)}</span>{" "}
+                <span className="font-medium text-ink">{step.provider ?? actor(step.node)}</span>{" "}
                 <span className={step.failed ? "text-bad" : "text-ink-2"}>{step.summary}</span>
               </p>
               {step.node === "plan" && step.objective && (

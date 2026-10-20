@@ -20,7 +20,8 @@ from pydantic import BaseModel, Field
 from agents.chief_of_staff import structured_invoke
 from llm import CHIEF, SPECIALIST
 from metrics import track
-from search import Hit, search_all, search_configured
+from providers import NAMES, chosen, search_all
+from search import Hit
 from state import Finding, RequestContext, Research, Source
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
@@ -29,7 +30,7 @@ MAX_QUERIES = 4
 MAX_FINDINGS = 8
 MAX_QUESTIONS = 3
 
-RESEARCH_OFF = "Web research is off: add a TAVILY_API_KEY to .env to turn it on."
+RESEARCH_OFF = "Web research is off: neither Azure OpenAI nor Tavily is set up."
 
 
 class TemplateField(BaseModel):
@@ -90,6 +91,7 @@ class BriefReview(BaseModel):
 
 class PreparedBrief(BaseModel):
     queries: list[str] = Field(description="The web searches that were run.")
+    provider: str | None = Field(None, description="Who searched the web: Azure OpenAI or Tavily.")
     research: Research | None = Field(description="The facts found and their sources; None without any.")
     research_note: str | None = Field(description="Why there is no research, when there is none.")
     questions: list[Question]
@@ -161,22 +163,26 @@ def _renumbered(findings: list[Finding], hits: list[Hit]) -> Research | None:
     return Research(findings=kept, sources=sources)
 
 
-def prepare_brief(prompt: str, context: RequestContext | None, template: Template | None) -> PreparedBrief:
-    """Research the brief on the web, when search is set up, and have the Chief
-    of Staff read it: the facts that bear on the decision, and its questions."""
+def prepare_brief(
+    prompt: str, context: RequestContext | None, template: Template | None, provider: str | None = None
+) -> PreparedBrief:
+    """Research the brief on the web, with the provider asked for (or the
+    default), and have the Chief of Staff read it: the facts that bear on the
+    decision, and its questions."""
     metrics: dict = {}
     brief = _brief_text(prompt, context)
     queries: list[str] = []
     hits: list[Hit] = []
     note: str | None = RESEARCH_OFF
-    if search_configured():
+    use = chosen(provider)
+    if use:
         topics = f"\n\nFor this kind of decision, look up: {'; '.join(template.research)}." if template and template.research else ""
         with track("research", metrics) as tracker:
             plan = structured_invoke(
                 SearchPlan, [SystemMessage(_SEARCH_PROMPT + topics), HumanMessage(brief)], tracker, SPECIALIST
             )
         queries = list(dict.fromkeys(query.strip() for query in plan.queries if query.strip()))[:MAX_QUERIES]
-        hits, note = search_all(queries)
+        hits, note = search_all(queries, use)
         if not hits and not note:
             note = "The web search found nothing for this brief."
 
@@ -194,6 +200,7 @@ def prepare_brief(prompt: str, context: RequestContext | None, template: Templat
     questions = [question for question in review.questions if question.question.strip()][:MAX_QUESTIONS]
     return PreparedBrief(
         queries=queries,
+        provider=NAMES[use] if use else None,
         research=research,
         research_note=None if research else note,
         questions=questions,

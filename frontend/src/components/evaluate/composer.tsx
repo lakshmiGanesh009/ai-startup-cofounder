@@ -9,7 +9,7 @@ import { useRef, useState } from "react";
 import { Button, Kbd } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { CheckIcon } from "@/components/ui/icons";
-import type { RequestContext, Scenario, Template } from "@/lib/api";
+import { PROVIDER_NAMES, type RequestContext, type ResearchProvider, type Scenario, type Template } from "@/lib/api";
 import { fillTemplate, missingField, type TemplateValues } from "@/lib/brief";
 import { DEEP_RESEARCH_COST } from "@/lib/team";
 
@@ -29,7 +29,7 @@ export type Submission = {
   prompt: string;
   context: RequestContext;
   template: string | null;
-  // Check the brief with the Chief of Staff first; have Tavily research each specialist's area.
+  // Check the brief with the Chief of Staff first; research each specialist's area on the web.
   prepare: boolean;
   deep: boolean;
 };
@@ -52,7 +52,7 @@ function Choice({ pressed, onClick, children }: { pressed: boolean; onClick: () 
 export function Composer({
   scenarios,
   templates,
-  researchAvailable,
+  research,
   waits,
   busy,
   onSubmit,
@@ -60,8 +60,9 @@ export function Composer({
 }: {
   scenarios: Scenario[];
   templates: Template[];
-  // Whether the backend can search the web; null while unknown.
-  researchAvailable: boolean | null;
+  // Where web research runs (the sidebar's choice): null when no provider is
+  // set up, undefined until the backend has answered.
+  research: ResearchProvider | null | undefined;
   // How long the next step takes: checking the brief, or running the team.
   waits: { prepare: string; evaluate: string };
   busy: boolean;
@@ -114,7 +115,7 @@ export function Composer({
         .map(([key, value]) => [key, value.trim()])
         .filter(([, value]) => value),
     );
-    onSubmit({ prompt: brief, context: filled, template: template?.name ?? null, prepare, deep: deep && researchAvailable !== false });
+    onSubmit({ prompt: brief, context: filled, template: template?.name ?? null, prepare, deep: deep && research !== null });
   }
 
   const sendOnShortcut = (event: React.KeyboardEvent) => {
@@ -232,29 +233,29 @@ export function Composer({
         <span>
           <span className="block text-sm font-medium text-ink">Research it and check the brief first</span>
           <span className="mt-0.5 block text-sm text-ink-3">
-            {researchAvailable === false
-              ? "Web research is off: the server has no TAVILY_API_KEY. The Chief of Staff still checks the brief for anything missing."
-              : "The Chief of Staff looks up the market on the web and asks anything it needs to know. You review both before the team starts."}
+            {research === null
+              ? "Web research is off: the server has neither Azure OpenAI nor a TAVILY_API_KEY set up. The Chief of Staff still checks the brief for anything missing."
+              : `The Chief of Staff looks up the market on the web with ${PROVIDER_NAMES[research ?? "azure"]}, and asks anything it needs to know. You review both before the team starts.`}
           </span>
         </span>
       </label>
 
       <label
-        className={`mt-4 flex items-start gap-3 ${researchAvailable === false ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+        className={`mt-4 flex items-start gap-3 ${research === null ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
       >
         <input
           type="checkbox"
-          checked={deep && researchAvailable !== false}
-          disabled={researchAvailable === false}
+          checked={deep && research !== null}
+          disabled={research === null}
           onChange={(event) => setDeep(event.target.checked)}
           className="mt-1 size-4 accent-[var(--primary)]"
         />
         <span>
           <span className="block text-sm font-medium text-ink">Deep research for each specialist</span>
           <span className="mt-0.5 block text-sm text-ink-3">
-            {researchAvailable === false
-              ? "Needs a TAVILY_API_KEY on the server."
-              : `Tavily researches each specialist's area and profiles up to three competitors before the team starts. ${DEEP_RESEARCH_COST}`}
+            {research === null
+              ? "Needs Azure OpenAI or a TAVILY_API_KEY on the server."
+              : `${PROVIDER_NAMES[research ?? "azure"]} researches each specialist's area and profiles up to three competitors before the team starts. ${DEEP_RESEARCH_COST[research ?? "azure"]} Choose where research runs in the sidebar.`}
           </span>
         </span>
       </label>

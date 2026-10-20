@@ -28,13 +28,14 @@ describe("deep research", () => {
     renderPage();
     await writeBrief(user, false);
     expect(deepSwitch().checked).toBe(false);
-    expect(screen.getByText(/about 150-450 of your Tavily credits/)).toBeTruthy();
+    expect(screen.getByText(/Azure OpenAI researches each specialist's area/)).toBeTruthy();
+    expect(screen.getByText(/a few dozen Bing searches billed to your Azure account/)).toBeTruthy();
 
     await user.click(deepSwitch());
     await user.click(screen.getByRole("button", { name: /^Evaluate\s*⌘↵$/ }));
 
     await screen.findByRole("heading", { name: "Go with conditions" });
-    expect(sent[0].body).toMatchObject({ prompt: "An idea", deep_research: true });
+    expect(sent[0].body).toMatchObject({ prompt: "An idea", deep_research: true, research_provider: "azure" });
   });
 
   test("goes with the request after the brief is checked too", async () => {
@@ -53,10 +54,10 @@ describe("deep research", () => {
   });
 
   test("cannot be switched on without a search key on the server", async () => {
-    fakeBackend({ "GET /health": { body: { ...HEALTH, research: { available: false, provider: "Tavily" } } } });
+    fakeBackend({ "GET /health": { body: { ...HEALTH, research: { providers: { azure: false, tavily: false }, default: null } } } });
     renderPage();
 
-    expect(await screen.findByText("Needs a TAVILY_API_KEY on the server.")).toBeTruthy();
+    expect(await screen.findByText("Needs Azure OpenAI or a TAVILY_API_KEY on the server.")).toBeTruthy();
     expect(deepSwitch().disabled).toBe(true);
   });
 
@@ -72,7 +73,7 @@ describe("deep research", () => {
 
     await act(async () => live.send(sse([...STEPS.slice(0, 2), { type: "start", node: "research", at: 9.7 }], null)));
     expect(within(working).getByLabelText("Research: Working")).toBeTruthy();
-    expect(within(working).getByText("Tavily is researching each specialist's area and the main competitors.")).toBeTruthy();
+    expect(within(working).getByText("Researching each specialist's area and the main competitors on the web.")).toBeTruthy();
 
     await act(async () =>
       live.send(
@@ -82,8 +83,9 @@ describe("deep research", () => {
               type: "done",
               node: "research",
               at: 80.2,
-              summary: "Researched 2 areas and 1 competitor (3 sources, 102 credits).",
+              summary: "Researched 2 areas and 1 competitor (3 sources, 102 Tavily credits).",
               credits: 102,
+              provider: "Tavily",
             },
             { type: "start", node: "finance", at: 80.3 },
           ],
@@ -93,7 +95,7 @@ describe("deep research", () => {
     );
     const log = within(working).getByRole("region", { name: "What the team has done" });
     expect(within(log).getByText("Tavily")).toBeTruthy();
-    expect(within(log).getByText("Researched 2 areas and 1 competitor (3 sources, 102 credits).")).toBeTruthy();
+    expect(within(log).getByText("Researched 2 areas and 1 competitor (3 sources, 102 Tavily credits).")).toBeTruthy();
     expect(within(working).getByLabelText("Research: Done")).toBeTruthy();
   });
 
@@ -106,7 +108,7 @@ describe("deep research", () => {
     await screen.findByRole("heading", { name: "Go with conditions" });
 
     const summary = screen.getByRole("complementary", { name: "The team's reviews" });
-    expect(within(summary).getByText("Deep research on 2 areas and 1 competitor, 102 Tavily credits")).toBeTruthy();
+    expect(within(summary).getByText("Deep research on 2 areas and 1 competitor with Tavily, 102 Tavily credits")).toBeTruthy();
     await user.click(screen.getByRole("tab", { name: "Research" }));
     const tab = screen.getByRole("tabpanel", { name: "Research" });
 
@@ -119,11 +121,33 @@ describe("deep research", () => {
     expect(within(competitors).getByText("$15 per user a month [2]")).toBeTruthy();
     expect(within(competitors).queryByText("Funding")).toBeNull(); // empty fields are left out
     expect(within(tab).getByRole("alert").textContent).toBe(
-      "Tavily could not research Risk & Compliance; the team worked without it there.",
+      "The research could not cover Risk & Compliance; the team worked without it there.",
     );
     const sources = within(tab).getByRole("region", { name: "Sources" });
     expect(within(sources).getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual(
       DEEP.sources.map((source) => source.url),
     );
   });
+});
+
+test("the sidebar's choice of Tavily changes what deep research costs, and where it runs", async () => {
+  const { ResearchSwitch } = await import("@/components/research-switch");
+  const { sent } = fakeBackend();
+  const user = userEvent.setup();
+  render(
+    <BackendProvider>
+      <ResearchSwitch />
+      <EvaluateApp />
+    </BackendProvider>,
+  );
+  await writeBrief(user, false);
+
+  await user.click(await screen.findByRole("radio", { name: "Tavily" }));
+  await user.click(deepSwitch());
+
+  expect(screen.getByText(/Tavily researches each specialist's area/)).toBeTruthy();
+  expect(screen.getByText(/about 150-450 of your Tavily credits/)).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: /^Evaluate\s*⌘↵$/ }));
+  await screen.findByRole("heading", { name: "Go with conditions" });
+  expect(sent[0].body).toMatchObject({ deep_research: true, research_provider: "tavily" });
 });

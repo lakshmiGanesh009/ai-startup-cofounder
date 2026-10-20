@@ -159,8 +159,9 @@ export function BriefReview({
               <>
                 <p className="mt-2 text-sm text-ink-2">
                   {research.findings.length} {research.findings.length === 1 ? "fact" : "facts"} from{" "}
-                  {research.sources.length} {research.sources.length === 1 ? "source" : "sources"}, for every agent to
-                  weigh. Leave out any that do not fit your case.
+                  {research.sources.length} {research.sources.length === 1 ? "source" : "sources"}
+                  {prepared.provider ? `, found with ${prepared.provider},` : ","} for every agent to weigh. Leave out
+                  any that do not fit your case.
                 </p>
                 <div className="mt-3">
                   <ResearchFindings research={research} prefix={prefix} leftOut={leftOut} onToggle={toggle} />

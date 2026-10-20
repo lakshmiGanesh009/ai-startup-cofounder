@@ -104,7 +104,15 @@ function Summary({ run }: { run: Run }) {
             {result.research && (
               <li>
                 Deep research on {count(Object.keys(result.research.areas).length, "area")} and{" "}
-                {count(result.research.companies.length, "competitor")}, {result.research.credits} Tavily credits
+                {count(result.research.companies.length, "competitor")}
+                {result.research.providers.length > 0 && ` with ${result.research.providers.join(" and ")}`}
+                {[
+                  result.research.credits > 0 && `${result.research.credits} Tavily credits`,
+                  result.research.searches > 0 && count(result.research.searches, "web search").replace("searchs", "searches"),
+                ]
+                  .filter(Boolean)
+                  .map((cost) => `, ${cost}`)
+                  .join("")}
               </li>
             )}
           </ul>
@@ -259,7 +267,7 @@ function ResearchTab({ brief, deep }: { brief?: Brief; deep?: DeepResearch | nul
       )}
       {deep && deep.failed.length > 0 && (
         <Notice tone="warn">
-          Tavily could not research {deep.failed.map(specialistTitle).join(", ")}; the team worked without it there.
+          The research could not cover {deep.failed.map(specialistTitle).join(", ")}; the team worked without it there.
         </Notice>
       )}
       {sources.length > 0 && (

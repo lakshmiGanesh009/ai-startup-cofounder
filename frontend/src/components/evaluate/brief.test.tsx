@@ -36,6 +36,7 @@ describe("preparing the brief", () => {
         context: { constraints: "Under $15k" },
         template: null,
         reasoning: { specialist: "minimal", chief: "medium" },
+        research_provider: "azure",
       },
     });
     expect(screen.queryByRole("form", { name: "New request" })).toBeNull(); // hidden, not gone
@@ -135,21 +136,21 @@ describe("preparing the brief", () => {
     await user.click(checkButton());
 
     expect(await screen.findByText("The Chief of Staff is preparing the brief.")).toBeTruthy();
-    expect(screen.getByText("Tavily searches the web")).toBeTruthy();
+    expect(screen.getByText("Azure OpenAI searches the web")).toBeTruthy();
     answer({ body: PREPARED });
     expect(await review()).toBeTruthy();
   });
 
   test("without web research, the brief is still checked, and says why there is none", async () => {
     const { sent } = fakeBackend({
-      "GET /health": { body: { ...HEALTH, research: { available: false, provider: "Tavily" } } },
+      "GET /health": { body: { ...HEALTH, research: { providers: { azure: false, tavily: false }, default: null } } },
       "POST /brief/prepare": {
         body: { queries: [], research: null, research_note: "Web research is off: add a TAVILY_API_KEY.", questions: [] },
       },
     });
     const user = userEvent.setup();
     renderPage();
-    expect(await screen.findByText(/Web research is off: the server has no TAVILY_API_KEY/)).toBeTruthy();
+    expect(await screen.findByText(/Web research is off: the server has neither Azure OpenAI nor a TAVILY_API_KEY/)).toBeTruthy();
     await user.type(screen.getByLabelText("The brief"), "An idea");
 
     await user.click(checkButton());

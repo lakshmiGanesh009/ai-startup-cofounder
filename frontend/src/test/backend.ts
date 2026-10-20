@@ -14,7 +14,7 @@ export const HEALTH: Health = {
     specialist: "minimal",
     chief: "medium",
   },
-  research: { available: true, provider: "Tavily" },
+  research: { providers: { azure: true, tavily: true }, default: "azure" },
 };
 
 export const SCENARIOS: Scenario[] = [
@@ -144,6 +144,8 @@ export const DEEP: DeepResearch = {
     { title: "Klara profile", url: "https://klara.example.com" },
   ],
   credits: 102,
+  searches: 0,
+  providers: ["Tavily"],
   failed: ["risk"],
 };
 

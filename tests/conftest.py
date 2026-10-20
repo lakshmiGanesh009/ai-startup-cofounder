@@ -249,15 +249,24 @@ def fake_llm(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Tavily is never called for real: a test that searches or researches
-    answers through search._transport, or replaces the calls."""
+    """Neither Tavily nor Azure OpenAI's web search is called for real: a test
+    that searches or researches answers through search._transport or
+    azure_web._client, or replaces the calls."""
+    import azure_web
     import search
 
     def refuse(request):
         raise AssertionError(f"A test tried to reach {request.url}")
 
+    class Refusing:
+        class responses:
+            @staticmethod
+            def create(**kwargs):
+                raise AssertionError("A test tried to reach Azure OpenAI's web search")
+
     monkeypatch.setattr(search, "_transport", httpx.MockTransport(refuse))
     monkeypatch.setattr(search, "POLL_SECONDS", 0)
+    monkeypatch.setattr(azure_web, "_client", Refusing)
 
 
 @pytest.fixture

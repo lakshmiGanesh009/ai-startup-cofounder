@@ -16,7 +16,7 @@ describe("what the team is doing now", () => {
     expect(activity([start("critique")])).toBe("The specialists are cross-checking each other's reports.");
     expect(activity([start("resolve")])).toBe("The Chief of Staff is settling the conflicts.");
     expect(activity([start("synthesis")])).toBe("The Chief of Staff is writing the launch strategy.");
-    expect(activity([start("research")])).toBe("Tavily is researching each specialist's area and the main competitors.");
+    expect(activity([start("research")])).toBe("Researching each specialist's area and the main competitors on the web.");
     expect(activity([start("plan"), done("plan")])).toBe("Passing the work on.");
   });
 

@@ -1,7 +1,7 @@
 // What the UI says about the founding team: its members, the stages of its
 // work, and how long a request takes at the chosen reasoning efforts.
 
-import type { Effort, Reasoning, Specialist, Step } from "@/lib/api";
+import type { Effort, Reasoning, ResearchProvider, Specialist, Step } from "@/lib/api";
 
 export const SPECIALISTS: Specialist[] = ["marketing", "finance", "technical", "risk"];
 
@@ -20,7 +20,7 @@ export function specialistTitle(name: string): string {
 export function actor(node: string): string {
   if (node in SPECIALIST_TITLES) return SPECIALIST_TITLES[node as Specialist];
   if (node === "critique") return "Specialists";
-  if (node === "research") return "Tavily";
+  if (node === "research") return "Web research";
   return "Chief of Staff";
 }
 
@@ -40,7 +40,7 @@ export const STAGES: Stage[] = [
   {
     key: "research",
     title: "Research",
-    who: "Tavily, for the specialists",
+    who: "On the web, for the specialists",
     about: "With deep research on, researches each specialist's area and profiles the main competitors.",
     nodes: ["research"],
   },
@@ -105,7 +105,7 @@ function writing(names: string[], verb: string): string {
 
 const AT_WORK: Record<string, string> = {
   plan: "The Chief of Staff is reading the brief and planning the work.",
-  research: "Tavily is researching each specialist's area and the main competitors.",
+  research: "Researching each specialist's area and the main competitors on the web.",
   review: "The Chief of Staff is reviewing the reports.",
   critique: "The specialists are cross-checking each other's reports.",
   resolve: "The Chief of Staff is settling the conflicts.",
@@ -161,10 +161,13 @@ export function evaluationWait(reasoning: Reasoning | null): string {
   return "This takes about a minute.";
 }
 
-// What deep research adds, measured with Tavily's "mini" model: research tasks
-// of 20-90 s run together, at 20-80 credits each.
-export const DEEP_RESEARCH_COST =
-  "Adds a minute or two, and about 150-450 of your Tavily credits (the free plan has 1,000 a month).";
+// What deep research adds, by where it runs, as measured: on Azure OpenAI tasks
+// of 10-20 s run together, a few Bing searches each; on Tavily's "mini" model
+// tasks of 20-90 s, at 20-80 credits each.
+export const DEEP_RESEARCH_COST: Record<ResearchProvider, string> = {
+  azure: "Adds about half a minute, and a few dozen Bing searches billed to your Azure account.",
+  tavily: "Adds a minute or two, and about 150-450 of your Tavily credits (the free plan has 1,000 a month).",
+};
 
 // How long preparing a brief takes: the Chief of Staff's searches and reading.
 export function briefWait(reasoning: Reasoning | null): string {

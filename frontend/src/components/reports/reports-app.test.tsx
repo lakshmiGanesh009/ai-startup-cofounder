@@ -66,7 +66,7 @@ describe("the Reports page, before the proposal", () => {
 
     const research = await screen.findByRole("region", { name: "Web Research" });
 
-    expect(within(research).getByText("Found on the web with Tavily")).toBeTruthy();
+    expect(within(research).getByText("Found on the web")).toBeTruthy();
     expect(within(research).getByRole("heading", { name: "Sources" })).toBeTruthy();
     expect(within(research).getByRole("link", { name: "Scheduling software prices" }).getAttribute("href")).toBe(
       "https://prices.example",

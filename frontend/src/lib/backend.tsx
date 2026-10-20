@@ -1,14 +1,23 @@
 "use client";
 
-// The backend as the whole app sees it: whether it answers, and the reasoning
-// efforts every request sends. The efforts start at the backend's configured
-// defaults and are remembered in this browser once changed.
+// The backend as the whole app sees it: whether it answers, the reasoning
+// efforts every request sends, and where web research runs. Both start at the
+// backend's defaults and are remembered in this browser once changed.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { type Effort, EFFORTS, getHealth, type Health, type Reasoning } from "@/lib/api";
+import {
+  type Effort,
+  EFFORTS,
+  getHealth,
+  type Health,
+  type Reasoning,
+  RESEARCH_PROVIDERS,
+  type ResearchProvider,
+} from "@/lib/api";
 
 const STORAGE_KEY = "cofounder-reasoning";
+const PROVIDER_KEY = "cofounder-research";
 
 type Role = "specialist" | "chief";
 
@@ -19,6 +28,9 @@ export type BackendState = {
   // The efforts to send, or null when the provider takes none (only Azure does).
   reasoning: Reasoning | null;
   setEffort: (role: Role, effort: Effort) => void;
+  // Where web research runs; null while unknown, or when no provider is set up.
+  researchProvider: ResearchProvider | null;
+  setResearchProvider: (provider: ResearchProvider) => void;
 };
 
 const BackendContext = createContext<BackendState | null>(null);
@@ -35,11 +47,21 @@ function valid(effort: unknown): effort is Effort {
   return EFFORTS.includes(effort as Effort);
 }
 
+function rememberedProvider(): ResearchProvider | null {
+  try {
+    const saved = window.localStorage.getItem(PROVIDER_KEY);
+    return RESEARCH_PROVIDERS.includes(saved as ResearchProvider) ? (saved as ResearchProvider) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function BackendProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<BackendState["status"]>("checking");
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [chosen, setChosen] = useState<Reasoning>({});
+  const [provider, setProvider] = useState<ResearchProvider | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,8 +75,10 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
           const configured = answer.reasoning[role];
           return valid(configured) ? configured : "minimal";
         };
+        const savedProvider = rememberedProvider();
         setHealth(answer);
         setChosen({ specialist: pick("specialist"), chief: pick("chief") });
+        setProvider(savedProvider && answer.research.providers[savedProvider] ? savedProvider : answer.research.default);
         setStatus("up");
       })
       .catch((reason: Error) => {
@@ -79,6 +103,15 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const setResearchProvider = useCallback((next: ResearchProvider) => {
+    setProvider(next);
+    try {
+      window.localStorage.setItem(PROVIDER_KEY, next);
+    } catch {
+      // Storage can be unavailable (a private window); the choice still applies.
+    }
+  }, []);
+
   const value = useMemo<BackendState>(
     () => ({
       status,
@@ -86,8 +119,10 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       health,
       reasoning: health?.reasoning.adjustable ? chosen : null,
       setEffort,
+      researchProvider: provider && health?.research.providers[provider] ? provider : null,
+      setResearchProvider,
     }),
-    [status, error, health, chosen, setEffort],
+    [status, error, health, chosen, setEffort, provider, setResearchProvider],
   );
 
   return <BackendContext value={value}>{children}</BackendContext>;

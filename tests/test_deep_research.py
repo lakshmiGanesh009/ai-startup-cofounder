@@ -140,8 +140,9 @@ def tavily(monkeypatch):
     calls: list[dict] = []
     failing: set[str] = set()
 
-    def research_all(tasks):
+    def research_all(tasks, provider):
         calls.append(tasks)
+        assert provider == "tavily"
         reports = {}
         for key, (task, schema) in tasks.items():
             kind, name = key.split(":")
@@ -235,9 +236,10 @@ def test_the_stream_reports_the_research(fake_llm, tavily):
     events = [dict(line.split(": ", 1) for line in block.splitlines()) for block in text.strip().split("\n\n")]
     done = next(json.loads(e["data"]) for e in events if e["event"] == "done" and '"research"' in e["data"])
     assert done["summary"] == (
-        "Researched 3 areas and 1 competitor (5 sources, 262 credits); "
+        "Researched 3 areas and 1 competitor (5 sources, 262 Tavily credits); "
         "could not research Risk & Compliance."
     )
+    assert done["provider"] == "Tavily"
     assert done["not_researched"] == ["risk"] and done["companies"] == ["Klara Inc."]
     starts = [json.loads(e["data"])["node"] for e in events if e["event"] == "start"]
     assert starts[:2] == ["plan", "research"]
@@ -288,7 +290,7 @@ def test_research_that_fails_leaves_the_team_to_work_without_it(fake_llm, tavily
 
 def test_a_profile_that_comes_back_without_fields_is_counted_as_failed(fake_llm, monkeypatch):
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
-    monkeypatch.setattr(deep_research, "research_all", lambda tasks: {
+    monkeypatch.setattr(deep_research, "research_all", lambda tasks, provider: {
         key: Report(content="Not a profile." if key.startswith("company") else "", sources=[], credits=5)
         for key in tasks
     })

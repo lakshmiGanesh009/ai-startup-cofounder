@@ -22,6 +22,7 @@ import {
   getTemplates,
   type PreparedBrief,
   prepareBrief,
+  PROVIDER_NAMES,
   type RequestContext,
   type Scenario,
   type Step,
@@ -88,7 +89,7 @@ function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
 }
 
 function Session() {
-  const { reasoning, health } = useBackend();
+  const { reasoning, health, researchProvider } = useBackend();
   const [saved] = useState(restore);
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -132,7 +133,7 @@ function Session() {
           context: Object.keys(context).length ? context : null,
           session_id: latest?.result.session_id ?? null,
           reasoning,
-          ...(deep ? { deep_research: true } : {}),
+          ...(deep ? { deep_research: true, research_provider: researchProvider } : {}),
         },
         (step) => {
           seconds = step.at;
@@ -163,6 +164,7 @@ function Session() {
         context: Object.keys(submission.context).length ? submission.context : null,
         template: submission.template,
         reasoning,
+        research_provider: researchProvider,
       });
       setPreparing({ submission, prepared });
     } catch (reason) {
@@ -204,7 +206,7 @@ function Session() {
             <Composer
               scenarios={scenarios}
               templates={templates}
-              researchAvailable={health ? health.research.available : null}
+              research={health ? researchProvider : undefined}
               waits={{ prepare: briefWait(reasoning), evaluate: wait }}
               busy={Boolean(pending || preparing)}
               onSubmit={begin}
@@ -221,11 +223,11 @@ function Session() {
             title="The Chief of Staff is preparing the brief."
             wait={briefWait(reasoning)}
             stages={
-              health?.research.available === false
+              !researchProvider
                 ? ["Reads the brief, and checks it for anything missing that would change the answer"]
                 : [
                     "Plans a few web searches about the idea",
-                    `${health?.research.provider ?? "Tavily"} searches the web`,
+                    `${PROVIDER_NAMES[researchProvider]} searches the web`,
                     "Reads the results, keeps the facts that matter, and checks the brief for anything missing",
                   ]
             }

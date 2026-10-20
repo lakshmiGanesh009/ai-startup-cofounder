@@ -28,8 +28,9 @@ def web(monkeypatch):
     """Search turned on, answering every brief with HITS; records the queries."""
     searched: list[list[str]] = []
 
-    def search_all(queries):
+    def search_all(queries, provider):
         searched.append(queries)
+        assert provider == "tavily"  # the only provider set up in these tests
         return HITS, None
 
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
@@ -92,7 +93,7 @@ def test_without_a_search_key_the_brief_is_still_checked(fake_llm):
 ])
 def test_research_that_comes_to_nothing_says_why(fake_llm, monkeypatch, found, note):
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
-    monkeypatch.setattr(brief, "search_all", lambda queries: found)
+    monkeypatch.setattr(brief, "search_all", lambda queries, provider: found)
     fake_llm.brief_review = BriefReview(findings=[Finding(point="Uncited.", sources=[7])], questions=[])
 
     prepared = prepare_brief("An idea.", None, None)
@@ -177,10 +178,14 @@ def test_without_a_model_the_api_says_so():
     assert "No LLM provider configured" in response.json()["detail"]
 
 
-def test_the_health_check_says_whether_research_is_on(monkeypatch):
-    assert client.get("/health").json()["research"] == {"available": False, "provider": "Tavily"}
+def test_the_health_check_says_where_research_can_run(monkeypatch):
+    assert client.get("/health").json()["research"] == {"providers": {"azure": False, "tavily": False}, "default": None}
     monkeypatch.setenv("TAVILY_API_KEY", "tvly-test")
-    assert client.get("/health").json()["research"]["available"] is True
+    assert client.get("/health").json()["research"] == {"providers": {"azure": False, "tavily": True}, "default": "tavily"}
+    for name in ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT_NAME"):
+        monkeypatch.setenv(name, "set")
+    # Azure OpenAI's own web search is the default once it is set up.
+    assert client.get("/health").json()["research"] == {"providers": {"azure": True, "tavily": True}, "default": "azure"}
 
 
 def test_the_research_and_answers_reach_the_team_and_the_report(fake_llm):

@@ -42,7 +42,10 @@ export type DeepResearch = {
   areas: Partial<Record<Specialist, string>>;
   companies: CompanyProfile[];
   sources: Source[];
+  // What it cost: Tavily credits, and the web searches Azure OpenAI ran; and who ran it.
   credits: number;
+  searches: number;
+  providers: string[];
   failed: string[];
 };
 
@@ -61,8 +64,9 @@ export type EvaluateRequest = {
   // Pass the session_id of an earlier response to send a follow-up.
   session_id?: string | null;
   reasoning?: Reasoning | null;
-  // Research each specialist's area and the main competitors with Tavily first.
+  // Research each specialist's area and the main competitors on the web first.
   deep_research?: boolean;
+  research_provider?: ResearchProvider | null;
 };
 
 export type ReviewResult = { approved: boolean; score: number; feedback: string };
@@ -95,12 +99,18 @@ export type ReasoningSettings = {
   chief: Effort | null;
 };
 
+// Where web research runs: Azure OpenAI's own web search (Bing, on the team's
+// deployment), or Tavily, for demanding tasks.
+export const RESEARCH_PROVIDERS = ["azure", "tavily"] as const;
+export type ResearchProvider = (typeof RESEARCH_PROVIDERS)[number];
+export const PROVIDER_NAMES: Record<ResearchProvider, string> = { azure: "Azure OpenAI", tavily: "Tavily" };
+
 export type Health = {
   status: string;
   service: string;
   reasoning: ReasoningSettings;
-  // Whether a brief can be researched on the web (a search key is set).
-  research: { available: boolean; provider: string };
+  // Which research providers are set up, and the default (null with neither).
+  research: { providers: Record<ResearchProvider, boolean>; default: ResearchProvider | null };
 };
 
 export type Scenario = {
@@ -131,6 +141,8 @@ export type Question = { question: string; why: string; suggestions: string[] };
 // found with their sources, or why there are none, and the questions.
 export type PreparedBrief = {
   queries: string[];
+  // Who searched the web: "Azure OpenAI" or "Tavily"; null with no research.
+  provider?: string | null;
   research: Research | null;
   research_note: string | null;
   questions: Question[];
@@ -141,6 +153,7 @@ export type PrepareRequest = {
   context?: RequestContext | null;
   template?: string | null;
   reasoning?: Reasoning | null;
+  research_provider?: ResearchProvider | null;
 };
 
 // The backend could not be reached, or answered with an error.
@@ -234,6 +247,8 @@ export type Step = {
   areas?: Specialist[];
   companies?: string[];
   credits?: number;
+  searches?: number;
+  provider?: string | null;
   not_researched?: string[];
 };
 
