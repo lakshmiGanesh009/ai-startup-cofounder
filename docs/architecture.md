@@ -258,6 +258,9 @@ No failed LLM call produces a 500. Each failure is handled where it happens:
 - **A failed plan or synthesis call** ends the request with 502 and the reason;
   without a plan there is nothing to run, and without synthesis there is no
   strategy. Missing credentials return 503.
+- **Anything else**, a bug, is logged with its traceback and answered with a 500
+  that carries the request's ID, and an evaluation it cuts short is recorded as
+  failed (see Observability).
 
 ## Serving
 
@@ -277,30 +280,70 @@ an `error` event with the status `/evaluate` would have returned (503, 502 or
 500). A summary that cannot be written never fails the request; it reads
 "Done." instead.
 
-The **Next.js frontend** (`frontend/`) is the UI, with an Evaluate page and a
-Reports page. The Evaluate page reads the stream with `fetch` (an `EventSource`
-can only send GETs) and shows the team's progress as it arrives. It calls the
-API from the browser, so the API allows the origins
-in `CORS_ORIGINS` (`http://localhost:3000` by default), and it gets the example
-scenarios from `GET /scenarios` because a browser cannot read them from disk. A
+The **Next.js frontend** (`frontend/`) is the UI, with Evaluate, Reports and How
+it works pages. The Evaluate page reads the stream with `fetch` (an
+`EventSource` can only send GETs) and shows the team's progress as it arrives.
+It calls the API from the browser, so the API allows the origins in
+`CORS_ORIGINS` (`http://localhost:3000` by default) and lets them read the
+`X-Request-ID` header, which the page shows with an error; and it gets the
+example scenarios from `GET /scenarios` because a browser cannot read them from
+disk. A
 session's requests are kept in the browser tab, and the reasoning efforts in
 the browser, so a reload loses neither. The PDF opens in a pop-up on the
 browser's `<dialog>`, shown by the browser's own PDF viewer from a blob the page
 fetches. (A Streamlit UI served the same pages until the Next.js one replaced
 it in Step 14.)
 
-## Monitoring
+## Observability
 
-`monitor.py` keeps, in memory, what the API has done since it started: each
-evaluation that ended (its time, model calls, tokens, reviews, conflicts and
-research cost, and each node's metrics), counts of briefs and proposals, and a
-log of the last 300 events. A failed evaluation is counted, but only finished
-ones add their time and cost, so the averages describe complete runs. The streamed evaluation logs each node's start and
-finish with its summary; the briefs, proposals and failures log themselves;
-and a logging handler adds every warning and error, and the model client's
-retries, which mark where Azure stalled. `GET /monitoring` returns it all for
-the How it works page, and `GET /pipeline` describes the pipeline from the
-running code: the graph as Mermaid, the specialists and the rules.
+Four things let an operator follow what the API did, and why.
+
+- **Request IDs.** `observability.py` gives every HTTP request an ID: the
+  `X-Request-ID` it sent, if usable, else a new one, returned in the response's
+  `X-Request-ID` header. It lives in a context variable, as does the session
+  once the request names it, and every log record is stamped with both where it
+  is made. The threads that run the agents and the searches copy the context
+  (LangGraph's, Starlette's thread pool and LangChain's
+  `ContextThreadPoolExecutor`), so their lines carry them too. The frontend adds
+  the ID to the errors it shows, so a founder's "it failed" leads to the right
+  lines.
+- **Logs.** One handler on the root logger writes every line, uvicorn's
+  included, as text or, with `LOG_FORMAT=json`, as one JSON object a line
+  (`time`, `level`, `logger`, `message`, `request_id`, `session_id`, and
+  `exception` with its traceback). An access line for each request replaces
+  uvicorn's, with the method, the route's template, the status and the time; the
+  polled routes (`/health`, `/metrics`, `/monitoring`) log theirs at DEBUG. An
+  error nothing else handled is logged with its traceback and answered with a
+  JSON 500 that carries the request ID; a browser that leaves mid-stream is
+  logged as 499, not as an error.
+- **The monitor.** `monitor.py` keeps, in memory, what the API has done since it
+  started: each evaluation that ended (its time, model calls, tokens, reviews,
+  conflicts and research cost, and each node's metrics), the evaluations
+  running, briefs and proposals with their failures, requests and server errors
+  (the polled routes left out), and a log of the last 300 events. A failed
+  evaluation is counted, but only finished ones add their time and cost, so the
+  averages describe complete runs; an evaluation the browser abandons, or an
+  unexpected error cuts short, is recorded as failed. The snapshot adds the
+  median and 95th-percentile time of an evaluation (over the last 50) and of
+  each step (over its last 200), and a health status: errors if one was logged
+  in the last 15 minutes, warnings if only warnings were. The streamed
+  evaluation logs each node's start and finish with its summary; the briefs,
+  proposals and failures log themselves; and a logging handler adds every
+  warning and error, and the model client's retries, which mark where Azure
+  stalled. `GET /monitoring` returns the snapshot for the How it works page's
+  Monitor, and `GET /pipeline` describes the pipeline from the running code: the
+  graph as Mermaid, the specialists and the rules.
+- **Metrics.** The monitor also keeps Prometheus counters, a gauge and
+  histograms in a registry of its own, served at `GET /metrics`: requests by
+  route and status and their time, evaluations by outcome and their time, those
+  in progress, each step's time, model calls and tokens, model retries, warnings
+  and errors, reviews, conflicts, research cost, briefs and proposals
+  (`cofounder_*`), with the process's own figures (on Linux) and Python's.
+  Routes are labelled by their template, so a session ID never becomes a label.
+  Prometheus keeps the history the monitor loses on a restart.
+
+The monitor, like the sessions, lives in the API's process: run one worker, as
+`main.py` does, or each worker counts only its own requests.
 
 ## Reports
 

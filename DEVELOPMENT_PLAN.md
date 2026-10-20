@@ -97,6 +97,7 @@ graph TD
 | 20 | Deep research and competitor profiles for the specialists | Specialised agents grounded in current, cited evidence | Done |
 | 21 | A switch for where web research runs: Azure OpenAI or Tavily | Cost-aware tool choice; Tavily kept for demanding tasks | Done |
 | 22 | How it works: the pipeline explained, its diagrams, and a monitor | Architecture and workflow documentation; logging and monitoring; human oversight | Done |
+| 23 | Observability: request IDs, structured logs, Prometheus metrics and a Monitor that copes with outages | Production logging and monitoring: traceable requests, error rates and latency percentiles, metrics to alert on | Done |
 
 ## Live verification
 
@@ -125,6 +126,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 20 | Tavily's Research API on two sample tasks; then the go-to-market risk scenario with deep research, against Tavily and Azure OpenAI in headless Chrome | Pass after fixes: an area report took 70 s and 80 credits, a competitor profile 22 s and 22 credits. The evaluation researched four areas and profiled Expensify, Dext and QuickBooks in 94 s, citing 72 sources for 209 credits, and finished in 205 s; the specialists cited the research 29 times and the strategy 14. 11 of 11 browser checks, with no console errors. The samples showed that Tavily needs a description on every field of an output schema, that a report repeats its sources in a closing list, now dropped, and that a profile cites loosely ("(source9)"), now renumbered; a profile that cites nothing lists all its sources, now shown as a range. |
 | 21 | Azure OpenAI's web search sampled for a search, a report and a profile; then the healthcare scenario researched and run with deep research on Azure OpenAI in headless Chrome | Pass after fixes: a call takes 11-15 s at low reasoning (web search does not run at minimal). The brief was researched in 47 s (7 facts); deep research took 45 s against Tavily's 94 s, covering four areas and Epic Systems, athenahealth and Luma Health from 55 sources and 42 Bing searches, with no Tavily credits; the specialists cited it 51 times and the strategy 12; the evaluation took 157 s. 10 of 10 browser checks, with no console errors. The live run showed Azure's reports closing like a chat (an offer of more help, a prose list of sources) and long profile fields, so the prompts now ask for a finished report and one or two sentences a field, and code strips any closing chat (a report now ends on its last finding; fields run 35-56 words); and the switch's "Azure OpenAI" wrapped in the sidebar, now kept on one line. |
 | 22 | The How it works page in headless Chrome against Azure OpenAI, light, dark and at phone width; the three diagrams drawn by the real Mermaid; the Monitor before and after a real evaluation, read screenshot by screenshot | Pass after fixes: the page took its numbers from `/pipeline`, Mermaid drew all three diagrams, and the Monitor showed a real evaluation (104 s, 2 specialists, 14 model calls, 35,857 tokens, 1 of 2 reports approved, 1 conflict settled) with each step's start, finish, time, calls and tokens. The first pass, 8 of 9 checks, found a 299 px sideways scroll on phones: the state matrix's screen-reader labels escaped its scroll box, which now positions them. The screenshots also showed the diagrams keeping their light colours when the scheme turned dark (they are now drawn again), the latest evaluations table clipped beside the time by step (it now has the full width below 2xl screens), averages written "1.0 calls" (and, by reading the code, failed runs counted into them), "Evaluation Evaluated in" in the log, a squeezed diagrams callout and a clipped table note on phones, the same icon for every layer of the stack, and "Only facts only you know"; each is fixed. The second pass: 12 of 12 checks, with the diagrams' colours and the Monitor at phone width checked too, and no console errors. |
+| 23 | The API with `LOG_FORMAT=json` and a real evaluation on Azure OpenAI; `/metrics` scraped; the Monitor in headless Chrome before, during and after it, light, dark and at phone width; then the API stopped and started again under the open Monitor | Pass after fixes: every log line, uvicorn's included, was JSON; the evaluation's access line (`POST /evaluate/stream 200 in 80782 ms`) and its 10 model calls, made in worker threads, carried its request ID and session, and the polled routes stayed out of the INFO log. The browser read the `X-Request-ID` header across origins. The Monitor showed "1 evaluation running now" during the 80 s run, then its median and 95th percentile, and `/metrics` counted it. With the API stopped, the Monitor said so within 5 s and kept the last data; with it restarted, Try now picked it up at once. The first pass passed its 25 checks, but the screenshots showed a green "Healthy" strip beneath the outage warning, the sidebar still "API connected", and each step's figures and the log squeezed on a phone: the warning now stands in for the health, the sidebar checks the backend every 30 s, and on a phone a step's name and a log line's message each take a line of their own. The second pass: 28 of 28 checks, the sidebar following the outage and the recovery too, with no console errors but the outage's refused connections. |
 
 ### Fixed during live verification
 
@@ -639,12 +641,32 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - The page explains the system accurately from the running code, its diagrams draw, and the Monitor shows what happened in a real run.
 
+### Step 23 - Observability: request IDs, structured logs, Prometheus metrics and a Monitor that copes with outages (Done)
+
+**Goal:** an operator can follow any request through the logs, see error rates and latency percentiles, scrape the API with Prometheus, and keep watching through an outage: the observability part of making the app production-ready.
+
+**Built:**
+
+- `observability.py`: every HTTP request gets an ID (the `X-Request-ID` it sent, if usable, else a new one), returned in the response's `X-Request-ID` header and stamped, with the session once known, on every log record made while it is handled, in the agents' and the searches' threads too (`search.py` and `azure_web.py` now use LangChain's `ContextThreadPoolExecutor`). Logs go through one handler as text or, with `LOG_FORMAT=json`, JSON lines; an access line for each request (method, route template, status, time) replaces uvicorn's, at DEBUG for the polled routes. An unhandled error is logged with its traceback and answered with a JSON 500 carrying the request ID; a browser that leaves mid-response is a 499, not an error.
+- `monitor.py`, `GET /metrics`: Prometheus counters, a gauge and histograms in the monitor's own registry (requests by route and status, evaluations by outcome, evaluations in progress, each step's time, calls and tokens, retries, warnings and errors, reviews, conflicts, research cost, briefs and proposals), in the text format or OpenMetrics. `GET /monitoring` adds a health status (errors or warnings in the last 15 minutes), the evaluations running, the median and 95th-percentile time of an evaluation and of each step, requests and server errors, and brief and proposal failures; each event names its request. An evaluation an unexpected error cuts short, or the browser abandons, is now recorded as failed.
+- `frontend/`: the Monitor shows the health (**Show them** filters the log to the problems), the error rates, the time to a decision as median, p95 and slowest, each step's median with a tick at its p95, and the request of each warning and error. It asks once at a time, gives up on an answer after 10 s, and while the API is not answering keeps what it last heard, says why, and backs off to 10, 20, 40 and 60 s (**Try now** asks at once); it stops while the page is hidden. Every API error the pages show ends with its request ID, and the sidebar checks the backend again every 30 s, so its status follows an outage. The How it works page's stack gains an Observability layer.
+
+**Check:**
+
+- Automated: request IDs kept, replaced and returned, exposed to the browser, and present on log records from worker threads; the text and JSON formats; the access log's routes, statuses and levels; one root handler; the unhandled-error 500; a stream the browser leaves; percentiles, health over its window, the polled routes left out of the totals, retries, failures and the running count; the metrics after a streamed evaluation, in both formats. In the frontend: request IDs on errors; the health strip, tiles and percentiles; the backoff, the timeout, Try now, the paused refresh and the hidden page.
+- Live: the API with `LOG_FORMAT=json` and a real evaluation: the log lines parsed and named their requests, `/metrics` reported the run, and the Monitor in headless Chrome, light, dark and at phone width, before and after; then the API stopped and started again under the open Monitor.
+
+**Done when:**
+
+- Any request can be followed from the error the founder sees to its log lines, the Monitor shows error rates and percentiles and rides out an outage, and Prometheus can scrape the API.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-22
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-23
 progress.py                Step summaries for the stream      Step 18
-monitor.py                 What the API has done              Step 22
+monitor.py                 What the API has done              Steps 22-23
+observability.py           Request IDs, logs, access log      Step 23
 brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20

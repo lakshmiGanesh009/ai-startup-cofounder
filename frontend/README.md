@@ -1,6 +1,6 @@
 # Frontend (Next.js)
 
-The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has three pages: **Evaluate**, to prepare a brief with the Chief of Staff, run the founding team on it, follow it as it works and send follow-ups, and **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF. The sidebar's reasoning sliders apply to both.
+The Next.js frontend for the AI Startup Co-Founder Team, its UI (it replaced the Streamlit UI in Step 14). It has three pages: **Evaluate**, to prepare a brief with the Chief of Staff, run the founding team on it, follow it as it works and send follow-ups; **Reports**, to read and edit each session's report, have the agents write it up as an investment proposal with charts, and get the PDF; and **How it works**, to see how the team turns a brief into a decision and what the API has been doing. The sidebar's reasoning sliders apply to every request.
 
 Created with `create-next-app` 16.4.2: TypeScript, App Router, Tailwind CSS and ESLint, with the code under `src/`.
 
@@ -25,7 +25,7 @@ uv run python main.py    # repository root: the API on port 8000
 npm run dev              # frontend/: http://localhost:3000
 ```
 
-The sidebar shows whether the browser can reach the backend. If it can't, check that the backend is running and that its `CORS_ORIGINS` (in the root `.env`) includes this app's origin, http://localhost:3000 by default.
+The sidebar shows whether the browser can reach the backend, checking again every 30 s while the page is shown, so it follows an outage and the recovery. If it can't, check that the backend is running and that its `CORS_ORIGINS` (in the root `.env`) includes this app's origin, http://localhost:3000 by default.
 
 ## The Evaluate page
 
@@ -52,7 +52,8 @@ The sidebar shows whether the browser can reach the backend. If it can't, check 
 
 - **The pipeline** explains the system in pictures: the steps from a brief to a decision (each links to its explanation; dashed steps are optional, a hand marks your decisions), the agents and what each reads and writes, the Chief of Staff's five decisions, a matrix of which step reads and writes each part of the shared state, a worked example of the critique, where the facts come from (Azure OpenAI against Tavily, as measured), where your judgement matters, the stack layer by layer, and your path through the app. Its numbers (the approval score, the rounds, the word limits) come from the backend (`GET /pipeline`), so it says what the code does.
 - **Show the diagrams** opens Mermaid drawings of the real LangGraph graph (from the compiled graph), the data flow from your brief to the memo, and the routes the Chief of Staff's decisions take, with their source to copy. Mermaid is loaded only then, draws one diagram at a time, and takes the page's colours, drawing again when the colour scheme changes.
-- **Monitor** is a dashboard of what the API has done since it started (`GET /monitoring`), refreshed every five seconds while it is open: totals (averaged over the evaluations that finished), the average time, calls and tokens of each step, the latest evaluations, and a log you can filter to warnings and errors. Pause stops the refresh.
+- **Monitor** is a dashboard of what the API has done since it started (`GET /monitoring`), refreshed every five seconds while it is open and the page is shown: whether a warning or error was logged in the last 15 minutes (**Show them** filters the log to them) and how many evaluations are running; totals with the error rates, the median and 95th-percentile time to a decision, and calls and tokens averaged over the evaluations that finished; each step's median time as a bar, with a tick at its 95th percentile; the latest evaluations; and a log you can filter, where a warning or error names its request. It asks once at a time and gives up on an answer after 10 s; while the API is not answering it keeps showing what it last heard, says why, and tries again after 10, 20, 40 and then 60 s (**Try now** asks at once). Pause stops the refresh.
+- **Errors name their request.** Every error from the API shows the request's ID, from its `X-Request-ID` header, such as "(request 3f2a9c1b7d4e5f60)": the API's log lines for that request carry the same ID.
 
 ## Design
 
