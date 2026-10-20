@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 import brief
 from brief import RESEARCH_OFF, BriefReview, Question, SearchPlan, load_templates, prepare_brief
+from guardrails import RULES, fence
 from llm import CHIEF, SPECIALIST
 from main import app
 from search import Hit
@@ -116,9 +117,10 @@ def test_a_template_says_what_to_look_up_and_what_to_ask(fake_llm, web, monkeypa
 
     prepare_brief("Price our tool.", None, template)
 
+    # The template's topics come last, then the rules on fenced text (guardrails.py).
     assert systems["SearchPlan"].endswith(
         "look up: what competitors charge and how they package it; what buyers like these pay for "
-        "similar tools; typical costs to serve and margins in the category."
+        "similar tools; typical costs to serve and margins in the category." + RULES
     )
     assert "make sure you know: the cost to serve one customer;" in systems["BriefReview"]
 
@@ -155,7 +157,10 @@ def test_the_api_prepares_a_brief_at_the_chosen_efforts(fake_llm, web):
     assert body["questions"][0]["suggestions"] == ["Under $15k", "$15k-$50k", "Over $50k"]
     assert body["research_note"] is None
     assert fake_llm.efforts == [(SPECIALIST, "low"), (CHIEF, "high")]
-    assert "Evaluate a scheduling assistant.\n\nWhat the founder told us:\nConstraints: Under $15k" in dict(fake_llm.brief_prompts)["search"]
+    assert (
+        f"{fence('Evaluate a scheduling assistant.', 'founder')}\n\nWhat the founder told us:\n"
+        f"{fence('Constraints: Under $15k', 'founder')}"
+    ) in dict(fake_llm.brief_prompts)["search"]
 
 
 def test_the_api_refuses_what_it_cannot_prepare(fake_llm):

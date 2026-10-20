@@ -117,6 +117,11 @@ export const JUDGEMENT: { title: string; why: string; where: string }[] = [
     where: "Reports, Open PDF",
   },
   {
+    title: "Text that tried to instruct the team",
+    why: "The agents read your text and every web page as material, never as orders, and a notice names any that tried to give them instructions. Check what it touched: a page that tries this may also be lying.",
+    where: "The brief's review, the result, the PDF's changes",
+  },
+  {
     title: "What you send to the web",
     why: "Research sends your brief's searches to Bing or Tavily, outside your Azure boundary. Keep patient data and confidential numbers out of the brief.",
     where: "The sidebar's Web research",
@@ -189,8 +194,8 @@ export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: str
   {
     layer: "Security",
     icon: "shield",
-    tools: ["API key, held by the app's server", "Rate and size limits", "A cap on runs", "Security headers"],
-    does: "Only callers with the key reach the API, and the browser never holds it; no caller can exhaust the API or the model.",
+    tools: ["API key, held by the app's server", "Rate and size limits", "A cap on runs", "Security headers", "Prompt guardrails"],
+    does: "Only callers with the key reach the API, and the browser never holds it; no caller can exhaust the API or the model; your text and the web's are read as material, never obeyed.",
   },
   {
     layer: "Observability",

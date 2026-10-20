@@ -33,6 +33,23 @@ class LLMReplyError(Exception):
 # What an LLM call raises when it still fails after the client's own retries.
 LLM_ERRORS = (openai.OpenAIError, LLMReplyError)
 
+
+def failure(error: Exception) -> str:
+    """What to tell the founder when a model call failed. Azure's own content
+    filter refuses a prompt it reads as harmful or as a jailbreak: that is
+    text for the founder to change, not a fault to retry."""
+    if isinstance(error, openai.BadRequestError) and error.code == "content_filter":
+        body = error.body if isinstance(error.body, dict) else {}
+        results = (body.get("innererror") or {}).get("content_filter_result") or {}
+        flagged = [
+            name.replace("_", " ") for name, result in results.items()
+            if isinstance(result, dict) and (result.get("filtered") or result.get("detected"))
+        ]
+        why = f" ({', '.join(flagged)})" if flagged else ""
+        return (f"Azure OpenAI's content filter refused the request{why}: it read part of it as harmful or as "
+                "an attempt to manipulate the model. Take that part out of the brief and try again.")
+    return f"The LLM call failed: {error}"
+
 # The roles a model is asked for: the specialists, including their critiques of
 # each other, and the Chief of Staff (planning, review, resolve and synthesis).
 SPECIALIST = "specialist"

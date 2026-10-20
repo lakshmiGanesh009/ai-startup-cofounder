@@ -34,6 +34,7 @@ from state import (
     Conflict,
     DeepResearch,
     DelegationPlan,
+    Flag,
     NodeMetric,
     RequestContext,
     Resolution,
@@ -59,6 +60,7 @@ _CHECKPOINT_TYPES = [
         DeepResearch,
         CompanyProfile,
         Source,
+        Flag,
     )
 ]
 # How a session's state is written and read back, wherever it is kept.

@@ -46,6 +46,7 @@ from llm import (
     SPECIALIST,
     Effort,
     LLMNotConfigured,
+    failure,
     default_effort,
     reasoning,
     takes_reasoning_effort,
@@ -53,6 +54,7 @@ from llm import (
 from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, Run, monitor
 from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session, configure_logging
 from persistence import open_storage
+from guardrails import log_flags, scan, scan_context
 from progress import summarize
 from proposal import Proposal
 from report_pdf import render_pdf
@@ -75,7 +77,7 @@ from security import (
     check_context,
     check_sections,
 )
-from state import DeepResearch, NodeMetric, RequestContext, Resolution, ReviewResult
+from state import DeepResearch, Flag, NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
@@ -107,7 +109,7 @@ async def lifespan(app: FastAPI):
         monitor.preload(*await run_in_threadpool(storage.archive.load, MAX_RUNS, MAX_EVENTS))
     access = "callers need its key" if API_KEY else "open to anyone who can reach it (no API_KEY)"
     monitor.event("system", "api", f"The API started, keeping sessions and reports in {storage.where}; {access}.")
-    logger.info("Sessions and reports are kept in %s; the API is %s.", storage.where, access)
+    logger.info("Sessions and reports are kept in %s; %s.", storage.where, access)
     yield
     await storage.close()
 
@@ -184,6 +186,11 @@ class EvaluateResponse(BaseModel):
     metrics: dict[str, NodeMetric]
     final_strategy: str
     research: DeepResearch | None = Field(None, description="The session's deep research, if any.")
+    guardrails: list[Flag] = Field(
+        default_factory=list,
+        description="Text that tried to instruct the agents, in the request or in the session's research: "
+        "cut out of what the agents read.",
+    )
 
 
 @app.get("/health")
@@ -327,7 +334,7 @@ async def prepare(request: PrepareRequest):
     except LLM_ERRORS as error:
         monitor.count("briefs", ok=False)
         logger.warning("Preparing a brief failed on an LLM call: %s", error)
-        raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
+        raise HTTPException(status_code=502, detail=failure(error)) from error
     monitor.count("briefs")
     facts = len(prepared.research.findings) if prepared.research else 0
     by = f" with {prepared.provider}" if prepared.provider else ""
@@ -339,22 +346,27 @@ async def prepare(request: PrepareRequest):
     return prepared
 
 
-def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
-    """The session, the graph's input and its config for one request."""
+def _start(request: EvaluateRequest) -> tuple[str, dict, dict, list[Flag]]:
+    """The session, the graph's input and its config for one request, and what
+    in the request tried to instruct the agents (guardrails.py)."""
     session_id = request.session_id or str(uuid.uuid4())
     bind_session(session_id)
+    flags = log_flags(
+        scan(request.prompt, "your follow-up" if request.session_id else "your brief") + scan_context(request.context)
+    )
     use = providers.chosen(request.research_provider)
     state = {"request": request.prompt, "deep": request.deep_research and use is not None}
     if use:
         state["research_provider"] = use
     if request.context:
         state["context"] = request.context
-    return session_id, state, {"configurable": {"thread_id": session_id}}
+    return session_id, state, {"configurable": {"thread_id": session_id}}, flags
 
 
-async def _finish(session_id: str, result: dict) -> EvaluateResponse:
+async def _finish(session_id: str, result: dict, flags: list[Flag]) -> EvaluateResponse:
     """Record the session's report and answer with its results."""
     await run_in_threadpool(store.record, session_id, SessionResults.from_state(result))
+    deep = result.get("deep_research")
     return EvaluateResponse(
         session_id=session_id,
         objective=result["plan"].objective,
@@ -364,7 +376,8 @@ async def _finish(session_id: str, result: dict) -> EvaluateResponse:
         resolutions=result.get("resolutions", []),
         metrics=result.get("metrics", {}),
         final_strategy=result["final_strategy"],
-        research=result.get("deep_research"),
+        research=deep,
+        guardrails=[*flags, *(deep.flags if deep else [])],
     )
 
 
@@ -405,7 +418,7 @@ async def evaluate(request: EvaluateRequest):
     Missing credentials return 503. An LLM call that still fails after its
     retries returns 502, so a provider problem never shows up as a 500.
     """
-    session_id, state, config = _start(request)
+    session_id, state, config, flags = _start(request)
     started = time.perf_counter()
     monitor.begin()
     try:
@@ -414,15 +427,15 @@ async def evaluate(request: EvaluateRequest):
         # The threads inherit the request's reasoning efforts.
         with reasoning(**_efforts(request.reasoning)):
             result = await graph.ainvoke(state, config)
-        response = await _finish(session_id, result)
+        response = await _finish(session_id, result, flags)
     except LLMNotConfigured as error:
         monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
         _record(request, session_id, started, error=str(error))
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LLM_ERRORS as error:
         logger.warning("Evaluation failed on an LLM call: %s", error)
-        _record(request, session_id, started, error=f"The LLM call failed: {error}")
-        raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
+        _record(request, session_id, started, error=failure(error))
+        raise HTTPException(status_code=502, detail=failure(error)) from error
     except BaseException:  # anything else, a cancellation too: recorded, then raised (an error becomes a 500)
         _record(request, session_id, started, error="The evaluation failed unexpectedly.")
         raise
@@ -445,7 +458,7 @@ async def evaluate_stream(request: EvaluateRequest):
     event (`status` 503 or 502, as /evaluate would answer, and `detail`), since
     the response has already begun.
     """
-    session_id, state, config = _start(request)
+    session_id, state, config, flags = _start(request)
 
     async def events():
         began = time.perf_counter()
@@ -469,7 +482,7 @@ async def evaluate_stream(request: EvaluateRequest):
                         summary = summarize(node, task.get("result"), runs[node], given.get(node))
                         monitor.event("done", node, summary["summary"], session_id)
                         yield _event("done", {"node": node, "at": at(), **summary})
-            response = await _finish(session_id, (await graph.aget_state(config)).values)
+            response = await _finish(session_id, (await graph.aget_state(config)).values, flags)
         except LLMNotConfigured as error:
             monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
             _record(request, session_id, began, error=str(error))
@@ -477,8 +490,8 @@ async def evaluate_stream(request: EvaluateRequest):
             return
         except LLM_ERRORS as error:
             logger.warning("Evaluation failed on an LLM call: %s", error)
-            _record(request, session_id, began, error=f"The LLM call failed: {error}")
-            yield _event("error", {"status": 502, "detail": f"The LLM call failed: {error}"})
+            _record(request, session_id, began, error=failure(error))
+            yield _event("error", {"status": 502, "detail": failure(error)})
             return
         except Exception:  # the status is already sent, so say what happened instead
             logger.exception("Evaluation failed")
@@ -532,6 +545,11 @@ class ProposalResult(BaseModel):
     report: Report
     failed: list[str] = Field(
         description="Titles of the parts that could not be revised; they keep their text."
+    )
+    guardrails: list[Flag] = Field(
+        default_factory=list,
+        description="Text in the requested change or the edited report that tried to instruct the agents: "
+        "cut out of what the agents read.",
     )
 
 
@@ -589,6 +607,9 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
     """Run the proposal writer off the event loop and save what it wrote."""
     started = time.perf_counter()
     doing = "Revising" if report.proposal else "Writing"
+    # What the founder wrote that the writers read: the change asked for, and the edits.
+    edits = "\n\n".join(section.body for section in report.sections) if report.edited else ""
+    flags = log_flags(scan(instruction, "your requested change") + scan(edits, "your edits to the report"))
     with reasoning(**_efforts(choice)):
         try:
             proposal, failed = await run_in_threadpool(write_proposal, report, instruction, part)
@@ -613,7 +634,7 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         + (f"; {len(failed)} parts kept their text." if failed else "."),
         report.session_id,
     )
-    return ProposalResult(report=saved, failed=failed)
+    return ProposalResult(report=saved, failed=failed, guardrails=flags)
 
 
 @app.post("/reports/{session_id}/proposal", response_model=ProposalResult)

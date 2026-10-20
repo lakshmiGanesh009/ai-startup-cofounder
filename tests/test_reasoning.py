@@ -2,6 +2,7 @@
 constraints in front of it."""
 
 from graph import build_graph
+from guardrails import unfenced
 from llm import CHIEF, SPECIALIST
 from state import (
     Conflict,
@@ -66,7 +67,7 @@ def test_the_chief_of_staff_sees_the_founders_request_and_constraints(fake_llm, 
     result = build_graph().invoke(REQUEST, thread)
 
     for prompt in [*prompts["review"], *prompts["resolve"], result["final_strategy"]]:
-        assert "Founder request:\nEvaluate an AI scheduling tool." in prompt
+        assert "Founder request:\nEvaluate an AI scheduling tool." in unfenced(prompt)
         assert "Constraints: Under $15k to launch" in prompt
     # Conflicts are decided with the reports themselves in view, not just the
     # one-line summary of each clash.

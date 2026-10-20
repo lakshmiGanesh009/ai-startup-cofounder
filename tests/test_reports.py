@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 
+from guardrails import fence
 from llm import CHIEF, SPECIALIST
 from main import app
 from proposal import investment_metrics
@@ -120,7 +121,7 @@ def test_the_agents_write_the_proposal_from_the_report_as_it_stands(fake_llm):
     # Every part is written from the report as edited, with the venture as background.
     for (prompt,) in prompts.values():
         assert "Charge $149 a month." in prompt
-        assert "Startup request:\nEvaluate an AI scheduling tool." in prompt
+        assert f"Startup request:\n{fence('Evaluate an AI scheduling tool.', 'founder')}" in prompt
     # Finance works from the market and technical parts; the Chief of Staff from
     # all four and the metrics calculated from Finance's figures.
     assert "## Market & Marketing Strategy" in prompts["financial"][0]
@@ -165,7 +166,7 @@ def test_revising_a_part_brings_the_parts_built_on_it_into_line(fake_llm):
     assert response.status_code == 200
     prompts = fake_llm.part_prompts
     assert set(prompts) == {"market", "financial", "executive"}
-    assert "The founder asks for this change:\nAdd a referral channel." in prompts["market"][0]
+    assert f"The founder asks for this change:\n{fence('Add a referral channel.', 'founder')}" in prompts["market"][0]
     assert "Your part as it stands:" in prompts["market"][0]
     assert "Add a referral channel." not in prompts["financial"][0]
     assert "These parts were just revised: Market & Marketing Strategy." in prompts["financial"][0]

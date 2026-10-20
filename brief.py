@@ -13,16 +13,18 @@ travel with the request in its context, so every agent works from them.
 import json
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
 
 from agents.chief_of_staff import structured_invoke
+from guardrails import RULES, context_for_prompt, fence, log_flags, scan, scan_context
 from llm import CHIEF, SPECIALIST
 from metrics import track
 from providers import NAMES, chosen, search_all
 from search import Hit
-from state import Finding, RequestContext, Research, Source
+from state import Finding, Flag, RequestContext, Research, Source
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 
@@ -95,6 +97,10 @@ class PreparedBrief(BaseModel):
     research: Research | None = Field(description="The facts found and their sources; None without any.")
     research_note: str | None = Field(description="Why there is no research, when there is none.")
     questions: list[Question]
+    guardrails: list[Flag] = Field(
+        default_factory=list,
+        description="Text that tried to instruct the agents, in the brief or on a web page: cut out of what they read.",
+    )
 
 
 _SEARCH_PROMPT = (
@@ -131,15 +137,16 @@ _REVIEW_PROMPT = (
 
 
 def _brief_text(prompt: str, context: RequestContext | None) -> str:
-    details = context.as_prompt() if context else ""
-    return f"The founder's brief:\n{prompt}" + (f"\n\nWhat the founder told us:\n{details}" if details else "")
+    details = context_for_prompt(context)
+    return f"The founder's brief:\n{fence(prompt, 'founder')}" + (f"\n\nWhat the founder told us:\n{details}" if details else "")
 
 
 def _results_text(hits: list[Hit]) -> str:
     if not hits:
         return "The web search found no results."
-    return "Search results:\n\n" + "\n\n".join(
-        f"[{number}] {hit.title} ({hit.url})\n{hit.content}" for number, hit in enumerate(hits, start=1)
+    return "Search results:\n\n" + fence(
+        "\n\n".join(f"[{number}] {hit.title} ({hit.url})\n{hit.content}" for number, hit in enumerate(hits, start=1)),
+        "web search results",
     )
 
 
@@ -171,6 +178,7 @@ def prepare_brief(
     decision, and its questions."""
     metrics: dict = {}
     brief = _brief_text(prompt, context)
+    flags = log_flags(scan(prompt, "your brief") + scan_context(context))
     queries: list[str] = []
     hits: list[Hit] = []
     note: str | None = RESEARCH_OFF
@@ -179,10 +187,14 @@ def prepare_brief(
         topics = f"\n\nFor this kind of decision, look up: {'; '.join(template.research)}." if template and template.research else ""
         with track("research", metrics) as tracker:
             plan = structured_invoke(
-                SearchPlan, [SystemMessage(_SEARCH_PROMPT + topics), HumanMessage(brief)], tracker, SPECIALIST
+                SearchPlan, [SystemMessage(_SEARCH_PROMPT + topics + RULES), HumanMessage(brief)], tracker, SPECIALIST
             )
         queries = list(dict.fromkeys(query.strip() for query in plan.queries if query.strip()))[:MAX_QUERIES]
         hits, note = search_all(queries, use)
+        flags += log_flags([
+            flag for hit in hits
+            for flag in scan(f"{hit.title}\n{hit.content}", f"a web page ({urlsplit(hit.url).netloc or hit.url})", "web")
+        ])
         if not hits and not note:
             note = "The web search found nothing for this brief."
 
@@ -190,7 +202,7 @@ def prepare_brief(
     with track("brief", metrics) as tracker:
         review = structured_invoke(
             BriefReview,
-            [SystemMessage(_REVIEW_PROMPT + must_know), HumanMessage(f"{brief}\n\n{_results_text(hits)}")],
+            [SystemMessage(_REVIEW_PROMPT + must_know + RULES), HumanMessage(f"{brief}\n\n{_results_text(hits)}")],
             tracker,
             CHIEF,
         )
@@ -204,4 +216,5 @@ def prepare_brief(
         research=research,
         research_note=None if research else note,
         questions=questions,
+        guardrails=flags,
     )

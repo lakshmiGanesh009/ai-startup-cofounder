@@ -16,6 +16,7 @@ from langgraph.types import Overwrite
 from agents.roles import SPECIALISTS
 from agents.specialist import GAP_PREFIX
 from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
+from guardrails import RULES, context_for_prompt, fence, unfenced
 from llm import CHIEF, LLM_ERRORS, SPECIALIST, LLMReplyError, get_llm
 from metrics import track
 from state import (
@@ -128,26 +129,26 @@ _PLANNER_PROMPT = (
 
 
 def _founder_brief(state: WorkflowState) -> str:
-    """The request and what the founder told us, as every Chief of Staff call sees it."""
+    """The request and what the founder told us, as every Chief of Staff call
+    sees it: fenced as the founder's (guardrails.py)."""
     venture = state.get("venture") or state["request"]
-    brief = f"Founder request:\n{venture}"
+    brief = f"Founder request:\n{fence(venture, 'founder')}"
     if state["request"] != venture:
-        brief += f"\n\nFollow-up request:\n{state['request']}"
-    context = state.get("context")
-    if context and context.as_prompt():
-        brief += f"\n\nWhat the founder told us:\n{context.as_prompt()}"
+        brief += f"\n\nFollow-up request:\n{fence(state['request'], 'founder')}"
+    context_text = context_for_prompt(state.get("context"))
+    if context_text:
+        brief += f"\n\nWhat the founder told us:\n{context_text}"
     return brief
 
 
 def _build_prompt(state: WorkflowState, prior: dict[str, str], venture: str) -> list:
     request = state["request"]
-    context = state.get("context")
-    context_text = context.as_prompt() if context else ""
+    context_text = context_for_prompt(state.get("context"))
 
     if prior:
-        human = f"Original request:\n{venture}\n\nFollow-up request:\n{request}"
+        human = f"Original request:\n{fence(venture, 'founder')}\n\nFollow-up request:\n{fence(request, 'founder')}"
     else:
-        human = f"Founder request:\n{request}"
+        human = f"Founder request:\n{fence(request, 'founder')}"
     if context_text:
         human += f"\n\n{context_text}"
     if prior:
@@ -160,7 +161,7 @@ def _build_prompt(state: WorkflowState, prior: dict[str, str], venture: str) -> 
             "to a follow-up."
         )
 
-    return [SystemMessage(_PLANNER_PROMPT), HumanMessage(human)]
+    return [SystemMessage(_PLANNER_PROMPT + RULES), HumanMessage(human)]
 
 
 # Fields from a previous request that must not leak into a new one.
@@ -248,9 +249,9 @@ def review_node(state: WorkflowState) -> dict:
         human = (
             f"{_founder_brief(state)}\n\n"
             f"Task given to the {name} specialist:\n{assignments.get(name, state['request'])}"
-            f"\n\nReport:\n{report}"
+            f"\n\nReport:\n{fence(report, f'the {name} report')}"
         )
-        prompts[name] = [SystemMessage(_REVIEW_PROMPT), HumanMessage(human)]
+        prompts[name] = [SystemMessage(_REVIEW_PROMPT + RULES), HumanMessage(human)]
 
     metrics: dict = {}
     with track("review", metrics) as t:
@@ -318,10 +319,10 @@ def critique_node(state: WorkflowState) -> dict:
         if not others:
             continue
         human = (
-            f"You are the {name} specialist. Your report:\n{analyses[name]}\n\n"
+            f"You are the {name} specialist. Your report:\n{fence(analyses[name], 'your report')}\n\n"
             f"The other reports:\n\n{_reports_text(others)}"
         )
-        prompts[name] = [SystemMessage(_CRITIQUE_PROMPT), HumanMessage(human)]
+        prompts[name] = [SystemMessage(_CRITIQUE_PROMPT + RULES), HumanMessage(human)]
 
     metrics: dict = {}
     with track("critique", metrics) as t:
@@ -367,7 +368,7 @@ def resolve_node(state: WorkflowState) -> dict:
                 "Conflicts raised:\n"
                 + "\n".join(f"- {c.raised_by} about {c.about}: {c.issue}" for c in conflicts)
             )
-            messages = [SystemMessage(_RESOLVE_PROMPT), HumanMessage(human)]
+            messages = [SystemMessage(_RESOLVE_PROMPT + RULES), HumanMessage(human)]
             decided: Resolutions | None = _attempt(
                 lambda: structured_invoke(Resolutions, messages, t), "Resolving the conflicts"
             )
@@ -411,7 +412,9 @@ _SYNTHESIS_PROMPT = (
 
 
 def _reports_text(analyses: dict[str, str]) -> str:
-    return "\n\n".join(f"## {name}\n{report}" for name, report in analyses.items())
+    """The reports as another agent reads them: written from the founder's and
+    the web's text, so fenced like it."""
+    return "\n\n".join(f"## {name}\n{fence(report, f'the {name} report')}" for name, report in analyses.items())
 
 
 def _decisions_text(resolutions: list[Resolution]) -> str:
@@ -434,6 +437,6 @@ def synthesis_node(state: WorkflowState) -> dict:
         human += f"\n\nDisagreements you settled:\n{_decisions_text(resolutions)}"
     metrics: dict = {}
     with track("synthesis", metrics) as t:
-        reply = get_llm(CHIEF).invoke([SystemMessage(_SYNTHESIS_PROMPT), HumanMessage(human)])
+        reply = get_llm(CHIEF).invoke([SystemMessage(_SYNTHESIS_PROMPT + RULES), HumanMessage(human)])
         t.record(reply)
-    return {"final_strategy": reply.content, "metrics": metrics}
+    return {"final_strategy": unfenced(reply.content), "metrics": metrics}

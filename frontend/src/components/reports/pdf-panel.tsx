@@ -7,12 +7,21 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Button, buttonClass } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { DownloadIcon } from "@/components/ui/icons";
 import { Notice, type Tone } from "@/components/ui/notice";
 import { Progress } from "@/components/ui/progress";
-import { ApiError, type PartKey, type Reasoning, type Report, reportPdf, reviseProposal } from "@/lib/api";
+import {
+  ApiError,
+  type GuardrailFlag,
+  type PartKey,
+  type Reasoning,
+  type Report,
+  reportPdf,
+  reviseProposal,
+} from "@/lib/api";
 import { PART_AGENTS, PART_TITLES } from "@/lib/proposal";
 import { proposalWait } from "@/lib/team";
 
@@ -38,6 +47,7 @@ export function PdfPanel({
   const [instruction, setInstruction] = useState("");
   const [revising, setRevising] = useState(false);
   const [message, setMessage] = useState<Message | null>(null);
+  const [flags, setFlags] = useState<GuardrailFlag[]>([]);
   const prompt = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -69,6 +79,7 @@ export function PdfPanel({
       return;
     }
     setMessage(null);
+    setFlags([]);
     setRevising(true);
     try {
       const result = await reviseProposal(
@@ -79,6 +90,7 @@ export function PdfPanel({
         reasoning,
       );
       setInstruction("");
+      setFlags(result.guardrails ?? []);
       setMessage(
         result.failed.length
           ? { tone: "warn", text: `Could not revise: ${result.failed.join(", ")}. They keep their text.` }
@@ -167,6 +179,7 @@ export function PdfPanel({
           />
         )}
         {message && <Notice tone={message.tone}>{message.text}</Notice>}
+        <GuardrailNotice flags={flags} />
         {current && "url" in current && (
           <a
             href={current.url}

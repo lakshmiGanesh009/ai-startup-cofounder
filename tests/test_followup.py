@@ -48,6 +48,7 @@ def test_follow_up_builds_on_the_original_request_and_report(fake_llm, thread):
 
     # The fake model echoes the prompt, so the report shows what finance was given.
     refined = second["analyses"]["finance"]
+    # The report shows the prompt without its fences (guardrails.unfenced).
     assert "Startup request:\nEvaluate an AI tool." in refined
     assert "Follow-up request:\nRefine the pricing strategy" in refined
     assert first["analyses"]["finance"] in refined

@@ -24,6 +24,7 @@ from langchain_core.runnables.config import ContextThreadPoolExecutor
 
 from agents.chief_of_staff import structured_invoke
 from agents.roles import ROLES
+from guardrails import RULES, fence
 from llm import CHIEF, LLM_ERRORS, SPECIALIST
 from metrics import track
 from proposal import (
@@ -200,17 +201,18 @@ _EXECUTIVE = (
 
 def _system(part: str) -> str:
     if part == "executive":
-        return _EXECUTIVE
-    return f"{ROLES[OWNERS[part]].brief} {_PARTS[part]}\n{_STYLE}"
+        return _EXECUTIVE + RULES
+    return f"{ROLES[OWNERS[part]].brief} {_PARTS[part]}\n{_STYLE}{RULES}"
 
 
 def _background(report: Report) -> str:
-    """The venture and the team's report, as every writer sees them."""
-    text = f"Startup request:\n{report.title}\n\nObjective: {report.objective}"
+    """The venture and the team's report, as every writer sees them: fenced, as
+    the founder wrote or edited them (guardrails.py)."""
+    text = f"Startup request:\n{fence(report.title, 'founder')}\n\nObjective: {report.objective}"
     if report.context:
-        text += f"\n\n{report.context}"
+        text += f"\n\n{fence(report.context, 'founder')}"
     sections = "\n\n".join(f"## {s.title}\n{s.body}" for s in report.sections)
-    return f"{text}\n\nThe team's report:\n\n{sections}"
+    return f"{text}\n\nThe team's report:\n\n{fence(sections, 'the team report')}"
 
 
 def _money(value: float) -> str:
@@ -300,7 +302,7 @@ def _prompt(part: str, background: str, parts: dict, own, instruction: str,
     if own:
         human += f"\n\nYour part as it stands:\n{own.model_dump_json(indent=1)}"
     if instruction:
-        human += (f"\n\nThe founder asks for this change:\n{instruction}\n\nApply it "
+        human += (f"\n\nThe founder asks for this change:\n{fence(instruction, 'founder')}\n\nApply it "
                   "wherever it concerns your part, and keep the rest as it stands.")
     if changed:
         human += (f"\n\nThese parts were just revised: {', '.join(TITLES[k] for k in changed)}. "

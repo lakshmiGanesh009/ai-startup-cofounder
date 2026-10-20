@@ -7,6 +7,7 @@
 import { useId, useState } from "react";
 
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
+import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Button, Kbd } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
@@ -120,6 +121,7 @@ export function BriefReview({
           Edit the brief
         </Button>
       </header>
+      <GuardrailNotice flags={prepared.guardrails} className="mt-6" />
 
       <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 space-y-12">

@@ -38,6 +38,10 @@ export type CompanyProfile = {
   sources: number[];
 };
 
+// Text that tried to instruct the agents (guardrails.py): the founder's or a web
+// page's. It was cut out of what the agents read, and the founder is told.
+export type GuardrailFlag = { origin: "founder" | "web"; source: string; kind: string; excerpt: string };
+
 // The session's deep research (deep_research.py): a report per specialist's
 // area, the competitors, and every source, numbered once from 1 (the brief's
 // research keeps its numbers); `failed` names what could not be researched.
@@ -50,6 +54,7 @@ export type DeepResearch = {
   searches: number;
   providers: string[];
   failed: string[];
+  flags?: GuardrailFlag[];
 };
 
 export type RequestContext = {
@@ -91,6 +96,7 @@ export type EvaluateResponse = {
   metrics: Record<string, NodeMetric>;
   final_strategy: string;
   research?: DeepResearch | null;
+  guardrails?: GuardrailFlag[];
 };
 
 export type ReasoningSettings = {
@@ -151,6 +157,7 @@ export type PreparedBrief = {
   research: Research | null;
   research_note: string | null;
   questions: Question[];
+  guardrails?: GuardrailFlag[];
 };
 
 export type PrepareRequest = {
@@ -552,7 +559,7 @@ export type Report = {
   checks: string[];
 };
 
-export type ProposalResult = { report: Report; failed: string[] };
+export type ProposalResult = { report: Report; failed: string[]; guardrails?: GuardrailFlag[] };
 
 function send<T>(method: "POST" | "PUT", path: string, body?: unknown): Promise<T> {
   return request(path, {

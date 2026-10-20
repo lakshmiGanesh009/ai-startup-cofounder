@@ -65,7 +65,7 @@ describe("the How it works page", () => {
     expect(screen.getByRole("region", { name: "How the specialists check each other" })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Where the facts come from" }).textContent).toContain("up to 3 competitors");
     const judgement = screen.getByRole("region", { name: "Where your judgement matters" });
-    expect(within(judgement).getAllByRole("listitem")).toHaveLength(7);
+    expect(within(judgement).getAllByRole("listitem")).toHaveLength(8);
     expect(screen.getByRole("region", { name: "What it is built with, and what each part does" }).textContent).toContain(
       "LangGraph StateGraph",
     );

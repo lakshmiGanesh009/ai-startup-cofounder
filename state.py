@@ -99,6 +99,16 @@ class Resolutions(BaseModel):
     )
 
 
+class Flag(BaseModel):
+    """A sign that text tried to instruct the agents (guardrails.py). It was
+    cut out of what the agents read; the founder is told."""
+
+    origin: Literal["founder", "web"] = Field(description="Whose text it was: the founder's, or the web's.")
+    source: str = Field(description="Where it was: the brief, an answer, a web page.")
+    kind: str = Field(description="What it tried to do.")
+    excerpt: str = Field(description="The words that gave it away, at most 80 characters.")
+
+
 class Source(BaseModel):
     """A web page the research drew on."""
 
@@ -176,6 +186,8 @@ class DeepResearch(BaseModel):
     providers: list[str] = Field(default_factory=list)
     # What could not be researched: specialists' names and competitors' names.
     failed: list[str] = Field(default_factory=list)
+    # Pages that tried to instruct the agents (guardrails.py): cut out of what they read.
+    flags: list[Flag] = Field(default_factory=list)
 
     def cited_sources(self, text: str) -> str:
         """The sources the [n] in `text` refer to, one per line."""

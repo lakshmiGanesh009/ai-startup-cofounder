@@ -155,6 +155,7 @@ class Totals(BaseModel):
     requests: int = 0
     server_errors: int = 0
     refused: int = 0
+    flagged: int = 0
     retries: int = 0
     warnings: int = 0
     errors: int = 0
@@ -215,6 +216,8 @@ class Metrics:
         self.log_events = counter("log_events", "Warnings and errors logged.", ["kind"])
         self.refused = counter("refused_requests", "Requests refused: no key, too large, too many, or the team busy.",
                                ["reason"])
+        self.flagged = counter("guardrail_flags", "Text that tried to instruct the agents, cut out of what they read.",
+                               ["origin", "kind"])
 
 
 class Monitor:
@@ -271,6 +274,12 @@ class Monitor:
         with self._lock:
             self._totals.refused += 1
             self.metrics.refused.labels(reason).inc()
+
+    def flagged(self, origin: str, kind: str) -> None:
+        """Count text that tried to instruct the agents (guardrails.py)."""
+        with self._lock:
+            self._totals.flagged += 1
+            self.metrics.flagged.labels(origin, kind).inc()
 
     def retried(self) -> None:
         """Count a model call the client retried."""

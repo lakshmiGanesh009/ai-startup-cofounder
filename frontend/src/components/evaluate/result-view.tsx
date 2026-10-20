@@ -3,6 +3,7 @@
 // the plan, the reviews, the conflicts and what the request cost.
 
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
+import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Markdown } from "@/components/markdown";
 import { Badge, Score } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
@@ -416,6 +417,7 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
         <p className="mt-3 text-sm leading-relaxed text-ink-3">
           <span className="text-ink-2">Your brief:</span> {run.prompt}
         </p>
+        <GuardrailNotice flags={result.guardrails} className="mt-5" />
       </header>
       <div className="mt-10 grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_16rem]">
         <div className="min-w-0">

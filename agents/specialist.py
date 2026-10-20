@@ -9,6 +9,7 @@ import logging
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from agents.roles import COMPANY_READERS, Role
+from guardrails import context_for_prompt, fence, unfenced
 from llm import get_llm
 from metrics import track
 from state import WorkflowState
@@ -23,12 +24,11 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     request = state["request"]
     venture = state.get("venture") or request
     task = state.get("assignments", {}).get(role.name)
-    context = state.get("context")
-    context_text = context.as_prompt() if context else ""
+    context_text = context_for_prompt(state.get("context"))
 
-    human = f"Startup request:\n{venture}"
+    human = f"Startup request:\n{fence(venture, 'founder')}"
     if venture != request:
-        human += f"\n\nFollow-up request:\n{request}"
+        human += f"\n\nFollow-up request:\n{fence(request, 'founder')}"
     if task:
         human += f"\n\nYour assignment from the Chief of Staff:\n{task}"
     if context_text:
@@ -36,7 +36,7 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     deep = state.get("deep_research")
     research = deep.for_specialist(role.name, role.name in COMPANY_READERS) if deep else ""
     if research:
-        human += f"\n\n{research}"
+        human += f"\n\n{fence(research, 'web research')}"
 
     feedback = state.get("revisions", {}).get(role.name) or state.get(
         "critique_revisions", {}
@@ -77,7 +77,7 @@ def specialist_node(role: Role):
             try:
                 reply = get_llm().invoke(_build_prompt(role, state))
                 t.record(reply)
-                analysis = reply.content
+                analysis = unfenced(reply.content)
             except Exception as error:  # a failed specialist must not sink the run
                 logger.warning("%s specialist failed: %s", role.name, error)
                 analysis = f"{GAP_PREFIX} The {role.name} analysis could not be produced."

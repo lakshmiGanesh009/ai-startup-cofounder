@@ -8,6 +8,8 @@ the brief plus the length limit for reports.
 
 from dataclasses import dataclass
 
+from guardrails import RULES
+
 # The specialists who read the deep research's competitor profiles (deep_research.py):
 # they price and position against those companies.
 COMPANY_READERS = ("marketing", "finance")
@@ -39,7 +41,7 @@ class Role:
 
     @property
     def system_prompt(self) -> str:
-        return f"{self.brief} {_BREVITY}"
+        return f"{self.brief} {_BREVITY}{RULES}"
 
 
 MARKETING = Role(
