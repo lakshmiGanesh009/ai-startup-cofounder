@@ -73,6 +73,7 @@ const KIND_TONE: Record<MonitorEvent["kind"], "neutral" | "primary" | "good" | "
   proposal: "primary",
   warning: "warn",
   error: "bad",
+  system: "neutral",
 };
 
 const FILTERS = {
@@ -465,7 +466,8 @@ export function MonitorView({ active }: { active: boolean }) {
     logRef.current?.focus();
   }
 
-  const quiet = data && !data.events.length && !data.runs.length;
+  // Nothing has run when the log holds no more than the API's own start.
+  const quiet = data && !data.runs.length && data.events.every((event) => event.kind === "system");
   return (
     <div className="space-y-10">
       <div className="space-y-4">
@@ -473,6 +475,7 @@ export function MonitorView({ active }: { active: boolean }) {
           <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-2">
             <PulseIcon className="size-4 text-primary" />
             {data ? `Since the API started at ${clock(data.started_at)}.` : trouble ? "" : "Asking the API…"}
+            {data?.kept_in === "postgres" && <span className="text-ink-3">History kept in PostgreSQL.</span>}
             {updated && (
               <span className={trouble ? "text-warn" : "text-ink-3"}>
                 Updated at {clock(updated)}
@@ -510,8 +513,11 @@ export function MonitorView({ active }: { active: boolean }) {
         <div className="rounded-lg border border-rule bg-surface p-6">
           <p className="font-serif text-xl">Nothing has run since the API started.</p>
           <p className="mt-1 text-sm text-ink-2">
-            Evaluate an idea, and each step, its time and its cost show up here as it happens. The monitor lives in the
-            API&apos;s memory, so a restart empties it; Prometheus can keep the history from <code>/metrics</code>.
+            Evaluate an idea, and each step, its time and its cost show up here as it happens.{" "}
+            {data?.kept_in === "postgres"
+              ? "The latest evaluations and the log are kept in PostgreSQL, so a restart keeps them; "
+              : "The monitor lives in the API's memory, so a restart empties it; "}
+            Prometheus can keep the counters from <code>/metrics</code>.
           </p>
           <ButtonLink href="/" variant="primary" className="mt-4">
             Evaluate an idea

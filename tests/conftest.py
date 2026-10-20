@@ -5,6 +5,16 @@
 graph and API tests are deterministic and need no credentials.
 """
 
+# ruff: noqa: E402
+# (the environment is set before the app's modules are imported)
+
+import os
+
+# The tests keep sessions and reports in memory, whatever .env says (config.py
+# reads it on import, so this comes first); test_persistence.py uses
+# TEST_DATABASE_URL.
+os.environ["DATABASE_URL"] = ""
+
 import time
 
 import httpx

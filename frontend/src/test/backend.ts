@@ -25,6 +25,7 @@ export const HEALTH: Health = {
     chief: "medium",
   },
   research: { providers: { azure: true, tavily: true }, default: "azure" },
+  storage: { kind: "postgres", ok: true },
 };
 
 export const SCENARIOS: Scenario[] = [
@@ -184,6 +185,7 @@ export const PIPELINE: Pipeline = {
 // running, a warning in the last 15 minutes, and a short log.
 export const MONITORING: Monitoring = {
   started_at: "2026-10-20T09:00:00Z",
+  kept_in: "postgres",
   health: { status: "warnings", warnings: 1, errors: 0, minutes: 15 },
   running: 1,
   totals: {

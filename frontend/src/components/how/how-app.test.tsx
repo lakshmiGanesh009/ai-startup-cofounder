@@ -160,6 +160,7 @@ describe("the Monitor", () => {
 
     const panel = screen.getByRole("tabpanel", { name: "Monitor" });
     const health = await within(panel).findByRole("status");
+    expect(within(panel).getByText("History kept in PostgreSQL.")).toBeTruthy();
     expect(health.textContent).toContain("Warnings1 warning in the last 15 minutes.");
     expect(health.textContent).toContain("1 evaluation running now");
     expect(within(panel).getByText("1 failed, 50%")).toBeTruthy();
@@ -316,13 +317,18 @@ describe("the Monitor", () => {
 
   test("before anything has run it says how to start, and a failure says why", async () => {
     const idle = { status: "healthy" as const, warnings: 0, errors: 0, minutes: 15 };
+    // Only the API's own start in the log: nothing has run yet.
+    const started = { ...MONITORING.events[0], kind: "system" as const, source: "api", message: "The API started." };
     fakeBackend({
-      "GET /monitoring": { body: { ...MONITORING, health: idle, running: 0, runs: [], events: [], nodes: [] } },
+      "GET /monitoring": {
+        body: { ...MONITORING, kept_in: "memory", health: idle, running: 0, runs: [], events: [started], nodes: [] },
+      },
     });
     const user = userEvent.setup();
     const { unmount } = renderPage();
     await user.click(await screen.findByRole("tab", { name: "Monitor" }));
     expect(await screen.findByText("Nothing has run since the API started.")).toBeTruthy();
+    expect(screen.getByText(/The monitor lives in the API's memory, so a restart empties it/)).toBeTruthy();
     expect(screen.getByRole("link", { name: /Evaluate an idea/ }).getAttribute("href")).toBe("/");
     const health = screen.getByRole("status");
     expect(health.textContent).toBe("HealthyNo warnings or errors in the last 15 minutes.Nothing running now");

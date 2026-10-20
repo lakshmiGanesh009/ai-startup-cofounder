@@ -7,14 +7,16 @@ section each. It can then be edited, turned into an investment proposal
 (agents/proposal_writer.py, proposal.py) or reset to the latest results, and
 report_pdf.py renders it as a PDF.
 
-Reports are kept in memory, like the sessions themselves, so they are lost when
-the API restarts. Every change to a report's content raises its version, and a
-change made from an older version is refused, so two editors cannot silently
-overwrite each other.
+Reports are kept in memory, or in PostgreSQL once the API has a database
+(persistence.py), so they survive a restart. Every change to a report's content
+raises its version, and a change made from an older version is refused, so two
+editors cannot silently overwrite each other.
 """
 
 import threading
+from collections.abc import Callable
 from datetime import datetime, timezone
+from typing import NamedTuple, Protocol
 
 from pydantic import BaseModel, computed_field
 
@@ -191,13 +193,85 @@ def _changed(report: Report, **updates) -> Report:
     )
 
 
-class ReportStore:
-    """Keeps each session's latest results and its report, in memory."""
+class Stored(NamedTuple):
+    """A session's latest results and its report, as kept."""
+
+    results: SessionResults
+    report: Report
+
+
+def summary(report: Report) -> ReportSummary:
+    return ReportSummary(
+        **report.model_dump(include={"session_id", "title", "version", "edited", "outdated", "updated_at"}),
+        has_proposal=report.proposal is not None,
+    )
+
+
+class ReportBackend(Protocol):
+    """Where the reports are kept. `update` reads a session's report, applies
+    `change` and writes the result as one step, so two changes cannot interleave;
+    if `change` raises, nothing is written."""
+
+    def get(self, session_id: str) -> Stored | None: ...
+
+    def update(self, session_id: str, change: Callable[[Stored | None], Stored]) -> Stored: ...
+
+    def summaries(self) -> list[ReportSummary]: ...
+
+
+class MemoryReports:
+    """The reports in this process's memory: lost when the API restarts."""
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._results: dict[str, SessionResults] = {}
-        self._reports: dict[str, Report] = {}
+        self._stored: dict[str, Stored] = {}
+
+    def get(self, session_id: str) -> Stored | None:
+        with self._lock:
+            return self._stored.get(session_id)
+
+    def update(self, session_id: str, change: Callable[[Stored | None], Stored]) -> Stored:
+        with self._lock:
+            stored = change(self._stored.get(session_id))
+            self._stored[session_id] = stored
+            return stored
+
+    def summaries(self) -> list[ReportSummary]:
+        with self._lock:
+            reports = sorted((each.report for each in self._stored.values()), key=lambda r: r.updated_at, reverse=True)
+        return [summary(report) for report in reports]
+
+
+def _from_results(session_id: str, results: SessionResults, previous: Report | None) -> Report:
+    return Report(
+        session_id=session_id,
+        title=results.venture,
+        objective=results.objective,
+        context=results.context,
+        sections=build_sections(results),
+        version=previous.version + 1 if previous else 1,
+        updated_at=_now(),
+    )
+
+
+def _at_version(stored: Stored | None, session_id: str, version: int) -> Stored:
+    """The session's report, if nobody has changed it since `version`."""
+    if stored is None:
+        raise ReportNotFound(session_id)
+    if stored.report.version != version:
+        raise ReportChanged(f"The report is at version {stored.report.version}, not {version}.")
+    return stored
+
+
+class ReportStore:
+    """Keeps each session's latest results and its report, in the backend it is
+    given: memory by default, PostgreSQL once the API has a database."""
+
+    def __init__(self, backend: ReportBackend | None = None):
+        self.backend: ReportBackend = backend or MemoryReports()
+
+    def use(self, backend: ReportBackend) -> None:
+        self.backend = backend
 
     def record(self, session_id: str, results: SessionResults) -> None:
         """Keep a session's latest results.
@@ -205,38 +279,33 @@ class ReportStore:
         A report nobody has touched is rebuilt from them. An edited one, or one
         with a proposal, is kept, so no work is lost, and marked outdated instead.
         """
-        with self._lock:
-            self._results[session_id] = results
-            report = self._reports.get(session_id)
+
+        def change(stored: Stored | None) -> Stored:
+            report = stored.report if stored else None
             if report and (report.edited or report.proposal):
-                self._reports[session_id] = report.model_copy(update={"outdated": True})
-            else:
-                self._reports[session_id] = self._from_results(session_id, report)
+                return Stored(results, report.model_copy(update={"outdated": True}))
+            return Stored(results, _from_results(session_id, results, report))
+
+        self.backend.update(session_id, change)
 
     def summaries(self) -> list[ReportSummary]:
         """Every report, the most recently changed first."""
-        with self._lock:
-            reports = sorted(self._reports.values(), key=lambda r: r.updated_at, reverse=True)
-        return [
-            ReportSummary(
-                **r.model_dump(
-                    exclude={"objective", "context", "sections", "proposal", "investment", "checks"}
-                ),
-                has_proposal=r.proposal is not None,
-            )
-            for r in reports
-        ]
+        return self.backend.summaries()
 
     def get(self, session_id: str) -> Report:
-        with self._lock:
-            return self._get(session_id)
+        stored = self.backend.get(session_id)
+        if stored is None:
+            raise ReportNotFound(session_id)
+        return stored.report
 
     def save(self, session_id: str, version: int, sections: list[ReportSection]) -> Report:
         """Replace the sections with edited ones, if nobody changed them since `version`."""
-        with self._lock:
-            report = self._current(session_id, version)
-            self._reports[session_id] = _changed(report, sections=sections, edited=True)
-            return self._reports[session_id]
+
+        def change(stored: Stored | None) -> Stored:
+            stored = _at_version(stored, session_id, version)
+            return stored._replace(report=_changed(stored.report, sections=sections, edited=True))
+
+        return self.backend.update(session_id, change).report
 
     def save_proposal(self, session_id: str, version: int, proposal: Proposal,
                       edited: bool = True) -> Report:
@@ -244,42 +313,23 @@ class ReportStore:
 
         `edited` is False when the agents wrote it rather than the founder.
         """
-        with self._lock:
-            report = self._current(session_id, version)
-            self._reports[session_id] = _changed(
-                report, proposal=proposal, edited=report.edited or edited
-            )
-            return self._reports[session_id]
+
+        def change(stored: Stored | None) -> Stored:
+            stored = _at_version(stored, session_id, version)
+            report = stored.report
+            return stored._replace(report=_changed(report, proposal=proposal, edited=report.edited or edited))
+
+        return self.backend.update(session_id, change).report
 
     def reset(self, session_id: str) -> Report:
         """Rebuild the report from the latest results, dropping edits and the proposal."""
-        with self._lock:
-            report = self._get(session_id)
-            self._reports[session_id] = self._from_results(session_id, report)
-            return self._reports[session_id]
 
-    def _get(self, session_id: str) -> Report:
-        if session_id not in self._reports:
-            raise ReportNotFound(session_id)
-        return self._reports[session_id]
+        def change(stored: Stored | None) -> Stored:
+            if stored is None:
+                raise ReportNotFound(session_id)
+            return stored._replace(report=_from_results(session_id, stored.results, stored.report))
 
-    def _current(self, session_id: str, version: int) -> Report:
-        report = self._get(session_id)
-        if report.version != version:
-            raise ReportChanged(f"The report is at version {report.version}, not {version}.")
-        return report
-
-    def _from_results(self, session_id: str, previous: Report | None) -> Report:
-        results = self._results[session_id]
-        return Report(
-            session_id=session_id,
-            title=results.venture,
-            objective=results.objective,
-            context=results.context,
-            sections=build_sections(results),
-            version=previous.version + 1 if previous else 1,
-            updated_at=_now(),
-        )
+        return self.backend.update(session_id, change).report
 
 
 store = ReportStore()

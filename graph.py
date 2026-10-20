@@ -7,9 +7,12 @@ cross-critique and the Chief of Staff resolves any conflicts, then the approved
 reports are synthesised into one strategy.
 
 The graph is compiled with a checkpointer, so a session's state survives between
-requests and a follow-up can reuse the reports that still stand.
+requests and a follow-up can reuse the reports that still stand: in memory by
+default, or in PostgreSQL when the API has a database (persistence.py), so it
+survives a restart too.
 """
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.graph import END, START, StateGraph
@@ -58,6 +61,8 @@ _CHECKPOINT_TYPES = [
         Source,
     )
 ]
+# How a session's state is written and read back, wherever it is kept.
+SERDE = JsonPlusSerializer(allowed_msgpack_modules=_CHECKPOINT_TYPES)
 
 
 def _route_to_assigned(state: WorkflowState) -> list[str]:
@@ -108,8 +113,9 @@ def _route_after_resolve(state: WorkflowState) -> list[str] | str:
     return list(revisions) if revisions else "synthesis"
 
 
-def build_graph():
-    """Build and compile the workflow graph."""
+def build_graph(checkpointer: BaseCheckpointSaver | None = None):
+    """Build and compile the workflow graph, keeping sessions with `checkpointer`
+    (in memory if none is given)."""
     builder = StateGraph(WorkflowState)
     builder.add_node("plan", plan_node)
     builder.add_node("research", research_node)
@@ -132,6 +138,5 @@ def build_graph():
     builder.add_edge("critique", "resolve")
     builder.add_conditional_edges("resolve", _route_after_resolve, [*SPECIALIST_NAMES, "synthesis"])
     builder.add_edge("synthesis", END)
-    serde = JsonPlusSerializer(allowed_msgpack_modules=_CHECKPOINT_TYPES)
     # With DEBUG_MODE on, LangGraph prints every step and the state it writes.
-    return builder.compile(checkpointer=MemorySaver(serde=serde), debug=DEBUG_MODE)
+    return builder.compile(checkpointer=checkpointer or MemorySaver(serde=SERDE), debug=DEBUG_MODE)

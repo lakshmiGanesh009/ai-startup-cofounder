@@ -111,6 +111,8 @@ export type Health = {
   reasoning: ReasoningSettings;
   // Which research providers are set up, and the default (null with neither).
   research: { providers: Record<ResearchProvider, boolean>; default: ResearchProvider | null };
+  // Where sessions and reports are kept, and whether it answers ("degraded" status when not).
+  storage: { kind: "memory" | "postgres"; ok: boolean };
 };
 
 export type Scenario = {
@@ -334,7 +336,7 @@ export type Pipeline = {
 
 export type MonitorEvent = {
   at: string;
-  kind: "start" | "done" | "run" | "brief" | "proposal" | "warning" | "error";
+  kind: "start" | "done" | "run" | "brief" | "proposal" | "warning" | "error" | "system";
   source: string;
   message: string;
   session: string | null;
@@ -381,10 +383,13 @@ export type MonitorHealth = {
   minutes: number;
 };
 
-// What the API has done since it started (kept in memory). The time, calls and
-// costs are the finished evaluations'; `requests` leaves out polled routes.
+// What the API has done. The statistics count since it started: the time,
+// calls and costs are the finished evaluations', and `requests` leaves out
+// polled routes. The latest runs and events are history, which survives a
+// restart when it is kept in PostgreSQL.
 export type Monitoring = {
   started_at: string;
+  kept_in: "memory" | "postgres";
   health: MonitorHealth;
   running: number;
   totals: {

@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 from collections import Counter
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -23,8 +24,8 @@ from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
 from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
 from brief import PreparedBrief, Template, load_templates, prepare_brief
-from config import CORS_ORIGINS, DEBUG_MODE, LOG_FORMAT, MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
-from graph import build_graph
+from config import CORS_ORIGINS, DATABASE_URL, DEBUG_MODE, LOG_FORMAT, MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
+from graph import SERDE, build_graph
 from llm import (
     CHIEF,
     EFFORTS,
@@ -36,8 +37,9 @@ from llm import (
     reasoning,
     takes_reasoning_effort,
 )
-from monitor import Monitoring, MonitorHandler, Run, monitor
+from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, Run, monitor
 from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session, configure_logging
+from persistence import open_storage
 from progress import summarize
 from proposal import Proposal
 from report_pdf import render_pdf
@@ -61,10 +63,37 @@ logger = logging.getLogger(__name__)
 # The monitor's log gets the app's warnings and errors, and the model client's retries.
 logging.getLogger().addHandler(MonitorHandler(monitor))
 
+# Sessions, reports and the Monitor's history: in PostgreSQL when DATABASE_URL
+# is set, so they survive a restart, else in memory.
+storage = open_storage(DATABASE_URL, SERDE)
+store.use(storage.reports)
+monitor.attach(storage.archive)
+# In memory until the storage opens: PostgreSQL's saver belongs to the event
+# loop that serves the requests, so the lifespan builds the graph on it.
+graph = build_graph()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Open the storage before the first request, and close it after the last.
+    The API does not start without the database it was given."""
+    global graph
+    await storage.open()
+    if storage.checkpointer:
+        graph = build_graph(storage.checkpointer)
+    if storage.archive:
+        monitor.preload(*await run_in_threadpool(storage.archive.load, MAX_RUNS, MAX_EVENTS))
+    monitor.event("system", "api", f"The API started, keeping sessions and reports in {storage.where}.")
+    logger.info("Sessions and reports are kept in %s.", storage.where)
+    yield
+    await storage.close()
+
+
 app = FastAPI(
     title=SERVICE_NAME,
     description="Multi-agent founding team that evaluates startup ideas",
     version="0.1.0",
+    lifespan=lifespan,
 )
 # Each request gets an ID, an access log line and its place in the metrics.
 app.add_middleware(RequestContextMiddleware, on_finish=monitor.request)
@@ -78,8 +107,6 @@ app.add_middleware(
     allow_headers=["Content-Type", REQUEST_HEADER],
     expose_headers=[REQUEST_HEADER],
 )
-
-graph = build_graph()
 
 
 class Reasoning(BaseModel):
@@ -126,11 +153,14 @@ class EvaluateResponse(BaseModel):
 @app.get("/health")
 async def health():
     """Health check, with the reasoning efforts a request can choose, the
-    configured ones it gets by default, and where web research can run
-    (Azure OpenAI, Tavily) and does by default."""
+    configured ones it gets by default, where web research can run (Azure
+    OpenAI, Tavily) and does by default, and where sessions and reports are kept.
+    The status is "degraded" while that database does not answer."""
+    stored = await run_in_threadpool(storage.ping)
     return {
-        "status": "healthy",
+        "status": "healthy" if stored else "degraded",
         "service": SERVICE_NAME,
+        "storage": {"kind": storage.kind, "ok": stored},
         "reasoning": {
             "adjustable": takes_reasoning_effort(),
             "efforts": list(EFFORTS),
@@ -281,9 +311,9 @@ def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
     return session_id, state, {"configurable": {"thread_id": session_id}}
 
 
-def _finish(session_id: str, result: dict) -> EvaluateResponse:
+async def _finish(session_id: str, result: dict) -> EvaluateResponse:
     """Record the session's report and answer with its results."""
-    store.record(session_id, SessionResults.from_state(result))
+    await run_in_threadpool(store.record, session_id, SessionResults.from_state(result))
     return EvaluateResponse(
         session_id=session_id,
         objective=result["plan"].objective,
@@ -343,7 +373,7 @@ async def evaluate(request: EvaluateRequest):
         # The threads inherit the request's reasoning efforts.
         with reasoning(**_efforts(request.reasoning)):
             result = await graph.ainvoke(state, config)
-        response = _finish(session_id, result)
+        response = await _finish(session_id, result)
     except LLMNotConfigured as error:
         monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
         _record(request, session_id, started, error=str(error))
@@ -398,7 +428,7 @@ async def evaluate_stream(request: EvaluateRequest):
                         summary = summarize(node, task.get("result"), runs[node], given.get(node))
                         monitor.event("done", node, summary["summary"], session_id)
                         yield _event("done", {"node": node, "at": at(), **summary})
-            response = _finish(session_id, (await graph.aget_state(config)).values)
+            response = await _finish(session_id, (await graph.aget_state(config)).values)
         except LLMNotConfigured as error:
             monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
             _record(request, session_id, began, error=str(error))
@@ -474,33 +504,34 @@ async def report_changed(request, error: ReportChanged):
     )
 
 
+# The report endpoints are plain functions, so FastAPI runs them in its thread
+# pool: with a database each is a round trip, which must not hold up the loop.
 @app.get("/reports", response_model=list[ReportSummary])
-async def list_reports():
+def list_reports():
     """Every session's report, the most recently changed first."""
     return store.summaries()
 
 
 @app.get("/reports/{session_id}", response_model=Report)
-async def get_report(session_id: str):
+def get_report(session_id: str):
     """A session's report: one markdown section each for the strategy, the
     specialists' reports and the decisions on conflicts."""
     return store.get(session_id)
 
 
 @app.put("/reports/{session_id}", response_model=Report)
-async def save_report(session_id: str, edit: ReportEdit):
+def save_report(session_id: str, edit: ReportEdit):
     """Save edited sections. Returns 409 if the report changed since `version`."""
     return store.save(session_id, edit.version, edit.sections)
 
 
 @app.post("/reports/{session_id}/reset", response_model=Report)
-async def reset_report(session_id: str):
+def reset_report(session_id: str):
     """Rebuild the report from the session's latest results, dropping edits."""
     return store.reset(session_id)
 
 
 def _report_at(session_id: str, version: int) -> Report:
-    bind_session(session_id)
     report = store.get(session_id)
     if report.version != version:
         raise ReportChanged(f"The report is at version {report.version}, not {version}.")
@@ -527,7 +558,7 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         monitor.count("proposals", ok=False)
         monitor.event("error", "proposal", "Nothing could be revised: every LLM call failed.", report.session_id)
         raise HTTPException(status_code=502, detail="Nothing could be revised: every LLM call failed.")
-    saved = store.save_proposal(report.session_id, report.version, proposal, edited=False)
+    saved = await run_in_threadpool(store.save_proposal, report.session_id, report.version, proposal, False)
     monitor.count("proposals")
     done = "Revised" if report.proposal else "Wrote"
     monitor.event(
@@ -543,7 +574,8 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
 async def write_report_proposal(session_id: str, request: ProposalRequest):
     """Have the agents write the investment proposal from the report as it stands,
     replacing any proposal it has. Takes about two minutes."""
-    report = _report_at(session_id, request.version)
+    bind_session(session_id)
+    report = await run_in_threadpool(_report_at, session_id, request.version)
     return await _write(report.model_copy(update={"proposal": None}), request.reasoning)
 
 
@@ -552,14 +584,15 @@ async def revise_report_proposal(session_id: str, revision: ProposalRevision):
     """Apply the founder's instruction to one part of the proposal (or all of it):
     the part's agent rewrites it, then the parts written from it are brought into
     line. A part whose call fails keeps its text and is listed in `failed`."""
-    report = _report_at(session_id, revision.version)
+    bind_session(session_id)
+    report = await run_in_threadpool(_report_at, session_id, revision.version)
     if not report.proposal:
         raise HTTPException(status_code=404, detail="This report has no proposal yet; write it first.")
     return await _write(report, revision.reasoning, revision.instruction, revision.part)
 
 
 @app.put("/reports/{session_id}/proposal", response_model=Report)
-async def save_report_proposal(session_id: str, edit: ProposalEdit):
+def save_report_proposal(session_id: str, edit: ProposalEdit):
     """Save an edited proposal. Returns 409 if the report changed since `version`."""
     return store.save_proposal(session_id, edit.version, edit.proposal)
 
@@ -572,7 +605,7 @@ async def save_report_proposal(session_id: str, edit: ProposalEdit):
 async def download_report(session_id: str):
     """The report as a PDF: the investment proposal once it is written, else the
     team's report."""
-    report = store.get(session_id)
+    report = await run_in_threadpool(store.get, session_id)
     pdf = await run_in_threadpool(render_pdf, report)
     name = re.sub(r"[^A-Za-z0-9-]", "", session_id)[:8] or "report"
     kind = "investment-proposal" if report.proposal else "launch-report"

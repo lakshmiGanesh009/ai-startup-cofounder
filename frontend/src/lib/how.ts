@@ -123,7 +123,17 @@ export const JUDGEMENT: { title: string; why: string; where: string }[] = [
   },
 ];
 
-export type LayerIcon = "window" | "server" | "flow" | "team" | "spark" | "globe" | "document" | "pulse" | "check";
+export type LayerIcon =
+  | "window"
+  | "server"
+  | "flow"
+  | "team"
+  | "spark"
+  | "globe"
+  | "document"
+  | "state"
+  | "pulse"
+  | "check";
 
 // The stack, by layer, and what each part does here.
 export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: string }[] = [
@@ -142,7 +152,7 @@ export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: str
   {
     layer: "Orchestration",
     icon: "flow",
-    tools: ["LangGraph StateGraph", "Conditional edges", "MemorySaver checkpointer"],
+    tools: ["LangGraph StateGraph", "Conditional edges", "PostgreSQL checkpointer"],
     does: "The graph: specialists in parallel, the routes the Chief of Staff's decisions take, and each session's state.",
   },
   {
@@ -168,6 +178,12 @@ export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: str
     icon: "document",
     tools: ["fpdf2", "Calculated metrics"],
     does: "The PDF with its charts; revenue, NPV, IRR and payback calculated in code, not by the model.",
+  },
+  {
+    layer: "Storage",
+    icon: "state",
+    tools: ["PostgreSQL", "psycopg", "Migrations"],
+    does: "Sessions, reports and the Monitor's history, so a restart loses none of them; in memory without a database.",
   },
   {
     layer: "Observability",

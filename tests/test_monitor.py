@@ -232,3 +232,15 @@ def test_a_proposal_that_fails_is_logged(fake_llm):
     assert error["source"] == "proposal" and error["message"].startswith("Writing the proposal failed")
     assert error["request"] == response.headers["X-Request-ID"]
     assert (seen["totals"]["proposals"], seen["totals"]["proposal_failures"]) == (0, 1)
+
+
+def test_the_api_logs_its_start_and_where_it_keeps_sessions():
+    with TestClient(app) as started:
+        health = started.get("/health").json()
+        seen = started.get("/monitoring").json()
+
+    assert health["storage"] == {"kind": "memory", "ok": True}
+    assert seen["kept_in"] == "memory"
+    assert [(event["kind"], event["message"]) for event in seen["events"]] == [
+        ("system", "The API started, keeping sessions and reports in memory."),
+    ]

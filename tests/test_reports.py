@@ -9,7 +9,7 @@ from llm import CHIEF, SPECIALIST
 from main import app
 from proposal import investment_metrics
 from report_pdf import render_pdf
-from reports import Report, ReportChanged, ReportSection, ReportStore, SessionResults
+from reports import Report, ReportChanged, ReportNotFound, ReportSection, ReportStore, SessionResults
 from state import Conflict, DelegationPlan, Resolution, SpecialistCritique, Task
 from tests.sample_proposal import SAMPLE
 
@@ -289,6 +289,8 @@ def test_a_proposal_written_meanwhile_does_not_overwrite_a_newer_edit():
 
     with pytest.raises(ReportChanged):
         store.save_proposal("s", started_from, SAMPLE, edited=False)
+    with pytest.raises(ReportNotFound):  # nothing to edit before an evaluation
+        store.save("never-evaluated", 1, [])
 
 
 def test_the_pdf_renders_what_the_agents_write():

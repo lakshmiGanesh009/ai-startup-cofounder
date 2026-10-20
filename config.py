@@ -38,3 +38,8 @@ CORS_ORIGINS = [
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
     if origin.strip()
 ]
+
+# Where sessions, reports and the Monitor's history are kept: a PostgreSQL URL,
+# such as postgresql://user:password@localhost:5432/cofounder, so they survive a
+# restart; unset, they are kept in memory and lost when the API stops.
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()

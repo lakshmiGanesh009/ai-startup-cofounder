@@ -5,9 +5,10 @@ events, warnings and errors.
 
 The endpoints record into one `Monitor`; a logging handler adds the app's
 warnings and errors, and the model client's retries, which show where Azure
-stalled. The snapshot (GET /monitoring) and the Prometheus metrics (GET
-/metrics) are kept in memory, like the sessions, so both start empty whenever
-the API does; Prometheus keeps the history it scrapes.
+stalled. Its statistics and the Prometheus metrics (GET /metrics) count since
+the API started; Prometheus keeps the history it scrapes. The latest
+evaluations and events are history: with a database (persistence.py) they are
+kept there too, and read back when the API starts.
 """
 
 import logging
@@ -41,7 +42,7 @@ MAX_SAMPLES = 200
 HEALTH_MINUTES = 15
 MAX_PROBLEMS = 1000
 
-EventKind = Literal["start", "done", "run", "brief", "proposal", "warning", "error"]
+EventKind = Literal["start", "done", "run", "brief", "proposal", "warning", "error", "system"]
 
 # Buckets for the time histograms, in seconds: requests run from milliseconds
 # to the ten minutes an evaluation can take at high reasoning.
@@ -160,11 +161,14 @@ class Totals(BaseModel):
 
 class Monitoring(BaseModel):
     started_at: datetime
+    kept_in: Literal["memory", "postgres"] = Field(
+        "memory", description="Where the latest evaluations and events are kept: lost on a restart, or in PostgreSQL."
+    )
     health: Health
     running: int = Field(0, description="Evaluations running now.")
     totals: Totals
     evaluation_seconds: Spread | None = Field(
-        None, description="How long the latest finished evaluations took; none until one has."
+        None, description="How long the evaluations finished since the API started took; none until one has."
     )
     nodes: list[NodeStats]
     runs: list[Run] = Field(description="The latest evaluations, newest first.")
@@ -216,6 +220,7 @@ class Monitor:
 
     def __init__(self):
         self._lock = threading.Lock()
+        self._archive = None  # where the history is kept too (persistence.MonitorArchive)
         self.reset()
 
     def reset(self) -> None:
@@ -231,6 +236,19 @@ class Monitor:
             self._running = 0
             self.metrics = Metrics()
 
+    def attach(self, archive) -> None:
+        """Keep the history in `archive` too (persistence.MonitorArchive)."""
+        self._archive = archive
+
+    def preload(self, runs: list[Run], events: list[Event]) -> None:
+        """Put back the history kept before the API started, oldest first. The
+        statistics still count from now; a warning or error in the last
+        HEALTH_MINUTES counts towards the health."""
+        with self._lock:
+            self._runs.extend(runs)
+            self._events.extend(events)
+            self._problems.extend((event.at, event.kind) for event in events if event.kind in ("warning", "error"))
+
     def event(self, kind: EventKind, source: str, message: str, session: str | None = None) -> None:
         """Log an event, in the request it happened in."""
         rid = request_id()
@@ -242,6 +260,8 @@ class Monitor:
                 self._problems.append((event.at, kind))
                 setattr(self._totals, f"{kind}s", getattr(self._totals, f"{kind}s") + 1)
                 self.metrics.log_events.labels(kind).inc()
+        if self._archive:
+            self._archive.add_event(event)
 
     def retried(self) -> None:
         """Count a model call the client retried."""
@@ -263,6 +283,8 @@ class Monitor:
             self._running = max(self._running - 1, 0)
             metrics.running.set(self._running)
             self._runs.append(run)
+            if self._archive:
+                self._archive.add_run(run)
             totals = self._totals
             totals.evaluations += 1
             if not run.ok:
@@ -316,9 +338,10 @@ class Monitor:
             since = _now() - timedelta(minutes=HEALTH_MINUTES)
             recent = [kind for at, kind in self._problems if at >= since]
             errors, warnings = recent.count("error"), recent.count("warning")
-            times = [run.seconds for run in self._runs if run.ok]
+            times = [run.seconds for run in self._runs if run.ok and run.at >= self.started_at]
             return Monitoring(
                 started_at=self.started_at,
+                kept_in="postgres" if self._archive else "memory",
                 health=Health(status="errors" if errors else "warnings" if warnings else "healthy",
                               warnings=warnings, errors=errors),
                 running=self._running,

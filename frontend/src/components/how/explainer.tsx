@@ -44,6 +44,7 @@ const LAYER_ICONS: Record<LayerIcon, Glyph> = {
   spark: SparkIcon,
   globe: GlobeIcon,
   document: DocumentIcon,
+  state: StateIcon,
   pulse: PulseIcon,
   check: CheckIcon,
 };
