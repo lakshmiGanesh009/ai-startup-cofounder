@@ -1,0 +1,15 @@
+# What the web app's image is built from. Secrets never enter the build context.
+.env*
+!.env.example
+
+# Built or installed inside the image instead.
+node_modules
+.next
+coverage
+tsconfig.tsbuildinfo
+next-env.d.ts
+
+# Not needed to build or run.
+*.md
+Dockerfile
+.dockerignore

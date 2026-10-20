@@ -1,0 +1,63 @@
+# The checks on every push and merge request: the backend's tests, with a
+# PostgreSQL service so the persistence tests run too; the frontend's lint,
+# types, tests and build; and, on the default branch, both images built.
+# Nothing is deployed or pushed to a registry, and no key is needed: the tests
+# use a fake model. Docker is an option, so the images' job cannot fail the
+# pipeline.
+
+stages: [test, build]
+
+backend:
+  stage: test
+  image: python:3.12-slim
+  services:
+    - name: postgres:16-alpine
+      alias: db
+  variables:
+    # A throwaway database, alive only for this job.
+    POSTGRES_DB: cofounder_test
+    POSTGRES_USER: cofounder
+    POSTGRES_PASSWORD: cofounder-ci
+    TEST_DATABASE_URL: postgresql://cofounder:cofounder-ci@db:5432/cofounder_test
+    UV_CACHE_DIR: .uv-cache
+  cache:
+    key:
+      files: [uv.lock]
+    paths: [.uv-cache]
+  before_script:
+    - pip install --quiet uv==0.11.7
+  script:
+    - uv sync --frozen
+    - uv run pytest --cov
+  coverage: '/^TOTAL.+?(\d+%)$/'
+
+frontend:
+  stage: test
+  image: node:22-alpine
+  cache:
+    key:
+      files: [frontend/package-lock.json]
+    paths: [frontend/.npm]
+  before_script:
+    - cd frontend
+    - npm ci --cache .npm --prefer-offline
+  script:
+    - npm run lint
+    - npm run typecheck
+    - npm run test:coverage
+    - npm run build
+
+# Keeps the Dockerfiles working. Needs a runner that allows Docker-in-Docker
+# (privileged); without one it fails, and the pipeline still passes.
+images:
+  stage: build
+  image: docker:29
+  services: [docker:29-dind]
+  allow_failure: true
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build --tag cofounder-api .
+    - docker build --tag cofounder-web frontend
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

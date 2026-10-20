@@ -1,0 +1,64 @@
+# The whole app in containers: PostgreSQL, the API and the web app. An option
+# beside running it locally; ./start.sh docker runs this and asks for anything
+# missing.
+#
+#   docker compose up --build        then open http://localhost:3000
+#
+# Keys and passwords come from .env (see .env.example): the API reads the whole
+# file; Compose fills in POSTGRES_PASSWORD and API_KEY below from it. None of it
+# goes into an image. Both the web app and the API answer on this machine only:
+# the browser reaches the API through the web app, Prometheus (/metrics, with
+# the key) and checks reach it on 127.0.0.1. WEB_PORT and API_PORT change the
+# ports; WEB_HOST=0.0.0.0 opens the web app to the network, for a proxy that
+# terminates HTTPS in front of it.
+
+name: cofounder
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cofounder
+      POSTGRES_USER: cofounder
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cofounder -d cofounder"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # These win over the same names in .env, which may point at a database
+      # on your own machine; the key is the one the web app is given.
+      DATABASE_URL: postgresql://cofounder:${POSTGRES_PASSWORD}@db:5432/cofounder
+      API_KEY: ${API_KEY:-}
+      LOG_FORMAT: json
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    # Evaluations take minutes: on a stop, those running get uvicorn's 30 s.
+    stop_grace_period: 40s
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://api:8000
+      API_KEY: ${API_KEY:-}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${WEB_HOST:-127.0.0.1}:${WEB_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  db:

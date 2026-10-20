@@ -1,0 +1,21 @@
+# What the API's image is built from: its code, its lockfile and its assets.
+# Secrets never enter the build context.
+.env
+.env.*
+!.env.example
+
+# Not the API's: the frontend has its own image; tests and docs do not ship.
+frontend
+tests
+docs
+*.md
+
+# Local state and caches.
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.ruff_cache
+.coverage
+coverage

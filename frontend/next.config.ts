@@ -29,6 +29,11 @@ const SECURITY_HEADERS = [
 
 const nextConfig: NextConfig = {
   /* config options here */
+  // The Docker image runs Next's standalone server, which holds only the files
+  // it needs (frontend/Dockerfile builds with BUILD_STANDALONE=1); otherwise
+  // `npm run build` and `npm start` work as usual.
+  output: process.env.BUILD_STANDALONE ? "standalone" : undefined,
+  poweredByHeader: false,
   async headers() {
     return [{ source: "/:path*", headers: SECURITY_HEADERS }];
   },
