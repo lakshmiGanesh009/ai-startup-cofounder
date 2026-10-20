@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, test, vi } from "vitest";
 
@@ -75,6 +75,26 @@ describe("the sidebar", () => {
 
     expect(await screen.findByText(/Can.t reach localhost:8000/)).toBeTruthy();
     expect(screen.getByText("Unavailable until the backend answers.")).toBeTruthy();
+  });
+
+  test("it checks the backend again every 30 s, so an outage and the recovery both show", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let down = false;
+    fakeBackend({ "GET /health": () => (down ? { status: 503, body: { detail: "Down." } } : { body: HEALTH }) });
+    renderSidebar();
+    const chief = await screen.findByLabelText<HTMLInputElement>("Chief of Staff");
+    await screen.findByText(/API connected/);
+    fireEvent.change(chief, { target: { value: "3" } });
+
+    down = true;
+    await act(async () => vi.advanceTimersByTimeAsync(30000));
+    expect(await screen.findByText(/Can.t reach localhost:8000/)).toBeTruthy();
+    expect(screen.getByText(/The backend returned 503: Down\./)).toBeTruthy();
+
+    down = false;
+    await act(async () => vi.advanceTimersByTimeAsync(30000));
+    expect(await screen.findByText(/API connected/)).toBeTruthy();
+    expect(chief.getAttribute("aria-valuetext")).toBe("high"); // the choice made before the outage stands
   });
 
   test("on a phone the rail folds into a menu", async () => {

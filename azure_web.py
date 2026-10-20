@@ -16,11 +16,11 @@ import json
 import logging
 import os
 import re
-from concurrent.futures import ThreadPoolExecutor
 from functools import cache
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import openai
+from langchain_core.runnables.config import ContextThreadPoolExecutor
 
 from config import LLM_MAX_RETRIES, LLM_TIMEOUT
 from search import CONTENT_CHARS, Hit, Report, SearchFailed
@@ -135,7 +135,8 @@ def search_all(queries: list[str]) -> tuple[list[Hit], str | None]:
             logger.warning("Search for %r failed: %s", query, error)
             return error
 
-    with ThreadPoolExecutor(max_workers=len(queries)) as pool:
+    # At once; each thread keeps the request's context, so its log lines name the request.
+    with ContextThreadPoolExecutor(max_workers=len(queries)) as pool:
         outcomes = list(pool.map(run, queries))
     hits: dict[str, Hit] = {}
     for outcome in outcomes:
@@ -245,5 +246,5 @@ def research_all(tasks: dict[str, tuple[str, dict | None]]) -> dict[str, Report 
             logger.warning("Research for %s failed: %s", key, error)
             return error
 
-    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+    with ContextThreadPoolExecutor(max_workers=len(tasks)) as pool:
         return dict(zip(tasks, pool.map(run, list(tasks))))

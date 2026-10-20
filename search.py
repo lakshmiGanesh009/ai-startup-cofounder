@@ -10,10 +10,10 @@ import logging
 import os
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import httpx
+from langchain_core.runnables.config import ContextThreadPoolExecutor
 
 from config import RESEARCH_TIMEOUT, SEARCH_TIMEOUT
 
@@ -117,7 +117,8 @@ def search_all(queries: list[str]) -> tuple[list[Hit], str | None]:
             logger.warning("Search for %r failed: %s", query, error)
             return error
 
-    with ThreadPoolExecutor(max_workers=len(queries)) as pool:
+    # At once; each thread keeps the request's context, so its log lines name the request.
+    with ContextThreadPoolExecutor(max_workers=len(queries)) as pool:
         outcomes = list(pool.map(run, queries))
     hits: dict[str, Hit] = {}
     for outcome in outcomes:
@@ -204,5 +205,5 @@ def research_all(tasks: dict[str, tuple[str, dict | None]]) -> dict[str, Report 
             logger.warning("Research for %s failed: %s", key, error)
             return error
 
-    with ThreadPoolExecutor(max_workers=len(tasks)) as pool:
+    with ContextThreadPoolExecutor(max_workers=len(tasks)) as pool:
         return dict(zip(tasks, pool.map(run, list(tasks))))

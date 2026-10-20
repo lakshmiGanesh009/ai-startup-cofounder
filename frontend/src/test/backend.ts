@@ -180,9 +180,12 @@ export const PIPELINE: Pipeline = {
   },
 };
 
-// What the API has done (/monitoring): two evaluations, one failed, and a short log.
+// What the API has done (/monitoring): two evaluations, one failed and another
+// running, a warning in the last 15 minutes, and a short log.
 export const MONITORING: Monitoring = {
   started_at: "2026-10-20T09:00:00Z",
+  health: { status: "warnings", warnings: 1, errors: 0, minutes: 15 },
+  running: 1,
   totals: {
     evaluations: 2,
     failures: 1,
@@ -195,12 +198,20 @@ export const MONITORING: Monitoring = {
     searches: 42,
     credits: 0,
     briefs: 1,
+    brief_failures: 0,
     proposals: 1,
+    proposal_failures: 1,
+    requests: 40,
+    server_errors: 1,
+    retries: 2,
+    warnings: 1,
+    errors: 0,
   },
+  evaluation_seconds: { p50: 157, p95: 157, max: 157, samples: 1 },
   nodes: [
-    { node: "synthesis", runs: 1, calls: 1, seconds: 19, tokens: 3400 },
-    { node: "plan", runs: 2, calls: 3, seconds: 19, tokens: 2400 },
-    { node: "finance", runs: 1, calls: 2, seconds: 30, tokens: 8000 },
+    { node: "synthesis", runs: 1, calls: 1, seconds: 19, tokens: 3400, p50: 19, p95: 19 },
+    { node: "plan", runs: 2, calls: 3, seconds: 19, tokens: 2400, p50: 9.5, p95: 9.9 },
+    { node: "finance", runs: 1, calls: 2, seconds: 30, tokens: 8000, p50: 30, p95: 30 },
   ],
   runs: [
     {
@@ -214,10 +225,19 @@ export const MONITORING: Monitoring = {
     },
   ],
   events: [
-    { at: "2026-10-20T09:10:00Z", kind: "warning", source: "main", message: "Evaluation failed on an LLM call: timeout", session: null },
-    { at: "2026-10-20T09:05:00Z", kind: "run", source: "evaluate", message: "Finished in 157 s: 4 specialists.", session: "efgh5678" },
-    { at: "2026-10-20T09:04:00Z", kind: "done", source: "review", message: "Reviewed 4 reports: approved 3.", session: "efgh5678" },
-    { at: "2026-10-20T09:03:00Z", kind: "start", source: "finance", message: "Started.", session: "efgh5678" },
+    {
+      at: "2026-10-20T09:10:00Z", kind: "warning", source: "main", message: "Evaluation failed on an LLM call: timeout",
+      session: null, request: "3f2a9c1b7d4e5f60",
+    },
+    {
+      at: "2026-10-20T09:05:00Z", kind: "run", source: "evaluate", message: "Finished in 157 s: 4 specialists.",
+      session: "efgh5678", request: "a1b2c3d4e5f60718",
+    },
+    {
+      at: "2026-10-20T09:04:00Z", kind: "done", source: "review", message: "Reviewed 4 reports: approved 3.",
+      session: "efgh5678", request: "a1b2c3d4e5f60718",
+    },
+    { at: "2026-10-20T09:03:00Z", kind: "start", source: "finance", message: "Started.", session: "efgh5678", request: null },
   ],
 };
 
@@ -283,10 +303,26 @@ export function liveStream() {
   };
 }
 
-type Answer = { status?: number; body?: unknown; stream?: string | ReadableStream<Uint8Array> };
+type Answer = {
+  status?: number;
+  body?: unknown;
+  stream?: string | ReadableStream<Uint8Array>;
+  headers?: Record<string, string>;
+};
 // A function answers each call afresh, from the body sent, and can hold the
 // call open with a promise.
 export type Answering = Answer | ((body: unknown) => Answer | Promise<Answer>);
+
+// Like fetch, a call gives up when its signal aborts.
+function abortable<T>(value: T | Promise<T>, signal?: AbortSignal | null): Promise<T> {
+  if (!signal) return Promise.resolve(value);
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+    if (signal.aborted) return abort();
+    signal.addEventListener("abort", abort, { once: true });
+    Promise.resolve(value).then(resolve, reject);
+  });
+}
 
 export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) {
   const sent: { path: string; body: unknown }[] = [];
@@ -308,11 +344,12 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
     if (init?.body) sent.push({ path, body: request });
     const answer = answers[key];
     if (!answer) throw new TypeError("Failed to fetch");
-    const { status = 200, body, stream } = typeof answer === "function" ? await answer(request) : answer;
+    const answered = typeof answer === "function" ? answer(request) : answer;
+    const { status = 200, body, stream, headers = {} } = await abortable(answered, init?.signal);
     if (stream !== undefined) {
-      return new Response(stream, { status, headers: { "Content-Type": "text/event-stream" } });
+      return new Response(stream, { status, headers: { "Content-Type": "text/event-stream", ...headers } });
     }
-    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+    return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", ...headers } });
   });
   vi.stubGlobal("fetch", fetch);
   return { fetch, sent };

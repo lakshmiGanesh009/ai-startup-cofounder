@@ -1,20 +1,27 @@
 "use client";
 
 // The Monitor: what the API has done since it started (GET /monitoring),
-// refreshed every few seconds while it is open: the totals, where the time goes
-// step by step, the latest evaluations, and a log of each step, run, brief and
-// proposal, with the warnings and errors, Azure's retries among them.
+// refreshed every few seconds while it is open: whether anything went wrong
+// lately, the totals and error rates, how long an evaluation and each of its
+// steps take (the median and the 95th percentile), the latest evaluations, and
+// a log of each step, run, brief and proposal, with the warnings and errors.
+// It asks one request at a time; when the API stops answering it keeps showing
+// what it last heard and waits longer between tries.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { ArrowRightIcon, PulseIcon, RefreshIcon } from "@/components/ui/icons";
+import { AlertIcon, ArrowRightIcon, CheckIcon, PulseIcon, RefreshIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
-import { getMonitoring, type MonitorEvent, type Monitoring } from "@/lib/api";
+import { getMonitoring, type MonitorEvent, type MonitorHealth, type Monitoring } from "@/lib/api";
 import { formatSeconds, specialistTitle } from "@/lib/team";
 
 const REFRESH_MS = 5000;
+// An answer slower than this counts as a failure; and the longest wait between
+// tries while the API is not answering.
+const PATIENCE_MS = 10_000;
+const LONGEST_WAIT_MS = 60_000;
 
 // The graph's steps, in the order they run.
 const NODE_ORDER = ["plan", "research", "marketing", "finance", "technical", "risk", "review", "critique", "resolve", "synthesis"];
@@ -45,8 +52,17 @@ function mean(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function clock(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+function percent(value: number): string {
+  if (value === 0 || value >= 10) return `${Math.round(value)}%`;
+  return `${value.toFixed(1)}%`;
+}
+
+function plural(count: number, one: string): string {
+  return `${count} ${count === 1 ? one : `${one}s`}`;
+}
+
+function clock(time: string | number): string {
+  return new Date(time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 const KIND_TONE: Record<MonitorEvent["kind"], "neutral" | "primary" | "good" | "warn" | "bad"> = {
@@ -67,6 +83,46 @@ const FILTERS = {
 } as const;
 type Filter = keyof typeof FILTERS;
 
+const HEALTH = {
+  healthy: { tone: "bg-good-soft text-good", Glyph: CheckIcon, label: "Healthy" },
+  warnings: { tone: "bg-warn-soft text-warn", Glyph: AlertIcon, label: "Warnings" },
+  errors: { tone: "bg-bad-soft text-bad", Glyph: AlertIcon, label: "Errors" },
+};
+
+function HealthStrip({ health, running, onShow }: { health: MonitorHealth; running: number; onShow: () => void }) {
+  const { tone, Glyph, label } = HEALTH[health.status];
+  const problems = [
+    health.errors ? plural(health.errors, "error") : "",
+    health.warnings ? plural(health.warnings, "warning") : "",
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  return (
+    <div role="status" className={`flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-4 py-3 text-sm ${tone}`}>
+      <span className="flex items-center gap-2 font-medium">
+        <Glyph className="size-4" />
+        {label}
+      </span>
+      <span className="text-ink-2">
+        {problems
+          ? `${problems} in the last ${health.minutes} minutes.`
+          : `No warnings or errors in the last ${health.minutes} minutes.`}
+      </span>
+      {problems && (
+        <Button size="sm" onClick={onShow}>
+          Show them
+        </Button>
+      )}
+      <span className="flex items-center gap-2 text-ink-2 sm:ml-auto">
+        {running > 0 && (
+          <span aria-hidden className="size-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
+        )}
+        {running ? `${plural(running, "evaluation")} running now` : "Nothing running now"}
+      </span>
+    </div>
+  );
+}
+
 function Tile({ label, value, note }: { label: string; value: string; note: string }) {
   return (
     <div className="bg-surface px-4 py-3.5">
@@ -78,40 +134,70 @@ function Tile({ label, value, note }: { label: string; value: string; note: stri
 }
 
 function Totals({ data }: { data: Monitoring }) {
-  const { totals } = data;
+  const { totals, evaluation_seconds: spread } = data;
   // The averages are over the evaluations that finished: one that failed
   // never reached the strategy.
   const finished = Math.max(totals.evaluations - totals.failures, 1);
   const share = totals.reviewed ? Math.round((totals.approved / totals.reviewed) * 100) : 0;
+  const failed = totals.brief_failures + totals.proposal_failures;
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-rule bg-rule md:grid-cols-4">
       <Tile
         label="Evaluations"
         value={String(totals.evaluations)}
-        note={totals.failures ? `${totals.failures} failed` : "none failed"}
+        note={
+          totals.failures
+            ? `${totals.failures} failed, ${percent((totals.failures / totals.evaluations) * 100)}`
+            : "none failed"
+        }
       />
-      <Tile label="Average time" value={formatSeconds(totals.seconds / finished)} note="from brief to strategy" />
-      <Tile label="Model calls" value={compact(totals.calls)} note={`${mean(totals.calls / finished)} an evaluation`} />
+      <Tile
+        label="Time to a decision"
+        value={spread ? formatSeconds(spread.p50) : "–"}
+        note={
+          spread
+            ? `median · p95 ${formatSeconds(spread.p95)} · slowest ${formatSeconds(spread.max)}`
+            : "none finished yet"
+        }
+      />
+      <Tile
+        label="Server errors"
+        value={String(totals.server_errors)}
+        note={
+          totals.requests
+            ? `${percent((totals.server_errors / totals.requests) * 100)} of ${plural(totals.requests, "request")}`
+            : "no requests yet"
+        }
+      />
+      <Tile
+        label="Model calls"
+        value={compact(totals.calls)}
+        note={`${mean(totals.calls / finished)} an evaluation${totals.retries ? ` · ${totals.retries} retried` : ""}`}
+      />
       <Tile label="Tokens" value={compact(totals.tokens)} note={`${compact(totals.tokens / finished)} an evaluation`} />
       <Tile
         label="Reports approved"
         value={totals.reviewed ? `${totals.approved} of ${totals.reviewed}` : "–"}
-        note={totals.reviewed ? `${share}% passed review` : "no reviews yet"}
+        note={
+          totals.reviewed
+            ? `${share}% passed review · ${plural(totals.conflicts, "conflict")} settled`
+            : "no reviews yet"
+        }
       />
-      <Tile label="Conflicts settled" value={String(totals.conflicts)} note="by the Chief of Staff" />
+      <Tile label="Web research" value={`${totals.searches} · ${totals.credits}`} note="Bing searches · Tavily credits" />
       <Tile
-        label="Web research"
-        value={`${totals.searches} · ${totals.credits}`}
-        note="Bing searches · Tavily credits"
+        label="Briefs · proposals"
+        value={`${totals.briefs} · ${totals.proposals}`}
+        note={failed ? `prepared · written; ${failed} failed` : "prepared · written"}
       />
-      <Tile label="Briefs · proposals" value={`${totals.briefs} · ${totals.proposals}`} note="prepared · written" />
     </div>
   );
 }
 
 function TimeByStep({ data }: { data: Monitoring }) {
   const nodes = [...data.nodes].sort((a, b) => NODE_ORDER.indexOf(a.node) - NODE_ORDER.indexOf(b.node));
-  const longest = Math.max(1, ...nodes.map((node) => node.seconds / Math.max(node.runs, 1)));
+  const longest = Math.max(1, ...nodes.map((node) => node.p95));
+  const at = (seconds: number) => `${Math.min(100, (seconds / longest) * 100)}%`;
   return (
     <section aria-labelledby="time-heading" className="max-w-2xl">
       <h3 id="time-heading" className="kicker">
@@ -120,23 +206,35 @@ function TimeByStep({ data }: { data: Monitoring }) {
       <ul className="mt-3 space-y-2.5">
         {nodes.map((node) => {
           const runs = Math.max(node.runs, 1);
-          const seconds = node.seconds / runs;
           const calls = node.calls / runs;
           return (
-            <li key={node.node} className="grid grid-cols-[8.5rem_minmax(0,1fr)] items-center gap-3 text-sm">
+            <li
+              key={node.node}
+              className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
+            >
               <span className="truncate text-ink-2">{nodeName(node.node)}</span>
               <span>
-                <span className="flex items-baseline justify-between gap-3 text-xs">
-                  <span className="font-medium text-ink tabular">{seconds.toFixed(1)} s</span>
-                  <span className="text-ink-3 tabular">
+                <span className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
+                  <span className="whitespace-nowrap tabular">
+                    <span className="font-medium text-ink">{node.p50.toFixed(1)} s</span>
+                    <span className="text-ink-3"> · p95 {node.p95.toFixed(1)} s</span>
+                  </span>
+                  <span className="whitespace-nowrap text-ink-3 tabular">
                     {mean(calls)} {calls === 1 ? "call" : "calls"} · {compact(node.tokens / runs)} tokens
                   </span>
                 </span>
-                <span className="mt-1 block h-1.5 rounded-full bg-sunken">
+                <span
+                  className="relative mt-1 block h-1.5 rounded-full bg-sunken"
+                  title={`${nodeName(node.node)}: median ${node.p50.toFixed(1)} s, p95 ${node.p95.toFixed(1)} s, over ${plural(node.runs, "evaluation")}`}
+                >
                   <span
                     className="block h-full rounded-full"
-                    title={`${nodeName(node.node)}: ${seconds.toFixed(1)} s on average over ${node.runs} runs`}
-                    style={{ width: `${Math.max(1.5, (seconds / longest) * 100)}%`, background: "var(--data-1)" }}
+                    style={{ width: `max(4px, ${at(node.p50)})`, background: "var(--data-1)" }}
+                  />
+                  <span
+                    aria-hidden
+                    className="absolute -top-0.5 h-2.5 w-0.5 rounded-full bg-ink"
+                    style={{ left: `calc(${at(node.p95)} - 1px)` }}
                   />
                 </span>
               </span>
@@ -144,8 +242,14 @@ function TimeByStep({ data }: { data: Monitoring }) {
           );
         })}
       </ul>
-      <p className="mt-3 text-xs text-ink-3">
-        The specialists run at the same time, so an evaluation takes far less than these add up to.
+      <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-1.5 w-4 rounded-full" style={{ background: "var(--data-1)" }} /> median
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden className="h-2.5 w-0.5 rounded-full bg-ink" /> 95th percentile
+        </span>
+        <span>The specialists run at the same time, so an evaluation takes far less than these add up to.</span>
       </p>
     </section>
   );
@@ -196,13 +300,22 @@ function Runs({ data }: { data: Monitoring }) {
   );
 }
 
-function Log({ data }: { data: Monitoring }) {
-  const [filter, setFilter] = useState<Filter>("all");
+function Log({
+  data,
+  filter,
+  onFilter,
+  sectionRef,
+}: {
+  data: Monitoring;
+  filter: Filter;
+  onFilter: (filter: Filter) => void;
+  sectionRef: React.Ref<HTMLElement>;
+}) {
   const [shown, setShown] = useState(40);
   const kinds: readonly string[] | null = FILTERS[filter].kinds;
   const events = data.events.filter((event) => !kinds || kinds.includes(event.kind));
   return (
-    <section aria-labelledby="log-title">
+    <section ref={sectionRef} tabIndex={-1} aria-labelledby="log-title" className="scroll-mt-8 outline-none">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h3 id="log-title" className="kicker">
           Log
@@ -213,7 +326,7 @@ function Log({ data }: { data: Monitoring }) {
               key={key}
               type="button"
               aria-pressed={filter === key}
-              onClick={() => setFilter(key)}
+              onClick={() => onFilter(key)}
               className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
                 filter === key ? "border-primary bg-primary-soft text-ink" : "border-rule-strong text-ink-2 hover:text-ink"
               }`}
@@ -226,17 +339,26 @@ function Log({ data }: { data: Monitoring }) {
       {events.length ? (
         <ol className="mt-3 divide-y divide-rule border-y border-rule">
           {events.slice(0, shown).map((event, index) => (
-            <li key={`${event.at}-${index}`} className="grid grid-cols-[4.5rem_6.5rem_minmax(0,1fr)] gap-3 py-2 text-sm">
+            <li
+              key={`${event.at}-${index}`}
+              className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 py-2 text-sm sm:grid-cols-[4.5rem_6.5rem_minmax(0,1fr)]"
+            >
               <span className="pt-0.5 font-mono text-xs text-ink-3">{clock(event.at)}</span>
               <span>
                 <Badge tone={KIND_TONE[event.kind]}>{event.kind}</Badge>
               </span>
-              <span className="min-w-0">
+              <span className="col-span-2 min-w-0 sm:col-span-1">
                 <span className="font-medium text-ink">{nodeName(event.source)}</span>{" "}
                 <span className={event.kind === "error" ? "text-bad" : event.kind === "warning" ? "text-warn" : "text-ink-2"}>
                   {event.message}
                 </span>
                 {event.session && <span className="ml-2 font-mono text-[11px] text-ink-3">{event.session}</span>}
+                {/* The request a problem happened in, to find its lines in the API's logs. */}
+                {event.request && (event.kind === "warning" || event.kind === "error") && (
+                  <span className="ml-2 font-mono text-[11px] text-ink-3" title={`Request ${event.request}`}>
+                    request {event.request.slice(0, 8)}
+                  </span>
+                )}
               </span>
             </li>
           ))}
@@ -253,57 +375,143 @@ function Log({ data }: { data: Monitoring }) {
   );
 }
 
+type Asked = { ok: true } | { ok: false; message: string };
+// Why the API is not being heard from, and when it is asked again (none while paused).
+type Trouble = { message: string; next: number | null };
+
 export function MonitorView({ active }: { active: boolean }) {
   const [data, setData] = useState<Monitoring | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [trouble, setTrouble] = useState<Trouble | null>(null);
   const [paused, setPaused] = useState(false);
   const [updated, setUpdated] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  // Bumped to ask again now, from the start.
+  const [round, setRound] = useState(0);
+  const asking = useRef<Promise<Asked> | null>(null);
+  const logRef = useRef<HTMLElement>(null);
 
-  const refresh = useCallback(() => {
-    getMonitoring()
-      .then((answer) => {
+  // One request at a time: asking while one is on its way waits for that one.
+  // A request is given up after PATIENCE_MS.
+  const ask = useCallback((): Promise<Asked> => {
+    asking.current ??= (async (): Promise<Asked> => {
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), PATIENCE_MS);
+      try {
+        const answer = await getMonitoring(controller.signal);
         setData(answer);
-        setProblem(null);
+        setTrouble(null);
         setUpdated(new Date().toISOString());
-      })
-      .catch((error: Error) => setProblem(error.message));
+        return { ok: true };
+      } catch (error) {
+        const message = controller.signal.aborted
+          ? `The API took more than ${PATIENCE_MS / 1000} s to answer.`
+          : (error as Error).message;
+        return { ok: false, message };
+      } finally {
+        window.clearTimeout(timer);
+        asking.current = null;
+      }
+    })();
+    return asking.current;
   }, []);
 
+  // While shown and not paused: every REFRESH_MS, or after a failure 10, 20,
+  // 40 and then 60 s, and at once when the page is shown again.
   useEffect(() => {
     if (!active || paused) return;
-    refresh();
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, REFRESH_MS);
-    return () => window.clearInterval(timer);
-  }, [active, paused, refresh]);
+    let stopped = false;
+    let timer: number | undefined;
+    let failures = 0;
+    let latest = 0; // only the latest poll sets the next one
+
+    async function poll() {
+      window.clearTimeout(timer);
+      const mine = ++latest;
+      const asked = await ask();
+      if (stopped || mine !== latest) return;
+      failures = asked.ok ? 0 : failures + 1;
+      const wait = failures ? Math.min(LONGEST_WAIT_MS, REFRESH_MS * 2 ** failures) : REFRESH_MS;
+      if (!asked.ok) setTrouble({ message: asked.message, next: Date.now() + wait });
+      timer = window.setTimeout(() => {
+        if (document.visibilityState === "visible") void poll();
+      }, wait);
+    }
+
+    function shown() {
+      if (document.visibilityState === "visible") void poll();
+    }
+
+    void poll();
+    document.addEventListener("visibilitychange", shown);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", shown);
+    };
+  }, [active, paused, round, ask]);
+
+  function refresh() {
+    if (!paused) {
+      setRound((current) => current + 1);
+      return;
+    }
+    void ask().then((asked) => {
+      if (!asked.ok) setTrouble({ message: asked.message, next: null });
+    });
+  }
+
+  function showProblems() {
+    setFilter("problems");
+    logRef.current?.focus();
+  }
 
   const quiet = data && !data.events.length && !data.runs.length;
   return (
     <div className="space-y-10">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm text-ink-2">
-          <PulseIcon className="size-4 text-primary" />
-          {data ? `Since the API started at ${clock(data.started_at)}.` : "Asking the API…"}
-          {updated && <span className="text-ink-3">Updated at {clock(updated)}.</span>}
-        </p>
-        <div className="flex gap-2">
-          <Button size="sm" aria-pressed={paused} onClick={() => setPaused((current) => !current)}>
-            {paused ? "Resume" : "Pause"}
-          </Button>
-          <Button size="sm" onClick={refresh}>
-            <RefreshIcon className="size-3.5" />
-            Refresh
-          </Button>
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="flex flex-wrap items-center gap-x-2 text-sm text-ink-2">
+            <PulseIcon className="size-4 text-primary" />
+            {data ? `Since the API started at ${clock(data.started_at)}.` : trouble ? "" : "Asking the API…"}
+            {updated && (
+              <span className={trouble ? "text-warn" : "text-ink-3"}>
+                Updated at {clock(updated)}
+                {trouble ? ", not since." : "."}
+              </span>
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button size="sm" aria-pressed={paused} onClick={() => setPaused((current) => !current)}>
+              {paused ? "Resume" : "Pause"}
+            </Button>
+            <Button size="sm" onClick={refresh}>
+              <RefreshIcon className="size-3.5" />
+              Refresh
+            </Button>
+          </div>
         </div>
+        {/* While the API is not answering, this stands in for the health it last reported. */}
+        {trouble ? (
+          <Notice tone="bad">
+            <p>
+              {data ? "The API stopped answering" : "The API is not answering"}: {trouble.message}
+              {data && updated ? ` Showing what it reported at ${clock(updated)}.` : ""}
+              {trouble.next ? ` Trying again at ${clock(trouble.next)}.` : ""}
+            </p>
+            <Button size="sm" className="mt-2" onClick={refresh}>
+              Try now
+            </Button>
+          </Notice>
+        ) : (
+          data && <HealthStrip health={data.health} running={data.running} onShow={showProblems} />
+        )}
       </div>
-      {problem && <Notice tone="bad">{problem}</Notice>}
       {quiet && (
         <div className="rounded-lg border border-rule bg-surface p-6">
           <p className="font-serif text-xl">Nothing has run since the API started.</p>
           <p className="mt-1 text-sm text-ink-2">
             Evaluate an idea, and each step, its time and its cost show up here as it happens. The monitor lives in the
-            API&apos;s memory, so a restart empties it.
+            API&apos;s memory, so a restart empties it; Prometheus can keep the history from <code>/metrics</code>.
           </p>
           <ButtonLink href="/" variant="primary" className="mt-4">
             Evaluate an idea
@@ -320,7 +528,7 @@ export function MonitorView({ active }: { active: boolean }) {
               {data.runs.length > 0 && <Runs data={data} />}
             </div>
           )}
-          <Log data={data} />
+          <Log data={data} filter={filter} onFilter={setFilter} sectionRef={logRef} />
         </>
       )}
     </div>

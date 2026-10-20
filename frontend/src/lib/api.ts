@@ -156,15 +156,25 @@ export type PrepareRequest = {
   research_provider?: ResearchProvider | null;
 };
 
-// The backend could not be reached, or answered with an error.
+// The backend could not be reached, or answered with an error. `requestId` is
+// the X-Request-ID the backend answered with: its logs name the request by it.
 export class ApiError extends Error {
   constructor(
     message: string,
     readonly status: number | null = null,
+    readonly requestId: string | null = null,
   ) {
-    super(message);
+    super(requestId ? `${message} (request ${requestId})` : message);
     this.name = "ApiError";
   }
+}
+
+async function failure(response: Response): Promise<ApiError> {
+  return new ApiError(
+    `The backend returned ${response.status}: ${await errorMessage(response)}`,
+    response.status,
+    response.headers.get("X-Request-ID"),
+  );
 }
 
 async function errorMessage(response: Response): Promise<string> {
@@ -185,12 +195,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError(`Could not reach the backend at ${API_URL}.`);
   }
-  if (!response.ok) {
-    throw new ApiError(
-      `The backend returned ${response.status}: ${await errorMessage(response)}`,
-      response.status,
-    );
-  }
+  if (!response.ok) throw await failure(response);
   return response.json() as Promise<T>;
 }
 
@@ -276,9 +281,8 @@ export async function evaluateStream(body: EvaluateRequest, onStep: (step: Step)
   } catch {
     throw new ApiError(`Could not reach the backend at ${API_URL}.`);
   }
-  if (!response.ok || !response.body) {
-    throw new ApiError(`The backend returned ${response.status}: ${await errorMessage(response)}`, response.status);
-  }
+  if (!response.ok || !response.body) throw await failure(response);
+  const requestId = response.headers.get("X-Request-ID");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -299,7 +303,7 @@ export async function evaluateStream(body: EvaluateRequest, onStep: (step: Step)
       if (event.name === "result") return event.data as unknown as EvaluateResponse;
       if (event.name === "error") {
         const status = Number(event.data.status) || null;
-        throw new ApiError(`The backend returned ${status}: ${String(event.data.detail)}`, status);
+        throw new ApiError(`The backend returned ${status}: ${String(event.data.detail)}`, status, requestId);
       }
       if (event.name === "start" || event.name === "done") {
         onStep({ ...(event.data as Omit<Step, "type">), type: event.name });
@@ -334,6 +338,8 @@ export type MonitorEvent = {
   source: string;
   message: string;
   session: string | null;
+  // The request it happened in: its X-Request-ID, also on every log line.
+  request: string | null;
 };
 
 export type MonitorRun = {
@@ -354,11 +360,33 @@ export type MonitorRun = {
   nodes: Record<string, NodeMetric>;
 };
 
-export type NodeStats = { node: string; runs: number; calls: number; seconds: number; tokens: number };
+// A step of the graph over the evaluations that finished: its totals, and the
+// median (p50) and 95th percentile of its time in one evaluation.
+export type NodeStats = {
+  node: string;
+  runs: number;
+  calls: number;
+  seconds: number;
+  tokens: number;
+  p50: number;
+  p95: number;
+};
 
-// What the API has done since it started (kept in memory).
+// Whether anything went wrong in the last `minutes`: an error, or only warnings
+// (a model call Azure made the client retry among them).
+export type MonitorHealth = {
+  status: "healthy" | "warnings" | "errors";
+  warnings: number;
+  errors: number;
+  minutes: number;
+};
+
+// What the API has done since it started (kept in memory). The time, calls and
+// costs are the finished evaluations'; `requests` leaves out polled routes.
 export type Monitoring = {
   started_at: string;
+  health: MonitorHealth;
+  running: number;
   totals: {
     evaluations: number;
     failures: number;
@@ -371,8 +399,17 @@ export type Monitoring = {
     searches: number;
     credits: number;
     briefs: number;
+    brief_failures: number;
     proposals: number;
+    proposal_failures: number;
+    requests: number;
+    server_errors: number;
+    retries: number;
+    warnings: number;
+    errors: number;
   };
+  // How long the latest finished evaluations took, in seconds.
+  evaluation_seconds: { p50: number; p95: number; max: number; samples: number } | null;
   nodes: NodeStats[];
   runs: MonitorRun[];
   events: MonitorEvent[];
@@ -382,8 +419,8 @@ export function getPipeline(): Promise<Pipeline> {
   return request("/pipeline");
 }
 
-export function getMonitoring(): Promise<Monitoring> {
-  return request("/monitoring");
+export function getMonitoring(signal?: AbortSignal): Promise<Monitoring> {
+  return request("/monitoring", { signal });
 }
 
 // ---- Reports (reports.py, proposal.py) ----
@@ -564,8 +601,6 @@ export async function reportPdf(sessionId: string): Promise<Blob> {
   } catch {
     throw new ApiError(`Could not reach the backend at ${API_URL}.`);
   }
-  if (!response.ok) {
-    throw new ApiError(`The backend returned ${response.status}: ${await errorMessage(response)}`, response.status);
-  }
+  if (!response.ok) throw await failure(response);
   return response.blob();
 }

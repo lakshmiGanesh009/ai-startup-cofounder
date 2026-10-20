@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import re
@@ -9,10 +10,11 @@ from pathlib import Path
 from typing import Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from prometheus_client.exposition import choose_encoder
 from pydantic import BaseModel, Field
 
 import brief as brief_module
@@ -21,7 +23,7 @@ from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
 from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
 from brief import PreparedBrief, Template, load_templates, prepare_brief
-from config import CORS_ORIGINS, DEBUG_MODE, MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
+from config import CORS_ORIGINS, DEBUG_MODE, LOG_FORMAT, MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
 from graph import build_graph
 from llm import (
     CHIEF,
@@ -35,6 +37,7 @@ from llm import (
     takes_reasoning_effort,
 )
 from monitor import Monitoring, MonitorHandler, Run, monitor
+from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session, configure_logging
 from progress import summarize
 from proposal import Proposal
 from report_pdf import render_pdf
@@ -53,10 +56,7 @@ from state import DeepResearch, NodeMetric, RequestContext, Resolution, ReviewRe
 SERVICE_NAME = "AI Startup Co-Founder Team"
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
 
-logging.basicConfig(
-    level=logging.DEBUG if DEBUG_MODE else logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+configure_logging(logging.DEBUG if DEBUG_MODE else logging.INFO, LOG_FORMAT)
 logger = logging.getLogger(__name__)
 # The monitor's log gets the app's warnings and errors, and the model client's retries.
 logging.getLogger().addHandler(MonitorHandler(monitor))
@@ -66,12 +66,17 @@ app = FastAPI(
     description="Multi-agent founding team that evaluates startup ideas",
     version="0.1.0",
 )
-# Lets a browser frontend on another origin (the Next.js app) call the API.
+# Each request gets an ID, an access log line and its place in the metrics.
+app.add_middleware(RequestContextMiddleware, on_finish=monitor.request)
+# Lets a browser frontend on another origin (the Next.js app) call the API, and
+# read a response's request ID to show with an error. Added last, so it wraps
+# every response, the 500s the request middleware makes included.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_methods=["GET", "POST", "PUT"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", REQUEST_HEADER],
+    expose_headers=[REQUEST_HEADER],
 )
 
 graph = build_graph()
@@ -205,6 +210,14 @@ async def monitoring():
     return monitor.snapshot()
 
 
+@app.get("/metrics", include_in_schema=False)
+async def metrics(request: Request):
+    """The monitor's counters and timings for Prometheus to scrape, in the
+    text format, or OpenMetrics when the scraper asks for it."""
+    encode, content_type = choose_encoder(request.headers.get("accept", ""))
+    return Response(encode(monitor.metrics.registry), media_type=content_type)
+
+
 class PrepareRequest(BaseModel):
     prompt: str = Field(min_length=1, description="The founder's brief.")
     context: RequestContext | None = None
@@ -237,9 +250,11 @@ async def prepare(request: PrepareRequest):
                 prepare_brief, request.prompt.strip(), request.context, template, request.research_provider
             )
     except LLMNotConfigured as error:
+        monitor.count("briefs", ok=False)
         monitor.event("error", "brief", f"No brief could be prepared: {error}")
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LLM_ERRORS as error:
+        monitor.count("briefs", ok=False)
         logger.warning("Preparing a brief failed on an LLM call: %s", error)
         raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
     monitor.count("briefs")
@@ -256,6 +271,7 @@ async def prepare(request: PrepareRequest):
 def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
     """The session, the graph's input and its config for one request."""
     session_id = request.session_id or str(uuid.uuid4())
+    bind_session(session_id)
     use = providers.chosen(request.research_provider)
     state = {"request": request.prompt, "deep": request.deep_research and use is not None}
     if use:
@@ -320,12 +336,14 @@ async def evaluate(request: EvaluateRequest):
     """
     session_id, state, config = _start(request)
     started = time.perf_counter()
+    monitor.begin()
     try:
         # ainvoke runs the nodes in worker threads, so a run that takes minutes
         # does not block the event loop, and other requests are still served.
         # The threads inherit the request's reasoning efforts.
         with reasoning(**_efforts(request.reasoning)):
             result = await graph.ainvoke(state, config)
+        response = _finish(session_id, result)
     except LLMNotConfigured as error:
         monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
         _record(request, session_id, started, error=str(error))
@@ -334,7 +352,9 @@ async def evaluate(request: EvaluateRequest):
         logger.warning("Evaluation failed on an LLM call: %s", error)
         _record(request, session_id, started, error=f"The LLM call failed: {error}")
         raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
-    response = _finish(session_id, result)
+    except BaseException:  # anything else, a cancellation too: recorded, then raised (an error becomes a 500)
+        _record(request, session_id, started, error="The evaluation failed unexpectedly.")
+        raise
     _record(request, session_id, started, response)
     return response
 
@@ -358,6 +378,7 @@ async def evaluate_stream(request: EvaluateRequest):
 
     async def events():
         began = time.perf_counter()
+        monitor.begin()
         runs: Counter[str] = Counter()
         given: dict[str, dict] = {}  # the state each running node was given
 
@@ -393,6 +414,9 @@ async def evaluate_stream(request: EvaluateRequest):
             _record(request, session_id, began, error="The evaluation failed unexpectedly.")
             yield _event("error", {"status": 500, "detail": "The evaluation failed unexpectedly."})
             return
+        except (asyncio.CancelledError, GeneratorExit):  # the browser went away mid-run
+            _record(request, session_id, began, error="The connection closed before the evaluation finished.")
+            raise
         _record(request, session_id, began, response)
         yield _event("result", response.model_dump(mode="json"))
 
@@ -476,6 +500,7 @@ async def reset_report(session_id: str):
 
 
 def _report_at(session_id: str, version: int) -> Report:
+    bind_session(session_id)
     report = store.get(session_id)
     if report.version != version:
         raise ReportChanged(f"The report is at version {report.version}, not {version}.")
@@ -491,12 +516,15 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         try:
             proposal, failed = await run_in_threadpool(write_proposal, report, instruction, part)
         except LLMNotConfigured as error:
+            monitor.count("proposals", ok=False)
             monitor.event("error", "proposal", f"{doing} the proposal could not start: {error}", report.session_id)
             raise HTTPException(status_code=503, detail=str(error)) from error
         except ProposalNotWritten as error:
+            monitor.count("proposals", ok=False)
             monitor.event("error", "proposal", f"{doing} the proposal failed: {error}", report.session_id)
             raise HTTPException(status_code=502, detail=f"{error} Try again.") from error
     if report.proposal and len(failed) == len(parts_to_write(report.proposal, part)):
+        monitor.count("proposals", ok=False)
         monitor.event("error", "proposal", "Nothing could be revised: every LLM call failed.", report.session_id)
         raise HTTPException(status_code=502, detail="Nothing could be revised: every LLM call failed.")
     saved = store.save_proposal(report.session_id, report.version, proposal, edited=False)

@@ -1,8 +1,9 @@
 "use client";
 
-// The backend as the whole app sees it: whether it answers, the reasoning
-// efforts every request sends, and where web research runs. Both start at the
-// backend's defaults and are remembered in this browser once changed.
+// The backend as the whole app sees it: whether it answers (checked again every
+// 30 s while the page is shown, so an outage and the recovery both show), the
+// reasoning efforts every request sends, and where web research runs. Both
+// start at the backend's defaults and are remembered in this browser once changed.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
@@ -18,6 +19,7 @@ import {
 
 const STORAGE_KEY = "cofounder-reasoning";
 const PROVIDER_KEY = "cofounder-research";
+const RECHECK_MS = 30_000;
 
 type Role = "specialist" | "chief";
 
@@ -65,29 +67,45 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    getHealth()
-      .then((answer) => {
-        if (cancelled) return;
-        const saved = remembered();
-        const pick = (role: Role): Effort => {
-          const mine = saved[role];
-          if (valid(mine)) return mine;
-          const configured = answer.reasoning[role];
-          return valid(configured) ? configured : "minimal";
-        };
-        const savedProvider = rememberedProvider();
-        setHealth(answer);
-        setChosen({ specialist: pick("specialist"), chief: pick("chief") });
-        setProvider(savedProvider && answer.research.providers[savedProvider] ? savedProvider : answer.research.default);
-        setStatus("up");
-      })
-      .catch((reason: Error) => {
-        if (cancelled) return;
-        setError(reason.message);
-        setStatus("down");
-      });
+    let started = false; // the efforts and provider are set from the first answer
+
+    function check() {
+      getHealth()
+        .then((answer) => {
+          if (cancelled) return;
+          if (!started) {
+            started = true;
+            const saved = remembered();
+            const pick = (role: Role): Effort => {
+              const mine = saved[role];
+              if (valid(mine)) return mine;
+              const configured = answer.reasoning[role];
+              return valid(configured) ? configured : "minimal";
+            };
+            const savedProvider = rememberedProvider();
+            setChosen({ specialist: pick("specialist"), chief: pick("chief") });
+            setProvider(
+              savedProvider && answer.research.providers[savedProvider] ? savedProvider : answer.research.default,
+            );
+          }
+          setHealth(answer);
+          setError(null);
+          setStatus("up");
+        })
+        .catch((reason: Error) => {
+          if (cancelled) return;
+          setError(reason.message);
+          setStatus("down");
+        });
+    }
+
+    check();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") check();
+    }, RECHECK_MS);
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, []);
 

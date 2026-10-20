@@ -15,6 +15,7 @@ import {
   GlobeIcon,
   HandIcon,
   MegaphoneIcon,
+  PulseIcon,
   ServerIcon,
   ShieldIcon,
   SparkIcon,
@@ -43,6 +44,7 @@ const LAYER_ICONS: Record<LayerIcon, Glyph> = {
   spark: SparkIcon,
   globe: GlobeIcon,
   document: DocumentIcon,
+  pulse: PulseIcon,
   check: CheckIcon,
 };
 

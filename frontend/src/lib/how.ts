@@ -123,7 +123,7 @@ export const JUDGEMENT: { title: string; why: string; where: string }[] = [
   },
 ];
 
-export type LayerIcon = "window" | "server" | "flow" | "team" | "spark" | "globe" | "document" | "check";
+export type LayerIcon = "window" | "server" | "flow" | "team" | "spark" | "globe" | "document" | "pulse" | "check";
 
 // The stack, by layer, and what each part does here.
 export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: string }[] = [
@@ -168,6 +168,12 @@ export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: str
     icon: "document",
     tools: ["fpdf2", "Calculated metrics"],
     does: "The PDF with its charts; revenue, NPV, IRR and payback calculated in code, not by the model.",
+  },
+  {
+    layer: "Observability",
+    icon: "pulse",
+    tools: ["Request IDs", "JSON logs", "Prometheus", "The Monitor"],
+    does: "An ID on every request, its log lines and its errors; metrics at /metrics for Prometheus; the Monitor tab.",
   },
   {
     layer: "Checks",

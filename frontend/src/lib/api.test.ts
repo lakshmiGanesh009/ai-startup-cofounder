@@ -51,6 +51,27 @@ describe("the API client", () => {
     expect(error.status).toBe(503);
   });
 
+  test("an error names the request, so it can be found in the API's logs", async () => {
+    fakeBackend({
+      "POST /evaluate": {
+        status: 500,
+        body: { detail: "The server failed unexpectedly.", request_id: "3f2a9c1b7d4e5f60" },
+        headers: { "X-Request-ID": "3f2a9c1b7d4e5f60" },
+      },
+      "POST /evaluate/stream": {
+        stream: sse(STEPS.slice(0, 2), { error: { status: 502, detail: "The LLM call failed: timeout" } }),
+        headers: { "X-Request-ID": "a1b2c3d4e5f60718" },
+      },
+    });
+
+    const error = await failure(evaluate({ prompt: "An idea" }));
+    expect(error.message).toBe("The backend returned 500: The server failed unexpectedly. (request 3f2a9c1b7d4e5f60)");
+    expect(error.requestId).toBe("3f2a9c1b7d4e5f60");
+
+    const streamed = await failure(evaluateStream({ prompt: "An idea" }, () => {}));
+    expect(streamed.message).toBe("The backend returned 502: The LLM call failed: timeout (request a1b2c3d4e5f60718)");
+  });
+
   test("a validation error lists its problems", async () => {
     fakeBackend({
       "POST /evaluate": {

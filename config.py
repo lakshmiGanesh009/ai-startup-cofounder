@@ -7,6 +7,10 @@ load_dotenv()
 # Workflow debugging flag: DEBUG logging plus LangGraph step-by-step traces.
 DEBUG_MODE = os.getenv("DEBUG_MODE", "false").strip().lower() in {"1", "true", "yes", "on"}
 
+# How log lines are written: "text" for reading in a terminal, or "json", one
+# object a line, for a log collector. Either way each line names its request.
+LOG_FORMAT = "json" if os.getenv("LOG_FORMAT", "text").strip().lower() == "json" else "text"
+
 # How many times a rejected report may be revised. 1 in the initial version.
 MAX_ITERATIONS = int(os.getenv("MAX_ITERATIONS", "1"))
 
