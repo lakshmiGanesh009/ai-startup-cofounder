@@ -4,6 +4,7 @@ import re
 import time
 import uuid
 from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -14,9 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+import brief as brief_module
+import deep_research
+from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
+from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
 from brief import PreparedBrief, Template, load_templates, prepare_brief
-from config import CORS_ORIGINS, DEBUG_MODE
+from config import CORS_ORIGINS, DEBUG_MODE, MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
 from graph import build_graph
 from llm import (
     CHIEF,
@@ -29,6 +34,7 @@ from llm import (
     reasoning,
     takes_reasoning_effort,
 )
+from monitor import Monitoring, MonitorHandler, Run, monitor
 from progress import summarize
 from proposal import Proposal
 from report_pdf import render_pdf
@@ -52,6 +58,8 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+# The monitor's log gets the app's warnings and errors, and the model client's retries.
+logging.getLogger().addHandler(MonitorHandler(monitor))
 
 app = FastAPI(
     title=SERVICE_NAME,
@@ -157,6 +165,46 @@ async def list_templates():
     return load_templates()
 
 
+def _diagram() -> str:
+    """The graph as Mermaid, without LangGraph's own colours and markup, which the page styles."""
+    text = graph.get_graph().draw_mermaid()
+    text = re.sub(r"<p>__(start|end)__</p>", r"\1", text)
+    text = re.sub(r":::\w+", "", text)
+    return "\n".join(line for line in text.splitlines() if not line.strip().startswith("classDef"))
+
+
+@app.get("/pipeline")
+async def pipeline():
+    """How the team works, for the How it works page: the graph as a Mermaid
+    diagram, the specialists, and the rules and settings in force, so the page
+    always shows what the code does."""
+    return {
+        "mermaid": _diagram(),
+        "specialists": [
+            {"name": role.name, "title": role.title, "focus": role.focus, "reads_competitors": role.name in COMPANY_READERS}
+            for role in SPECIALISTS
+        ],
+        "rules": {
+            "approval_score": APPROVAL_SCORE,
+            "max_revisions": MAX_ITERATIONS,
+            "max_critique_rounds": MAX_CRITIQUE_ROUNDS,
+            "report_words": REPORT_WORDS,
+            "strategy_words": STRATEGY_WORDS,
+            "max_questions": brief_module.MAX_QUESTIONS,
+            "max_facts": brief_module.MAX_FINDINGS,
+            "max_competitors": deep_research.MAX_COMPANIES,
+        },
+    }
+
+
+@app.get("/monitoring", response_model=Monitoring)
+async def monitoring():
+    """What the API has done since it started: evaluations, briefs and proposals,
+    the time, calls and tokens of each step of the graph, and a log of recent
+    events, warnings and errors. Kept in memory, so a restart empties it."""
+    return monitor.snapshot()
+
+
 class PrepareRequest(BaseModel):
     prompt: str = Field(min_length=1, description="The founder's brief.")
     context: RequestContext | None = None
@@ -182,16 +230,27 @@ async def prepare(request: PrepareRequest):
         template = next((each for each in load_templates() if each.name == request.template), None)
         if template is None:
             raise HTTPException(status_code=422, detail=f"There is no template called {request.template!r}.")
+    started = time.perf_counter()
     try:
         with reasoning(**_efforts(request.reasoning)):
-            return await run_in_threadpool(
+            prepared = await run_in_threadpool(
                 prepare_brief, request.prompt.strip(), request.context, template, request.research_provider
             )
     except LLMNotConfigured as error:
+        monitor.event("error", "brief", f"No brief could be prepared: {error}")
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LLM_ERRORS as error:
         logger.warning("Preparing a brief failed on an LLM call: %s", error)
         raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
+    monitor.count("briefs")
+    facts = len(prepared.research.findings) if prepared.research else 0
+    by = f" with {prepared.provider}" if prepared.provider else ""
+    monitor.event(
+        "brief", "brief",
+        f"Prepared a brief{by} in {time.perf_counter() - started:.0f} s: "
+        f"{facts} facts kept, {len(prepared.questions)} questions.",
+    )
+    return prepared
 
 
 def _start(request: EvaluateRequest) -> tuple[str, dict, dict]:
@@ -222,6 +281,36 @@ def _finish(session_id: str, result: dict) -> EvaluateResponse:
     )
 
 
+def _record(request: EvaluateRequest, session_id: str, started: float,
+            response: EvaluateResponse | None = None, error: str | None = None) -> None:
+    """Put an evaluation that ended in the monitor: what it ran, took and cost."""
+    seconds = round(time.perf_counter() - started, 1)
+    at = datetime.now(timezone.utc)
+    if response is None:
+        monitor.run(Run(session=session_id[:8], at=at, seconds=seconds, ok=False, error=error))
+        return
+    verdicts: dict[str, ReviewResult] = {}
+    for review_round in response.review_history:
+        verdicts.update(review_round)
+    deep = response.research if request.deep_research else None
+    calls = sum(metric.calls for metric in response.metrics.values())
+    tokens = sum(metric.tokens for metric in response.metrics.values())
+    monitor.run(Run(
+        session=session_id[:8], at=at, seconds=seconds, ok=True,
+        specialists=list(response.assignments), calls=calls, tokens=tokens,
+        reviewed=len(verdicts), approved=sum(1 for review in verdicts.values() if review.approved),
+        conflicts=len(response.resolutions),
+        research=deep.providers[-1] if deep and deep.providers else None,
+        searches=deep.searches if deep else 0, credits=deep.credits if deep else 0,
+        nodes=response.metrics,
+    ))
+    monitor.event(
+        "run", "evaluate",
+        f"Finished in {seconds:.0f} s: {len(response.assignments)} specialists, {calls} model calls, {tokens:,} tokens.",
+        session_id,
+    )
+
+
 @app.post("/evaluate", response_model=EvaluateResponse)
 async def evaluate(request: EvaluateRequest):
     """Run the founding team against a startup request and return the analyses.
@@ -230,6 +319,7 @@ async def evaluate(request: EvaluateRequest):
     retries returns 502, so a provider problem never shows up as a 500.
     """
     session_id, state, config = _start(request)
+    started = time.perf_counter()
     try:
         # ainvoke runs the nodes in worker threads, so a run that takes minutes
         # does not block the event loop, and other requests are still served.
@@ -237,11 +327,16 @@ async def evaluate(request: EvaluateRequest):
         with reasoning(**_efforts(request.reasoning)):
             result = await graph.ainvoke(state, config)
     except LLMNotConfigured as error:
+        monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
+        _record(request, session_id, started, error=str(error))
         raise HTTPException(status_code=503, detail=str(error)) from error
     except LLM_ERRORS as error:
         logger.warning("Evaluation failed on an LLM call: %s", error)
+        _record(request, session_id, started, error=f"The LLM call failed: {error}")
         raise HTTPException(status_code=502, detail=f"The LLM call failed: {error}") from error
-    return _finish(session_id, result)
+    response = _finish(session_id, result)
+    _record(request, session_id, started, response)
+    return response
 
 
 def _event(name: str, data: dict) -> str:
@@ -276,22 +371,29 @@ async def evaluate_stream(request: EvaluateRequest):
                     if "input" in task:
                         runs[node] += 1
                         given[node] = task["input"]
+                        monitor.event("start", node, "Started." if runs[node] == 1 else "Started again.", session_id)
                         yield _event("start", {"node": node, "at": at()})
                     elif not task.get("error"):
                         summary = summarize(node, task.get("result"), runs[node], given.get(node))
+                        monitor.event("done", node, summary["summary"], session_id)
                         yield _event("done", {"node": node, "at": at(), **summary})
             response = _finish(session_id, (await graph.aget_state(config)).values)
         except LLMNotConfigured as error:
+            monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
+            _record(request, session_id, began, error=str(error))
             yield _event("error", {"status": 503, "detail": str(error)})
             return
         except LLM_ERRORS as error:
             logger.warning("Evaluation failed on an LLM call: %s", error)
+            _record(request, session_id, began, error=f"The LLM call failed: {error}")
             yield _event("error", {"status": 502, "detail": f"The LLM call failed: {error}"})
             return
         except Exception:  # the status is already sent, so say what happened instead
             logger.exception("Evaluation failed")
+            _record(request, session_id, began, error="The evaluation failed unexpectedly.")
             yield _event("error", {"status": 500, "detail": "The evaluation failed unexpectedly."})
             return
+        _record(request, session_id, began, response)
         yield _event("result", response.model_dump(mode="json"))
 
     # No caching or proxy buffering, so each event reaches the browser as it happens.
@@ -383,16 +485,29 @@ def _report_at(session_id: str, version: int) -> Report:
 async def _write(report: Report, choice: Reasoning | None, instruction: str = "",
                  part: str | None = None) -> ProposalResult:
     """Run the proposal writer off the event loop and save what it wrote."""
+    started = time.perf_counter()
+    doing = "Revising" if report.proposal else "Writing"
     with reasoning(**_efforts(choice)):
         try:
             proposal, failed = await run_in_threadpool(write_proposal, report, instruction, part)
         except LLMNotConfigured as error:
+            monitor.event("error", "proposal", f"{doing} the proposal could not start: {error}", report.session_id)
             raise HTTPException(status_code=503, detail=str(error)) from error
         except ProposalNotWritten as error:
+            monitor.event("error", "proposal", f"{doing} the proposal failed: {error}", report.session_id)
             raise HTTPException(status_code=502, detail=f"{error} Try again.") from error
     if report.proposal and len(failed) == len(parts_to_write(report.proposal, part)):
+        monitor.event("error", "proposal", "Nothing could be revised: every LLM call failed.", report.session_id)
         raise HTTPException(status_code=502, detail="Nothing could be revised: every LLM call failed.")
     saved = store.save_proposal(report.session_id, report.version, proposal, edited=False)
+    monitor.count("proposals")
+    done = "Revised" if report.proposal else "Wrote"
+    monitor.event(
+        "proposal", "proposal",
+        f"{done} the investment proposal in {time.perf_counter() - started:.0f} s"
+        + (f"; {len(failed)} parts kept their text." if failed else "."),
+        report.session_id,
+    )
     return ProposalResult(report=saved, failed=failed)
 
 

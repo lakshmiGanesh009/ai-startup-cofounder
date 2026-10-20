@@ -248,6 +248,14 @@ def fake_llm(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def fresh_monitor():
+    """Each test starts with an empty monitor."""
+    from monitor import monitor
+
+    monitor.reset()
+
+
+@pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     """Neither Tavily nor Azure OpenAI's web search is called for real: a test
     that searches or researches answers through search._transport or

@@ -309,6 +309,83 @@ export async function evaluateStream(body: EvaluateRequest, onStep: (step: Step)
   throw new ApiError("The connection to the backend was lost before the evaluation finished.");
 }
 
+// ---- How it works (main.py's /pipeline, monitor.py) ----
+
+// The team as the code runs it: the graph as Mermaid, the specialists, and the
+// rules the Chief of Staff decides by.
+export type Pipeline = {
+  mermaid: string;
+  specialists: { name: Specialist; title: string; focus: string; reads_competitors: boolean }[];
+  rules: {
+    approval_score: number;
+    max_revisions: number;
+    max_critique_rounds: number;
+    report_words: number;
+    strategy_words: number;
+    max_questions: number;
+    max_facts: number;
+    max_competitors: number;
+  };
+};
+
+export type MonitorEvent = {
+  at: string;
+  kind: "start" | "done" | "run" | "brief" | "proposal" | "warning" | "error";
+  source: string;
+  message: string;
+  session: string | null;
+};
+
+export type MonitorRun = {
+  session: string;
+  at: string;
+  seconds: number;
+  ok: boolean;
+  error: string | null;
+  specialists: Specialist[];
+  calls: number;
+  tokens: number;
+  reviewed: number;
+  approved: number;
+  conflicts: number;
+  research: string | null;
+  searches: number;
+  credits: number;
+  nodes: Record<string, NodeMetric>;
+};
+
+export type NodeStats = { node: string; runs: number; calls: number; seconds: number; tokens: number };
+
+// What the API has done since it started (kept in memory).
+export type Monitoring = {
+  started_at: string;
+  totals: {
+    evaluations: number;
+    failures: number;
+    seconds: number;
+    calls: number;
+    tokens: number;
+    reviewed: number;
+    approved: number;
+    conflicts: number;
+    searches: number;
+    credits: number;
+    briefs: number;
+    proposals: number;
+  };
+  nodes: NodeStats[];
+  runs: MonitorRun[];
+  events: MonitorEvent[];
+};
+
+export function getPipeline(): Promise<Pipeline> {
+  return request("/pipeline");
+}
+
+export function getMonitoring(): Promise<Monitoring> {
+  return request("/monitoring");
+}
+
 // ---- Reports (reports.py, proposal.py) ----
 
 export type ReportSection = { key: string; title: string; body: string };

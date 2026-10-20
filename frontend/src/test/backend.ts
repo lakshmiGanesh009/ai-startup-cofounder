@@ -3,7 +3,17 @@
 
 import { vi } from "vitest";
 
-import type { DeepResearch, EvaluateResponse, Health, PreparedBrief, Scenario, Step, Template } from "@/lib/api";
+import type {
+  DeepResearch,
+  EvaluateResponse,
+  Health,
+  Monitoring,
+  Pipeline,
+  PreparedBrief,
+  Scenario,
+  Step,
+  Template,
+} from "@/lib/api";
 
 export const HEALTH: Health = {
   status: "healthy",
@@ -149,6 +159,68 @@ export const DEEP: DeepResearch = {
   failed: ["risk"],
 };
 
+// How the backend describes the team (/pipeline).
+export const PIPELINE: Pipeline = {
+  mermaid: "graph TD;\n\t__start__([start])\n\tplan(plan)\n\t__start__ --> plan;",
+  specialists: [
+    { name: "marketing", title: "Marketing Strategy", focus: "customers, positioning, demand and go-to-market", reads_competitors: true },
+    { name: "finance", title: "Financial Planning", focus: "costs, pricing, runway and break-even", reads_competitors: true },
+    { name: "technical", title: "Technical Feasibility", focus: "architecture, build effort and technical risk", reads_competitors: false },
+    { name: "risk", title: "Risk & Compliance", focus: "legal, regulatory and operational risk", reads_competitors: false },
+  ],
+  rules: {
+    approval_score: 4,
+    max_revisions: 1,
+    max_critique_rounds: 1,
+    report_words: 250,
+    strategy_words: 500,
+    max_questions: 3,
+    max_facts: 8,
+    max_competitors: 3,
+  },
+};
+
+// What the API has done (/monitoring): two evaluations, one failed, and a short log.
+export const MONITORING: Monitoring = {
+  started_at: "2026-10-20T09:00:00Z",
+  totals: {
+    evaluations: 2,
+    failures: 1,
+    seconds: 157, // the finished evaluation's only
+    calls: 22,
+    tokens: 95000,
+    reviewed: 4,
+    approved: 3,
+    conflicts: 2,
+    searches: 42,
+    credits: 0,
+    briefs: 1,
+    proposals: 1,
+  },
+  nodes: [
+    { node: "synthesis", runs: 1, calls: 1, seconds: 19, tokens: 3400 },
+    { node: "plan", runs: 2, calls: 3, seconds: 19, tokens: 2400 },
+    { node: "finance", runs: 1, calls: 2, seconds: 30, tokens: 8000 },
+  ],
+  runs: [
+    {
+      session: "abcd1234", at: "2026-10-20T09:10:00Z", seconds: 3, ok: false, error: "The LLM call failed: timeout",
+      specialists: [], calls: 0, tokens: 0, reviewed: 0, approved: 0, conflicts: 0, research: null, searches: 0, credits: 0, nodes: {},
+    },
+    {
+      session: "efgh5678", at: "2026-10-20T09:05:00Z", seconds: 157, ok: true, error: null,
+      specialists: ["marketing", "finance", "technical", "risk"], calls: 22, tokens: 95000, reviewed: 4, approved: 3,
+      conflicts: 2, research: "Azure OpenAI", searches: 42, credits: 0, nodes: {},
+    },
+  ],
+  events: [
+    { at: "2026-10-20T09:10:00Z", kind: "warning", source: "main", message: "Evaluation failed on an LLM call: timeout", session: null },
+    { at: "2026-10-20T09:05:00Z", kind: "run", source: "evaluate", message: "Finished in 157 s: 4 specialists.", session: "efgh5678" },
+    { at: "2026-10-20T09:04:00Z", kind: "done", source: "review", message: "Reviewed 4 reports: approved 3.", session: "efgh5678" },
+    { at: "2026-10-20T09:03:00Z", kind: "start", source: "finance", message: "Started.", session: "efgh5678" },
+  ],
+};
+
 // What /evaluate/stream reports for RESULT, step by step.
 export const STEPS: Step[] = [
   { type: "start", node: "plan", at: 0.1 },
@@ -223,6 +295,8 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
     "GET /scenarios": { body: SCENARIOS },
     "GET /templates": { body: TEMPLATES },
     "POST /brief/prepare": { body: PREPARED },
+    "GET /pipeline": { body: PIPELINE },
+    "GET /monitoring": { body: MONITORING },
     "POST /evaluate": { body: RESULT },
     "POST /evaluate/stream": () => ({ stream: sse(STEPS, { result: RESULT }) }),
     ...overrides,

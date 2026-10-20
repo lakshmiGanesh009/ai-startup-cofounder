@@ -435,3 +435,48 @@ dialog::backdrop {
   background: rgb(20 18 14 / 0.45);
   backdrop-filter: blur(2px);
 }
+
+/* ---- How it works: the line through the pipeline, and the work moving along it ---- */
+.pipeline-line {
+  position: absolute;
+  top: 22px;
+  left: calc(100% / 18);
+  right: calc(100% / 18);
+  height: 1px;
+  background: var(--rule-strong);
+}
+
+.pipeline-line::after {
+  content: "";
+  position: absolute;
+  top: -2.5px;
+  left: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: pipeline-travel 9s linear infinite;
+}
+
+@keyframes pipeline-travel {
+  from {
+    left: 0;
+  }
+  to {
+    left: calc(100% - 6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pipeline-line::after {
+    animation: none;
+    display: none;
+  }
+}
+
+/* A Mermaid diagram fits its panel's width. */
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+}

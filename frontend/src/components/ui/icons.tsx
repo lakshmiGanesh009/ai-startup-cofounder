@@ -132,3 +132,165 @@ export function MenuIcon(props: IconProps) {
     </Icon>
   );
 }
+
+// ---- The How it works page: the steps, the agents and their tools ----
+
+export function FlowIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="3.5" cy="4" r="1.75" />
+      <circle cx="12.5" cy="4" r="1.75" />
+      <circle cx="8" cy="12.25" r="1.75" />
+      <path d="M5.25 4h5.5M4.4 5.5l2.7 5.1M11.6 5.5l-2.7 5.1" />
+    </Icon>
+  );
+}
+
+export function UserIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="5.25" r="2.75" />
+      <path d="M2.75 14c.6-2.9 2.7-4.5 5.25-4.5s4.65 1.6 5.25 4.5" />
+    </Icon>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="m10.4 10.4 3.35 3.35" />
+    </Icon>
+  );
+}
+
+export function GlobeIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M1.75 8h12.5M8 1.75c1.7 1.75 2.55 3.85 2.55 6.25S9.7 12.5 8 14.25C6.3 12.5 5.45 10.4 5.45 8S6.3 3.5 8 1.75Z" />
+    </Icon>
+  );
+}
+
+export function MegaphoneIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.25 6.5v3h2.5l5.5 3V3.5l-5.5 3h-2.5Z" />
+      <path d="m4.75 9.5.9 3.5h1.6M12.25 6.25c.6.5.9 1.1.9 1.75s-.3 1.25-.9 1.75" />
+    </Icon>
+  );
+}
+
+export function ChartIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.25 13.75h11.5M4 13.75v-4M7.25 13.75V5.5M10.5 13.75V8M13.25 3.5l-3 2.25-2.5-1.5L4 7" />
+    </Icon>
+  );
+}
+
+export function ChipIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="8" height="8" rx="1.25" />
+      <path d="M6.5 6.5h3v3h-3zM6 1.75V4M10 1.75V4M6 12v2.25M10 12v2.25M1.75 6H4M1.75 10H4M12 6h2.25M12 10h2.25" />
+    </Icon>
+  );
+}
+
+export function ShieldIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 1.75 13.25 3.75v3.9c0 3.05-2.1 5.5-5.25 6.6-3.15-1.1-5.25-3.55-5.25-6.6v-3.9Z" />
+      <path d="m5.75 8 1.6 1.6L10.5 6.5" />
+    </Icon>
+  );
+}
+
+export function ScaleIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M8 2v11.75M5 13.75h6M3.5 4.25h9M3.5 4.25 1.75 9h3.5L3.5 4.25ZM12.5 4.25 10.75 9h3.5L12.5 4.25Z" />
+    </Icon>
+  );
+}
+
+export function SwapIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 5h10.25M10.25 2.5 12.75 5l-2.5 2.5M13.5 11H3.25M5.75 8.5 3.25 11l2.5 2.5" />
+    </Icon>
+  );
+}
+
+export function GavelIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m7.25 3.25 4 4M5.5 5 9.5 9M6.4 4.1l3.5 3.5M8.4 7.6 13.5 12.7M2.25 14h6" />
+      <path d="m5.25 2.75 3.25-.75.75.75-.75 3.25" />
+    </Icon>
+  );
+}
+
+export function PulseIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M1.75 8.5h2.75l1.5-4 2.75 8 1.75-4.5h3.75" />
+    </Icon>
+  );
+}
+
+export function WindowIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.5" />
+      <path d="M1.75 5.75h12.5M4 4.25h.01M5.75 4.25h.01" />
+    </Icon>
+  );
+}
+
+export function ServerIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2.25" width="12" height="4.75" rx="1.25" />
+      <rect x="2" y="9" width="12" height="4.75" rx="1.25" />
+      <path d="M4.75 4.6h.01M4.75 11.4h.01M7.25 4.6h4M7.25 11.4h4" />
+    </Icon>
+  );
+}
+
+export function TeamIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="6" cy="5.25" r="2.25" />
+      <path d="M1.75 13.5c.45-2.45 2.1-3.75 4.25-3.75s3.8 1.3 4.25 3.75M10.25 3.1a2.25 2.25 0 0 1 0 4.3M11.75 9.9c1.3.5 2.15 1.7 2.5 3.6" />
+    </Icon>
+  );
+}
+
+export function SparkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M7.25 1.75c.45 2.95 1.3 3.8 4.25 4.25-2.95.45-3.8 1.3-4.25 4.25C6.8 7.3 5.95 6.45 3 6c2.95-.45 3.8-1.3 4.25-4.25Z" />
+      <path d="M12 10.25c.2 1.15.6 1.55 1.75 1.75-1.15.2-1.55.6-1.75 1.75-.2-1.15-.6-1.55-1.75-1.75 1.15-.2 1.55-.6 1.75-1.75Z" />
+    </Icon>
+  );
+}
+
+export function StateIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <ellipse cx="8" cy="3.75" rx="5" ry="1.75" />
+      <path d="M3 3.75v8.5c0 .95 2.25 1.75 5 1.75s5-.8 5-1.75v-8.5M3 8c0 .95 2.25 1.75 5 1.75S13 8.95 13 8" />
+    </Icon>
+  );
+}
+
+export function HandIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5.5 8.25V3.5a1 1 0 0 1 2 0v4M7.5 7.5V2.75a1 1 0 0 1 2 0V7.5M9.5 7.5V3.75a1 1 0 0 1 2 0v5.5c0 2.75-1.75 4.75-4.25 4.75-1.75 0-2.75-.75-3.75-2.25L2 9a1 1 0 0 1 1.6-1.2l1.9 1.95" />
+    </Icon>
+  );
+}

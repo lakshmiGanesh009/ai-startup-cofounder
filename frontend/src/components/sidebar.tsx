@@ -10,12 +10,13 @@ import { useState } from "react";
 import { BackendStatus } from "@/components/backend-status";
 import { ReasoningSliders } from "@/components/reasoning-sliders";
 import { ResearchSwitch } from "@/components/research-switch";
-import { CloseIcon, CompassIcon, DocumentIcon, MenuIcon } from "@/components/ui/icons";
+import { CloseIcon, CompassIcon, DocumentIcon, FlowIcon, MenuIcon } from "@/components/ui/icons";
 import { TeamMark } from "@/components/ui/team-mark";
 
 const PAGES = [
   { href: "/", label: "Evaluate", Icon: CompassIcon },
   { href: "/reports", label: "Reports", Icon: DocumentIcon },
+  { href: "/how-it-works", label: "How it works", Icon: FlowIcon },
 ];
 
 function Brand() {

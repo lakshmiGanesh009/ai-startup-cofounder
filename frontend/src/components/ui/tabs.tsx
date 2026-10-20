@@ -13,11 +13,14 @@ export function Tabs({
   label,
   orientation = "horizontal",
   initial = 0,
+  onSelect,
 }: {
   tabs: Tab[];
   label: string;
   orientation?: "horizontal" | "vertical";
   initial?: number;
+  // Told which tab is now open, for a panel that should work only while shown.
+  onSelect?: (index: number) => void;
 }) {
   const [active, setActive] = useState(initial);
   const id = useId();
@@ -27,6 +30,7 @@ export function Tabs({
   function select(index: number, focus = true) {
     const next = (index + tabs.length) % tabs.length;
     setActive(next);
+    onSelect?.(next);
     if (focus) buttons.current[next]?.focus();
   }
 
