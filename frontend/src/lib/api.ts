@@ -1,7 +1,10 @@
 // Client for the FastAPI backend. The types mirror the request and response
 // models in main.py and state.py; keep them in step.
-
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+//
+// The browser calls the API through this app's own server (app/api/[...path]/
+// route.ts), which adds the API's key, so the key never reaches the browser.
+export const API_URL = "/api";
+const UNREACHABLE = "Could not reach this app's server; check the connection.";
 
 export type Specialist = "marketing" | "finance" | "technical" | "risk";
 
@@ -195,7 +198,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     response = await fetch(`${API_URL}${path}`, init);
   } catch {
-    throw new ApiError(`Could not reach the backend at ${API_URL}.`);
+    throw new ApiError(UNREACHABLE);
   }
   if (!response.ok) throw await failure(response);
   return response.json() as Promise<T>;
@@ -281,7 +284,7 @@ export async function evaluateStream(body: EvaluateRequest, onStep: (step: Step)
       body: JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(`Could not reach the backend at ${API_URL}.`);
+    throw new ApiError(UNREACHABLE);
   }
   if (!response.ok || !response.body) throw await failure(response);
   const requestId = response.headers.get("X-Request-ID");
@@ -604,7 +607,7 @@ export async function reportPdf(sessionId: string): Promise<Blob> {
   try {
     response = await fetch(`${API_URL}${reportPath(sessionId)}/pdf`);
   } catch {
-    throw new ApiError(`Could not reach the backend at ${API_URL}.`);
+    throw new ApiError(UNREACHABLE);
   }
   if (!response.ok) throw await failure(response);
   return response.blob();

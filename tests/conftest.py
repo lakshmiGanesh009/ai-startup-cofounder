@@ -10,10 +10,14 @@ graph and API tests are deterministic and need no credentials.
 
 import os
 
-# The tests keep sessions and reports in memory, whatever .env says (config.py
-# reads it on import, so this comes first); test_persistence.py uses
-# TEST_DATABASE_URL.
+# Whatever .env says (config.py reads it on import, so this comes first), the
+# tests keep sessions and reports in memory (test_persistence.py uses
+# TEST_DATABASE_URL), need no API key, and meet no rate limit; test_security.py
+# sets those on the API's guard itself.
 os.environ["DATABASE_URL"] = ""
+os.environ["API_KEY"] = ""
+os.environ["REQUESTS_PER_MINUTE"] = "1000000"
+os.environ["RUNS_PER_HOUR"] = "1000000"
 
 import time
 

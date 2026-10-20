@@ -154,6 +154,7 @@ class Totals(BaseModel):
     proposal_failures: int = 0
     requests: int = 0
     server_errors: int = 0
+    refused: int = 0
     retries: int = 0
     warnings: int = 0
     errors: int = 0
@@ -212,6 +213,8 @@ class Metrics:
         self.proposals = counter("proposals", "Investment proposals written or revised, by outcome.", ["outcome"])
         self.retries = counter("model_retries", "Model calls retried after Azure stalled or refused them.")
         self.log_events = counter("log_events", "Warnings and errors logged.", ["kind"])
+        self.refused = counter("refused_requests", "Requests refused: no key, too large, too many, or the team busy.",
+                               ["reason"])
 
 
 class Monitor:
@@ -262,6 +265,12 @@ class Monitor:
                 self.metrics.log_events.labels(kind).inc()
         if self._archive:
             self._archive.add_event(event)
+
+    def refused(self, reason: str) -> None:
+        """Count a request refused before it reached a route (security.py)."""
+        with self._lock:
+            self._totals.refused += 1
+            self.metrics.refused.labels(reason).inc()
 
     def retried(self) -> None:
         """Count a model call the client retried."""

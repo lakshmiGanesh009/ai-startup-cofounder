@@ -45,6 +45,7 @@ const LAYER_ICONS: Record<LayerIcon, Glyph> = {
   globe: GlobeIcon,
   document: DocumentIcon,
   state: StateIcon,
+  shield: ShieldIcon,
   pulse: PulseIcon,
   check: CheckIcon,
 };

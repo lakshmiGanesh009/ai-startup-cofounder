@@ -96,7 +96,7 @@ describe("the API client", () => {
 
     const error = await failure(getHealth());
 
-    expect(error.message).toBe("Could not reach the backend at http://localhost:8000.");
+    expect(error.message).toBe("Could not reach this app's server; check the connection.");
     expect(error.status).toBeNull();
   });
 });
@@ -155,7 +155,7 @@ describe("the streamed evaluation", () => {
 
     fakeBackend({ "POST /evaluate/stream": undefined });
     expect((await failure(evaluateStream({ prompt: "An idea" }, () => {}))).message).toBe(
-      "Could not reach the backend at http://localhost:8000.",
+      "Could not reach this app's server; check the connection.",
     );
   });
 });

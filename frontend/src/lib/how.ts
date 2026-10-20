@@ -132,6 +132,7 @@ export type LayerIcon =
   | "globe"
   | "document"
   | "state"
+  | "shield"
   | "pulse"
   | "check";
 
@@ -184,6 +185,12 @@ export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: str
     icon: "state",
     tools: ["PostgreSQL", "psycopg", "Migrations"],
     does: "Sessions, reports and the Monitor's history, so a restart loses none of them; in memory without a database.",
+  },
+  {
+    layer: "Security",
+    icon: "shield",
+    tools: ["API key, held by the app's server", "Rate and size limits", "A cap on runs", "Security headers"],
+    does: "Only callers with the key reach the API, and the browser never holds it; no caller can exhaust the API or the model.",
   },
   {
     layer: "Observability",

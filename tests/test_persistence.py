@@ -235,4 +235,5 @@ def test_through_the_api_a_restart_loses_nothing(fake_llm, api):
     assert [run["session"] for run in seen["runs"]] == [session[:8], session[:8]]
     assert seen["totals"]["evaluations"] == 1
     starts = [event["message"] for event in seen["events"] if event["kind"] == "system"]
-    assert starts == ["The API started, keeping sessions and reports in localhost:5432/cofounder_test."] * 2
+    assert starts == ["The API started, keeping sessions and reports in localhost:5432/cofounder_test; "
+                      "open to anyone who can reach it (no API_KEY)."] * 2

@@ -22,7 +22,6 @@ describe("the sidebar", () => {
     renderSidebar();
 
     expect(await screen.findByText(/API connected/)).toBeTruthy();
-    expect(screen.getByText("localhost:8000")).toBeTruthy();
     const pages = screen.getByRole("navigation", { name: "Pages" });
     expect(within(pages).getByRole("link", { name: "Evaluate" }).getAttribute("aria-current")).toBe("page");
     expect(within(pages).getByRole("link", { name: "Reports" }).getAttribute("href")).toBe("/reports");
@@ -73,7 +72,7 @@ describe("the sidebar", () => {
     fakeBackend({ "GET /health": undefined });
     renderSidebar();
 
-    expect(await screen.findByText(/Can.t reach localhost:8000/)).toBeTruthy();
+    expect(await screen.findByText(/Can.t reach the API/)).toBeTruthy();
     expect(screen.getByText("Unavailable until the backend answers.")).toBeTruthy();
   });
 
@@ -88,7 +87,7 @@ describe("the sidebar", () => {
 
     down = true;
     await act(async () => vi.advanceTimersByTimeAsync(30000));
-    expect(await screen.findByText(/Can.t reach localhost:8000/)).toBeTruthy();
+    expect(await screen.findByText(/Can.t reach the API/)).toBeTruthy();
     expect(screen.getByText(/The backend returned 503: Down\./)).toBeTruthy();
 
     down = false;

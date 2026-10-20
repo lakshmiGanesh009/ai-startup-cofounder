@@ -8,15 +8,16 @@ from collections import Counter
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import Path as InPath
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from prometheus_client.exposition import choose_encoder
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import brief as brief_module
 import deep_research
@@ -24,7 +25,19 @@ from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
 from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
 from brief import PreparedBrief, Template, load_templates, prepare_brief
-from config import CORS_ORIGINS, DATABASE_URL, DEBUG_MODE, LOG_FORMAT, MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
+from config import (
+    API_KEY,
+    CORS_ORIGINS,
+    DATABASE_URL,
+    DEBUG_MODE,
+    LOG_FORMAT,
+    MAX_CONCURRENT_RUNS,
+    MAX_CRITIQUE_ROUNDS,
+    MAX_ITERATIONS,
+    MAX_REQUEST_BYTES,
+    REQUESTS_PER_MINUTE,
+    RUNS_PER_HOUR,
+)
 from graph import SERDE, build_graph
 from llm import (
     CHIEF,
@@ -53,6 +66,15 @@ from reports import (
     store,
 )
 import providers
+from security import (
+    MAX_PROMPT_CHARS,
+    MAX_SECTIONS,
+    SESSION_ID,
+    Guard,
+    GuardMiddleware,
+    check_context,
+    check_sections,
+)
 from state import DeepResearch, NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
@@ -83,8 +105,9 @@ async def lifespan(app: FastAPI):
         graph = build_graph(storage.checkpointer)
     if storage.archive:
         monitor.preload(*await run_in_threadpool(storage.archive.load, MAX_RUNS, MAX_EVENTS))
-    monitor.event("system", "api", f"The API started, keeping sessions and reports in {storage.where}.")
-    logger.info("Sessions and reports are kept in %s.", storage.where)
+    access = "callers need its key" if API_KEY else "open to anyone who can reach it (no API_KEY)"
+    monitor.event("system", "api", f"The API started, keeping sessions and reports in {storage.where}; {access}.")
+    logger.info("Sessions and reports are kept in %s; the API is %s.", storage.where, access)
     yield
     await storage.close()
 
@@ -95,7 +118,11 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-# Each request gets an ID, an access log line and its place in the metrics.
+# The key, the size, the rates and the runs, checked before a route (security.py).
+guard = Guard(API_KEY, MAX_REQUEST_BYTES, REQUESTS_PER_MINUTE, RUNS_PER_HOUR, MAX_CONCURRENT_RUNS)
+app.add_middleware(GuardMiddleware, guard=guard, on_refuse=monitor.refused)
+# Each request gets an ID, an access log line and its place in the metrics,
+# refusals included.
 app.add_middleware(RequestContextMiddleware, on_finish=monitor.request)
 # Lets a browser frontend on another origin (the Next.js app) call the API, and
 # read a response's request ID to show with an error. Added last, so it wraps
@@ -122,10 +149,14 @@ def _efforts(choice: Reasoning | None) -> dict:
     return choice.model_dump() if choice else {}
 
 
+# A session's id, wherever a request names one.
+SessionId = Annotated[str, InPath(pattern=SESSION_ID, description="The session's id.")]
+
+
 class EvaluateRequest(BaseModel):
-    prompt: str
+    prompt: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS)
     context: RequestContext | None = None
-    session_id: str | None = None
+    session_id: str | None = Field(None, pattern=SESSION_ID)
     reasoning: Reasoning | None = None
     deep_research: bool = Field(
         False,
@@ -136,6 +167,11 @@ class EvaluateRequest(BaseModel):
     research_provider: providers.Provider | None = Field(
         None, description="Where web research runs: azure (the default) or tavily, for demanding tasks."
     )
+
+    @field_validator("context")
+    @classmethod
+    def _context_within_limits(cls, context):
+        return check_context(context)
 
 
 class EvaluateResponse(BaseModel):
@@ -249,13 +285,18 @@ async def metrics(request: Request):
 
 
 class PrepareRequest(BaseModel):
-    prompt: str = Field(min_length=1, description="The founder's brief.")
+    prompt: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS, description="The founder's brief.")
     context: RequestContext | None = None
-    template: str | None = Field(None, description="The template the brief was written from, by name.")
+    template: str | None = Field(None, max_length=64, description="The template the brief was written from, by name.")
     reasoning: Reasoning | None = None
     research_provider: providers.Provider | None = Field(
         None, description="Where the web search runs: azure (the default) or tavily."
     )
+
+    @field_validator("context")
+    @classmethod
+    def _context_within_limits(cls, context):
+        return check_context(context)
 
 
 @app.post("/brief/prepare", response_model=PreparedBrief)
@@ -459,7 +500,12 @@ async def evaluate_stream(request: EvaluateRequest):
 
 class ReportEdit(BaseModel):
     version: int = Field(description="The report version the edits were made to.")
-    sections: list[ReportSection] = Field(min_length=1)
+    sections: list[ReportSection] = Field(min_length=1, max_length=MAX_SECTIONS)
+
+    @field_validator("sections")
+    @classmethod
+    def _sections_within_limits(cls, sections):
+        return check_sections(sections)
 
 
 PartKey = Literal["executive", "market", "technical", "risk", "financial"]
@@ -471,7 +517,7 @@ class ProposalRequest(BaseModel):
 
 
 class ProposalRevision(ProposalRequest):
-    instruction: str = Field(min_length=1, description="What to change, in the founder's words.")
+    instruction: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS, description="What to change, in the founder's words.")
     part: PartKey | None = Field(
         None, description="The part to revise; the parts written from it follow. None for all."
     )
@@ -513,20 +559,20 @@ def list_reports():
 
 
 @app.get("/reports/{session_id}", response_model=Report)
-def get_report(session_id: str):
+def get_report(session_id: SessionId):
     """A session's report: one markdown section each for the strategy, the
     specialists' reports and the decisions on conflicts."""
     return store.get(session_id)
 
 
 @app.put("/reports/{session_id}", response_model=Report)
-def save_report(session_id: str, edit: ReportEdit):
+def save_report(session_id: SessionId, edit: ReportEdit):
     """Save edited sections. Returns 409 if the report changed since `version`."""
     return store.save(session_id, edit.version, edit.sections)
 
 
 @app.post("/reports/{session_id}/reset", response_model=Report)
-def reset_report(session_id: str):
+def reset_report(session_id: SessionId):
     """Rebuild the report from the session's latest results, dropping edits."""
     return store.reset(session_id)
 
@@ -571,7 +617,7 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
 
 
 @app.post("/reports/{session_id}/proposal", response_model=ProposalResult)
-async def write_report_proposal(session_id: str, request: ProposalRequest):
+async def write_report_proposal(session_id: SessionId, request: ProposalRequest):
     """Have the agents write the investment proposal from the report as it stands,
     replacing any proposal it has. Takes about two minutes."""
     bind_session(session_id)
@@ -580,7 +626,7 @@ async def write_report_proposal(session_id: str, request: ProposalRequest):
 
 
 @app.post("/reports/{session_id}/proposal/revise", response_model=ProposalResult)
-async def revise_report_proposal(session_id: str, revision: ProposalRevision):
+async def revise_report_proposal(session_id: SessionId, revision: ProposalRevision):
     """Apply the founder's instruction to one part of the proposal (or all of it):
     the part's agent rewrites it, then the parts written from it are brought into
     line. A part whose call fails keeps its text and is listed in `failed`."""
@@ -592,7 +638,7 @@ async def revise_report_proposal(session_id: str, revision: ProposalRevision):
 
 
 @app.put("/reports/{session_id}/proposal", response_model=Report)
-def save_report_proposal(session_id: str, edit: ProposalEdit):
+def save_report_proposal(session_id: SessionId, edit: ProposalEdit):
     """Save an edited proposal. Returns 409 if the report changed since `version`."""
     return store.save_proposal(session_id, edit.version, edit.proposal)
 
@@ -602,7 +648,7 @@ def save_report_proposal(session_id: str, edit: ProposalEdit):
     response_class=Response,
     responses={200: {"content": {"application/pdf": {}}}},
 )
-async def download_report(session_id: str):
+async def download_report(session_id: SessionId):
     """The report as a PDF: the investment proposal once it is written, else the
     team's report."""
     report = await run_in_threadpool(store.get, session_id)

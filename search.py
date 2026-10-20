@@ -114,7 +114,7 @@ def search_all(queries: list[str]) -> tuple[list[Hit], str | None]:
         try:
             return search(query)
         except SearchFailed as error:
-            logger.warning("Search for %r failed: %s", query, error)
+            logger.warning("A search failed: %s", error)  # not the query: it comes from the brief
             return error
 
     # At once; each thread keeps the request's context, so its log lines name the request.

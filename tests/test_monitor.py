@@ -242,5 +242,5 @@ def test_the_api_logs_its_start_and_where_it_keeps_sessions():
     assert health["storage"] == {"kind": "memory", "ok": True}
     assert seen["kept_in"] == "memory"
     assert [(event["kind"], event["message"]) for event in seen["events"]] == [
-        ("system", "The API started, keeping sessions and reports in memory."),
+        ("system", "The API started, keeping sessions and reports in memory; open to anyone who can reach it (no API_KEY)."),
     ]

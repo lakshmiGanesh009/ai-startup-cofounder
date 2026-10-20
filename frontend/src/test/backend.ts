@@ -340,7 +340,7 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
     ...overrides,
   };
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    const path = new URL(url).pathname;
+    const path = new URL(url, "http://localhost").pathname.replace(/^\/api(?=\/)/, "");
     const key = `${init?.method ?? "GET"} ${path}`;
     const request = init?.body ? JSON.parse(String(init.body)) : undefined;
     if (init?.body) sent.push({ path, body: request });

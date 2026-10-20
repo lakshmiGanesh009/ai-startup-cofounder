@@ -43,3 +43,18 @@ CORS_ORIGINS = [
 # such as postgresql://user:password@localhost:5432/cofounder, so they survive a
 # restart; unset, they are kept in memory and lost when the API stops.
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+# The key a caller must send (Authorization: Bearer <key>) for anything but
+# /health. The Next.js app's server adds it to the calls it forwards, so it
+# never reaches a browser. Unset, anyone who can reach the API can use it:
+# fine on your own machine, not on a network.
+API_KEY = os.getenv("API_KEY", "").strip()
+
+# Limits, so one caller cannot exhaust the API or the model deployment. The
+# largest request body accepted, in bytes; evaluations, briefs and proposals
+# running at once (more are refused until one ends); and, per caller, those
+# runs an hour and requests a minute.
+MAX_REQUEST_BYTES = int(os.getenv("MAX_REQUEST_BYTES", "1000000"))
+MAX_CONCURRENT_RUNS = int(os.getenv("MAX_CONCURRENT_RUNS", "4"))
+RUNS_PER_HOUR = int(os.getenv("RUNS_PER_HOUR", "30"))
+REQUESTS_PER_MINUTE = int(os.getenv("REQUESTS_PER_MINUTE", "300"))
