@@ -11,6 +11,7 @@ import { BriefReview } from "@/components/evaluate/brief-review";
 import { Composer, type Submission } from "@/components/evaluate/composer";
 import { type Brief, ResultView, type Run } from "@/components/evaluate/result-view";
 import { TeamProgress } from "@/components/evaluate/team-progress";
+import { AgentStack } from "@/components/ui/agent";
 import { Button } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
@@ -28,6 +29,7 @@ import {
   type Step,
   type Template,
 } from "@/lib/api";
+import { TEAM } from "@/lib/agents";
 import { useBackend } from "@/lib/backend";
 import { briefWait, evaluationWait } from "@/lib/team";
 
@@ -69,8 +71,8 @@ function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
     <section ref={section} aria-label="The team is working" aria-busy="true" className="scroll-mt-8">
       <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3 border-b border-rule pb-6">
         <div className="max-w-3xl">
-          <p className="kicker flex items-center gap-2">
-            <span aria-hidden className="working-dot size-1.5 rounded-full bg-primary" />
+          <p className="kicker flex items-center gap-2.5">
+            <AgentStack agents={TEAM} />
             The team is working
           </p>
           <p className="mt-2 font-serif text-xl leading-snug">{pending.prompt}</p>
@@ -82,7 +84,9 @@ function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
       </div>
       <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <ActivityLog steps={pending.steps} />
-        <TeamProgress steps={pending.steps} live />
+        <div className="self-start rounded-xl border border-rule bg-sunken/40 p-5 lg:sticky lg:top-8">
+          <TeamProgress steps={pending.steps} live />
+        </div>
       </div>
     </section>
   );
@@ -212,7 +216,9 @@ function Session() {
               onSubmit={begin}
               onScenario={(scenario) => setFollowUp(scenario.follow_up ?? "")}
             />
-            <TeamProgress steps={[]} live={false} />
+            <div className="self-start rounded-xl border border-rule bg-sunken/40 p-5">
+              <TeamProgress steps={[]} live={false} />
+            </div>
           </div>
         </div>
       )}

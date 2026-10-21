@@ -260,6 +260,48 @@ export function ServerIcon(props: IconProps) {
   );
 }
 
+export function SunIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M8 1.5v1.25M8 13.25v1.25M1.5 8h1.25M13.25 8h1.25M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9" />
+    </Icon>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13.25 9.6A5.5 5.5 0 0 1 6.4 2.75a5.5 5.5 0 1 0 6.85 6.85Z" />
+    </Icon>
+  );
+}
+
+export function MonitorIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="1.75" y="2.5" width="12.5" height="8.5" rx="1.25" />
+      <path d="M6 13.75h4M8 11v2.75" />
+    </Icon>
+  );
+}
+
+// The Chief of Staff: the hub the four specialists report to.
+export function ChiefIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="2.4" />
+      <path d="M8 4.1v1.5M8 10.4v1.5M4.1 8h1.5M10.4 8h1.5" />
+      <g fill="currentColor" stroke="none">
+        <circle cx="8" cy="2.4" r="1.15" />
+        <circle cx="13.6" cy="8" r="1.15" />
+        <circle cx="8" cy="13.6" r="1.15" />
+        <circle cx="2.4" cy="8" r="1.15" />
+      </g>
+    </Icon>
+  );
+}
+
 export function TeamIcon(props: IconProps) {
   return (
     <Icon {...props}>

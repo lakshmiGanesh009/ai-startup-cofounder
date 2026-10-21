@@ -16,6 +16,23 @@ export function specialistTitle(name: string): string {
   return SPECIALIST_TITLES[name as Specialist] ?? name;
 }
 
+const STEP_NAMES: Record<string, string> = {
+  plan: "Plan",
+  research: "Research",
+  review: "Review",
+  critique: "Cross-check",
+  resolve: "Resolve",
+  synthesis: "Strategy",
+  evaluate: "Evaluation",
+  brief: "Brief",
+  proposal: "Proposal",
+};
+
+// A step of the graph (or a kind of run), as the pages name it.
+export function stepName(node: string): string {
+  return STEP_NAMES[node] ?? specialistTitle(node);
+}
+
 // Who did a step of the graph.
 export function actor(node: string): string {
   if (node in SPECIALIST_TITLES) return SPECIALIST_TITLES[node as Specialist];

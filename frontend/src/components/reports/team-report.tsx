@@ -6,11 +6,13 @@
 import { useState } from "react";
 
 import { Markdown } from "@/components/markdown";
+import { AgentAvatar } from "@/components/ui/agent";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { PencilIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
 import type { ReportSection } from "@/lib/api";
+import { SECTION_AGENT } from "@/lib/agents";
 import { SECTION_AGENTS } from "@/lib/proposal";
 
 export function TeamReport({
@@ -36,9 +38,12 @@ export function TeamReport({
         <div className="mt-4 space-y-14">
           {sections.map((section) => (
             <section key={section.key} aria-label={section.title}>
-              <div className="mb-5 border-b border-rule pb-3">
-                <h3 className="font-serif text-[1.5rem] leading-snug font-medium">{section.title}</h3>
-                <p className="mt-1 text-xs text-ink-3">{SECTION_AGENTS[section.key] ?? "Edited by you"}</p>
+              <div className="mb-5 flex items-center gap-3 border-b border-rule pb-3">
+                {SECTION_AGENT[section.key] && <AgentAvatar agent={SECTION_AGENT[section.key]} size="md" />}
+                <div>
+                  <h3 className="font-serif text-[1.5rem] leading-snug font-medium">{section.title}</h3>
+                  <p className="mt-0.5 text-xs text-ink-3">{SECTION_AGENTS[section.key] ?? "Edited by you"}</p>
+                </div>
               </div>
               <Markdown labels={4}>{section.body}</Markdown>
             </section>

@@ -6,7 +6,11 @@
 
 import { useId, useRef, useState } from "react";
 
-export type Tab = { label: string; content: React.ReactNode; marker?: string };
+import { type AgentKey, agentClass } from "@/lib/agents";
+
+// `agent` colours a vertical tab's marker and its edge when selected: the
+// chapter's author.
+export type Tab = { label: string; content: React.ReactNode; marker?: string; agent?: AgentKey };
 
 export function Tabs({
   tabs,
@@ -68,9 +72,9 @@ export function Tabs({
             }}
             className={
               vertical
-                ? `flex shrink-0 items-baseline gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors lg:rounded-none lg:border-l-2 lg:px-3 lg:py-2 ${
+                ? `${tab.agent ? agentClass(tab.agent) : ""} flex shrink-0 items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm transition-colors lg:rounded-none lg:border-l-2 lg:px-3 lg:py-2 ${
                     selected
-                      ? "bg-sunken font-medium text-ink lg:border-primary lg:bg-transparent"
+                      ? `bg-sunken font-medium text-ink lg:bg-transparent ${tab.agent ? "lg:border-agent" : "lg:border-primary"}`
                       : "text-ink-3 hover:text-ink lg:border-transparent"
                   }`
                 : `-mb-px shrink-0 border-b-2 py-2.5 text-sm font-medium transition-colors ${
@@ -78,11 +82,21 @@ export function Tabs({
                   }`
             }
           >
-            {tab.marker && (
-              <span aria-hidden className="w-4 text-xs text-ink-3 tabular">
-                {tab.marker}
-              </span>
-            )}
+            {tab.marker &&
+              (tab.agent ? (
+                <span
+                  aria-hidden
+                  className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] tabular ${
+                    selected ? "bg-agent-solid text-white" : "bg-agent-soft text-agent-deep"
+                  }`}
+                >
+                  {tab.marker}
+                </span>
+              ) : (
+                <span aria-hidden className="w-4 text-xs text-ink-3 tabular">
+                  {tab.marker}
+                </span>
+              ))}
             <span>{tab.label}</span>
           </button>
         );

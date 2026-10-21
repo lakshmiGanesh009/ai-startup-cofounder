@@ -76,4 +76,22 @@ describe("the agents' markdown", () => {
     expect(headings()).toEqual([]);
     expect(container.querySelector(".doc-compact mark.assumption")?.textContent).toBe("(assumption)");
   });
+
+  test("the agents the Chief of Staff cites are set as tags in their colours", () => {
+    const { container } = render(
+      <Markdown>
+        {"Go with paid pilots [finance][marketing], within the budget [Chief of Staff]. See `[risk]` and [someone]."}
+      </Markdown>,
+    );
+
+    const tags = [...container.querySelectorAll(".cite")].map((tag) => [tag.className, tag.textContent]);
+    expect(tags).toEqual([
+      ["cite agent-finance", "Finance"],
+      ["cite agent-marketing", "Marketing"],
+      ["cite agent-chief", "Chief of Staff"],
+    ]);
+    // Code keeps its brackets, and a name that is no agent stays as written.
+    expect(container.querySelector("code")?.textContent).toBe("[risk]");
+    expect(container.textContent).toContain("[someone]");
+  });
 });

@@ -157,6 +157,7 @@ export function Composer({
         </div>
       )}
 
+      <div className="rounded-xl border border-rule bg-surface p-5 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_10px_30px_-18px_rgb(0_0_0/0.18)] sm:p-7">
       {template ? (
         <section aria-label={template.title} className="space-y-5">
           <p className="text-[15px] text-ink-2">{template.summary}</p>
@@ -267,31 +268,38 @@ export function Composer({
         </Button>
         <p className="text-sm text-ink-3">{prepare ? waits.prepare : waits.evaluate}</p>
       </div>
+      </div>
 
       {scenarios.length > 0 && (
         <section aria-labelledby="examples-heading" className="mt-14">
           <h2 id="examples-heading" className="kicker">
             Or start from an example
           </h2>
-          <ul className="mt-3 divide-y divide-rule border-y border-rule">
+          <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {scenarios.map((scenario, index) => {
               const picked = chosen === scenario.name;
               return (
-                <li key={scenario.name}>
+                <li key={scenario.name} className="flex">
                   <button
                     type="button"
                     aria-pressed={picked}
                     onClick={() => start(scenario)}
-                    className="group flex w-full items-start gap-4 py-3.5 text-left"
+                    className={`group flex w-full items-start gap-3 rounded-lg border px-4 py-3.5 text-left transition-[border-color,box-shadow,background-color] ${
+                      picked
+                        ? "border-primary bg-primary-soft"
+                        : "border-rule bg-surface hover:border-rule-strong hover:shadow-[0_6px_18px_-12px_rgb(0_0_0/0.25)]"
+                    }`}
                   >
-                    <span className="mt-0.5 w-5 text-xs text-ink-3 tabular">
-                      {picked ? <CheckIcon className="size-4 text-primary" /> : String(index + 1).padStart(2, "0")}
+                    <span
+                      className={`mt-px flex size-6 shrink-0 items-center justify-center rounded-full text-[11px] tabular ${
+                        picked ? "bg-primary text-primary-ink" : "bg-sunken text-ink-3"
+                      }`}
+                    >
+                      {picked ? <CheckIcon className="size-3.5" /> : String(index + 1).padStart(2, "0")}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium text-ink underline-offset-4 group-hover:underline">
-                        {scenario.title}
-                      </span>
-                      <span className="mt-0.5 block truncate text-sm text-ink-3">{scenario.prompt}</span>
+                      <span className="block text-sm font-medium text-ink">{scenario.title}</span>
+                      <span className="mt-1 line-clamp-2 block text-[13px] leading-snug text-ink-3">{scenario.prompt}</span>
                     </span>
                   </button>
                 </li>

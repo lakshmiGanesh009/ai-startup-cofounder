@@ -5,16 +5,11 @@
 // backend's own settings (/pipeline).
 
 import {
-  ChartIcon,
   CheckIcon,
-  ChipIcon,
-  CompassIcon,
   DocumentIcon,
   FlowIcon,
-  GavelIcon,
   GlobeIcon,
   HandIcon,
-  MegaphoneIcon,
   PulseIcon,
   ServerIcon,
   ShieldIcon,
@@ -24,17 +19,31 @@ import {
   TeamIcon,
   WindowIcon,
 } from "@/components/ui/icons";
-import type { Pipeline, Reasoning, Specialist } from "@/lib/api";
+import { AgentAvatar, AgentStack } from "@/components/ui/agent";
+import { type AgentKey, agentClass, SPECIALIST_AGENTS, specialistAgent, TEAM } from "@/lib/agents";
+import type { Pipeline, Reasoning } from "@/lib/api";
 import { JUDGEMENT, type LayerIcon, STACK, STATE, STEPS, USER_FLOW } from "@/lib/how";
 
 type Glyph = (props: { className?: string }) => React.ReactNode;
 
-const SPECIALIST_ICONS: Record<Specialist, Glyph> = {
-  marketing: MegaphoneIcon,
-  finance: ChartIcon,
-  technical: ChipIcon,
-  risk: ShieldIcon,
+// Who does each step of the state table, so a step's writes are in its colours.
+const STEP_AGENTS: Record<string, AgentKey[]> = {
+  Prepare: ["chief"],
+  Plan: ["chief"],
+  Research: ["research"],
+  Specialists: SPECIALIST_AGENTS,
+  Review: ["chief"],
+  "Cross-check": SPECIALIST_AGENTS,
+  Resolve: ["chief"],
+  Strategy: ["chief"],
 };
+
+// A dot's fill: one agent's colour, or a wheel of several.
+function fill(agents: AgentKey[]): string {
+  if (agents.length === 1) return `var(--agent-${agents[0]})`;
+  const share = 100 / agents.length;
+  return `conic-gradient(${agents.map((agent, i) => `var(--agent-${agent}) ${i * share}% ${(i + 1) * share}%`).join(", ")})`;
+}
 
 const LAYER_ICONS: Record<LayerIcon, Glyph> = {
   window: WindowIcon,
@@ -88,18 +97,6 @@ function Chips({ label, items }: { label: string; items: string[] }) {
   );
 }
 
-function Orb({ children, chief = false }: { children: React.ReactNode; chief?: boolean }) {
-  return (
-    <span
-      className={`flex size-10 shrink-0 items-center justify-center rounded-full border border-rule-strong ${
-        chief ? "bg-primary-soft text-primary" : "bg-surface text-ink-2"
-      }`}
-    >
-      {children}
-    </span>
-  );
-}
-
 export function TeamSection({ pipeline, reasoning }: { pipeline: Pipeline; reasoning: Reasoning | null }) {
   const { rules } = pipeline;
   return (
@@ -109,11 +106,9 @@ export function TeamSection({ pipeline, reasoning }: { pipeline: Pipeline; reaso
       title="One orchestrator, four specialists"
       intro="Every agent is the same model, given a different role, the parts of the shared state it needs, and a structured form to answer in."
     >
-      <div className="rounded-lg border border-rule bg-surface p-5">
+      <div className="agent-chief rounded-lg border border-rule bg-surface p-5 shadow-[inset_0_3px_0_var(--agent)]">
         <div className="flex items-start gap-4">
-          <Orb chief>
-            <CompassIcon className="size-5" />
-          </Orb>
+          <AgentAvatar agent="chief" size="lg" />
           <div className="min-w-0">
             <p className="font-medium">
               Chief of Staff <span className="font-normal text-ink-3">· the orchestrator</span>
@@ -136,13 +131,13 @@ export function TeamSection({ pipeline, reasoning }: { pipeline: Pipeline; reaso
       </div>
       <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {pipeline.specialists.map((specialist) => {
-          const Glyph = SPECIALIST_ICONS[specialist.name];
           return (
-            <li key={specialist.name} className="rounded-lg border border-rule bg-surface p-4">
+            <li
+              key={specialist.name}
+              className={`${agentClass(specialistAgent(specialist.name))} rounded-lg border border-rule bg-surface p-4 shadow-[inset_0_3px_0_var(--agent)]`}
+            >
               <div className="flex items-center gap-3">
-                <Orb>
-                  <Glyph className="size-[18px]" />
-                </Orb>
+                <AgentAvatar agent={specialistAgent(specialist.name)} size="lg" />
                 <p className="font-medium leading-snug">{specialist.title}</p>
               </div>
               <p className="mt-3 text-sm text-ink-2">Covers {specialist.focus}.</p>
@@ -233,10 +228,10 @@ export function DecisionsSection({ pipeline }: { pipeline: Pipeline }) {
     >
       <ol className="relative space-y-6 before:absolute before:top-3 before:bottom-3 before:left-[13px] before:w-px before:bg-rule">
         {decisions.map((decision, index) => (
-          <li key={decision.step} className="relative grid grid-cols-[28px_minmax(0,1fr)] gap-x-4">
+          <li key={decision.step} className="agent-chief relative grid grid-cols-[28px_minmax(0,1fr)] gap-x-4">
             <span aria-hidden className="relative z-10 mt-0.5 flex size-7 items-center justify-center">
-              <span className="absolute inset-1 rotate-45 rounded-[3px] border border-primary bg-paper" />
-              <span className="relative text-[11px] font-medium text-primary tabular">{index + 1}</span>
+              <span className="absolute inset-1 rotate-45 rounded-[3px] border-[1.5px] border-agent bg-agent-soft" />
+              <span className="relative text-[11px] font-medium text-agent-deep tabular">{index + 1}</span>
             </span>
             <div className="max-w-3xl">
               <p className="kicker">{decision.step}</p>
@@ -280,7 +275,14 @@ export function StateSection() {
               </th>
               {STEPS.map((step) => (
                 <th key={step} className="px-2 py-2 text-center font-medium">
-                  {step}
+                  <span className="flex flex-col items-center gap-1.5">
+                    {STEP_AGENTS[step].length > 1 ? (
+                      <AgentStack agents={STEP_AGENTS[step]} />
+                    ) : (
+                      <AgentAvatar agent={STEP_AGENTS[step][0]} size="xs" />
+                    )}
+                    {step}
+                  </span>
                 </th>
               ))}
             </tr>
@@ -295,7 +297,11 @@ export function StateSection() {
                 {row.cells.map((cell, index) => (
                   <td key={STEPS[index]} className="px-2 py-2.5 text-center">
                     {cell === "w" && (
-                      <span className="inline-block size-3 rounded-full bg-primary" title="writes">
+                      <span
+                        className="inline-block size-3 rounded-full"
+                        style={{ background: fill(STEP_AGENTS[STEPS[index]]) }}
+                        title="writes"
+                      >
                         <span className="sr-only">writes</span>
                       </span>
                     )}
@@ -313,7 +319,8 @@ export function StateSection() {
       </div>
       <p className="mt-3 flex gap-5 text-xs text-ink-3">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden className="size-2.5 rounded-full bg-primary" /> writes
+          <span aria-hidden className="size-2.5 rounded-full" style={{ background: fill(TEAM) }} /> writes, in the colour of
+          the agent who does the step
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="size-2.5 rounded-full border-[1.5px] border-ink-3" /> reads
@@ -325,24 +332,26 @@ export function StateSection() {
 
 function Card({
   icon,
+  agent,
   who,
   children,
   tone = "plain",
 }: {
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
+  agent?: AgentKey;
   who: string;
   children: React.ReactNode;
   tone?: "plain" | "conflict" | "decision";
 }) {
   const tones = {
-    plain: "border-rule bg-surface",
+    plain: "border-rule border-l-[3px] border-l-agent bg-surface",
     conflict: "border-warn/40 bg-warn-soft",
-    decision: "border-primary/40 bg-primary-soft",
+    decision: "border-agent-line bg-agent-soft",
   };
   return (
-    <div className={`rounded-lg border p-4 ${tones[tone]}`}>
+    <div className={`${agent ? agentClass(agent) : ""} rounded-lg border p-4 ${tones[tone]}`}>
       <p className="flex items-center gap-2 text-xs font-medium text-ink-2">
-        {icon}
+        {agent ? <AgentAvatar agent={agent} size="xs" /> : icon}
         {who}
       </p>
       <p className="mt-1.5 font-serif text-[15px] leading-snug text-ink">{children}</p>
@@ -370,10 +379,10 @@ export function CritiqueSection({ pipeline }: { pipeline: Pipeline }) {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="max-w-2xl">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Card icon={<ChartIcon className="size-3.5" />} who="Financial Planning">
+            <Card agent="finance" who="Financial Planning">
               Charge $149 a month: 25 clinics cover the fixed costs.
             </Card>
-            <Card icon={<MegaphoneIcon className="size-3.5" />} who="Marketing Strategy">
+            <Card agent="marketing" who="Marketing Strategy">
               Launch at $99 a month to win the first pilots fast.
             </Card>
           </div>
@@ -382,11 +391,11 @@ export function CritiqueSection({ pipeline }: { pipeline: Pipeline }) {
             At $99 a month the pilot cannot cover the cost to serve.
           </Card>
           <Down label="The Chief of Staff decides" />
-          <Card icon={<GavelIcon className="size-3.5" />} who="Decision: Marketing Strategy revises" tone="decision">
+          <Card agent="chief" who="Decision: Marketing Strategy revises" tone="decision">
             Charge $149, with the first two months at $99.
           </Card>
           <Down label="The revision, then the strategy" />
-          <Card icon={<MegaphoneIcon className="size-3.5" />} who="Marketing Strategy, revised">
+          <Card agent="marketing" who="Marketing Strategy, revised">
             Launch at $149 a month, the first two months at $99.
           </Card>
         </div>

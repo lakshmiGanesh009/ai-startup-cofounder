@@ -21,6 +21,7 @@ import {
   type View,
 } from "@/components/reports/proposal-view";
 import { TeamReport } from "@/components/reports/team-report";
+import { AgentName } from "@/components/ui/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -46,6 +47,7 @@ import {
   writeProposal,
 } from "@/lib/api";
 import { useBackend } from "@/lib/backend";
+import { agentClass, PART_AGENT } from "@/lib/agents";
 import { PART_AGENTS, PART_TITLES } from "@/lib/proposal";
 import { proposalWait } from "@/lib/team";
 
@@ -189,9 +191,16 @@ function Chapter({
     <div>
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-rule pb-6">
         <div>
-          <p className="kicker">Chapter {number}</p>
-          <h2 className="mt-1 font-serif text-[1.9rem] leading-tight font-medium tracking-[-0.01em]">{title}</h2>
-          <p className="mt-2 text-sm text-ink-3">Written by the {PART_AGENTS[part]}</p>
+          <p className={`${agentClass(PART_AGENT[part])} kicker flex items-center gap-2`}>
+            <span className="h-[3px] w-5 rounded-full bg-agent" />
+            Chapter {number}
+          </p>
+          <h2 className="mt-1.5 font-serif text-[1.9rem] leading-tight font-medium tracking-[-0.01em]">{title}</h2>
+          <p className="mt-3 text-sm text-ink-3">
+            <AgentName agent={PART_AGENT[part]} size="sm">
+              Written by the {PART_AGENTS[part]}
+            </AgentName>
+          </p>
         </div>
         {!editing && (
           <Button size="sm" onClick={() => setEditing(true)}>
@@ -441,6 +450,7 @@ function Reports() {
                 ...CHAPTERS.map(({ number, name, title, part, only, View }) => ({
                   label: name,
                   marker: number,
+                  agent: PART_AGENT[part],
                   content: (
                     <Chapter
                       key={`${name}-${report.version}`}

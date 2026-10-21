@@ -38,4 +38,28 @@ describe("the team's progress", () => {
     expect(screen.getByLabelText("Cross-check: Skipped")).toBeTruthy();
     expect(screen.getByLabelText("Strategy: Working")).toBeTruthy();
   });
+
+  test("each stage and specialist wears the colour of the agent who does it", () => {
+    const steps: Step[] = [
+      { type: "start", node: "plan", at: 0 },
+      { type: "done", node: "plan", at: 8, summary: "Planned the work.", assigned: ["marketing", "finance"] },
+      { type: "start", node: "marketing", at: 8.1 },
+      { type: "start", node: "finance", at: 8.1 },
+      { type: "done", node: "marketing", at: 20, summary: "Wrote its report (400 words)." },
+    ];
+
+    const { container } = render(<TeamProgress steps={steps} live />);
+
+    // The plan is the Chief of Staff's, done: a filled mark in its colour.
+    const plan = screen.getByLabelText("Plan: Done");
+    expect(plan.querySelector(".agent-chief.bg-agent-solid")).toBeTruthy();
+    // The reports are shared: a ring of the specialists' colours, turning while they write.
+    const ring = screen.getByLabelText("Reports: Working").querySelector(".stage-turning") as HTMLElement;
+    expect(ring.style.background).toContain("var(--agent-marketing)");
+    expect(ring.style.background).toContain("var(--agent-risk)");
+    // Each specialist's row is in its colour, and says where it is.
+    const finance = container.querySelector("li.agent-finance");
+    expect(finance?.textContent).toContain("Writing");
+    expect(container.querySelector("li.agent-marketing")?.textContent).toContain("Done");
+  });
 });

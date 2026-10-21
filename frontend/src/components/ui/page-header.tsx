@@ -1,4 +1,6 @@
-// A page's title and what the page is for.
+// A page's title and what the page is for, under the team's colours.
+
+import { TeamStripe } from "@/components/ui/agent";
 
 export function PageHeader({
   title,
@@ -12,6 +14,7 @@ export function PageHeader({
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-8 gap-y-4 border-b border-rule pb-6">
       <div className="max-w-2xl">
+        <TeamStripe className="mb-4" />
         <h1 className="font-serif text-[2rem] leading-tight font-medium tracking-[-0.01em]">{title}</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{description}</p>
       </div>

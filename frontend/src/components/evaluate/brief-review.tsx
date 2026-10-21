@@ -8,6 +8,7 @@ import { useId, useState } from "react";
 
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
 import { GuardrailNotice } from "@/components/guardrail-notice";
+import { AgentAvatar } from "@/components/ui/agent";
 import { Button, Kbd } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
@@ -126,7 +127,8 @@ export function BriefReview({
       <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <div className="min-w-0 space-y-12">
           <section aria-labelledby={`${prefix}-questions`}>
-            <h2 id={`${prefix}-questions`} className="kicker">
+            <h2 id={`${prefix}-questions`} className="kicker flex items-center gap-2">
+              <AgentAvatar agent="chief" size="xs" />
               The Chief of Staff asks
             </h2>
             {questions.length ? (
@@ -154,7 +156,8 @@ export function BriefReview({
           </section>
 
           <section aria-labelledby={`${prefix}-research`}>
-            <h2 id={`${prefix}-research`} className="kicker">
+            <h2 id={`${prefix}-research`} className="kicker flex items-center gap-2">
+              <AgentAvatar agent="research" size="xs" />
               What the web says
             </h2>
             {research ? (

@@ -10,12 +10,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { AgentAvatar, AgentStack } from "@/components/ui/agent";
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { AlertIcon, ArrowRightIcon, CheckIcon, PulseIcon, RefreshIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
 import { getMonitoring, type MonitorEvent, type MonitorHealth, type Monitoring } from "@/lib/api";
-import { formatSeconds, specialistTitle } from "@/lib/team";
+import { agentFill, agentOf, agentsOf, agentsOfSource } from "@/lib/agents";
+import { formatSeconds, stepName } from "@/lib/team";
 
 const REFRESH_MS = 5000;
 // An answer slower than this counts as a failure; and the longest wait between
@@ -25,22 +27,6 @@ const LONGEST_WAIT_MS = 60_000;
 
 // The graph's steps, in the order they run.
 const NODE_ORDER = ["plan", "research", "marketing", "finance", "technical", "risk", "review", "critique", "resolve", "synthesis"];
-const NODE_NAMES: Record<string, string> = {
-  plan: "Plan",
-  research: "Research",
-  review: "Review",
-  critique: "Cross-check",
-  resolve: "Resolve",
-  synthesis: "Strategy",
-  evaluate: "Evaluation",
-  brief: "Brief",
-  proposal: "Proposal",
-};
-
-function nodeName(node: string): string {
-  return NODE_NAMES[node] ?? specialistTitle(node);
-}
-
 function compact(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
@@ -211,9 +197,16 @@ function TimeByStep({ data }: { data: Monitoring }) {
           return (
             <li
               key={node.node}
-              className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-[8.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
+              className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-[11.5rem_minmax(0,1fr)] sm:items-center sm:gap-3"
             >
-              <span className="truncate text-ink-2">{nodeName(node.node)}</span>
+              <span className="flex min-w-0 items-center gap-2 text-ink-2">
+                {agentsOf(node.node).length > 1 ? (
+                  <AgentStack agents={agentsOf(node.node)} />
+                ) : (
+                  <AgentAvatar agent={agentOf(node.node)} size="xs" />
+                )}
+                <span className="truncate">{stepName(node.node)}</span>
+              </span>
               <span>
                 <span className="flex flex-wrap items-baseline justify-between gap-x-3 text-xs">
                   <span className="whitespace-nowrap tabular">
@@ -226,11 +219,11 @@ function TimeByStep({ data }: { data: Monitoring }) {
                 </span>
                 <span
                   className="relative mt-1 block h-1.5 rounded-full bg-sunken"
-                  title={`${nodeName(node.node)}: median ${node.p50.toFixed(1)} s, p95 ${node.p95.toFixed(1)} s, over ${plural(node.runs, "evaluation")}`}
+                  title={`${stepName(node.node)}: median ${node.p50.toFixed(1)} s, p95 ${node.p95.toFixed(1)} s, over ${plural(node.runs, "evaluation")}`}
                 >
                   <span
                     className="block h-full rounded-full"
-                    style={{ width: `max(4px, ${at(node.p50)})`, background: "var(--data-1)" }}
+                    style={{ width: `max(4px, ${at(node.p50)})`, background: agentFill(agentsOf(node.node)) }}
                   />
                   <span
                     aria-hidden
@@ -245,7 +238,8 @@ function TimeByStep({ data }: { data: Monitoring }) {
       </ul>
       <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-3">
         <span className="flex items-center gap-1.5">
-          <span aria-hidden className="h-1.5 w-4 rounded-full" style={{ background: "var(--data-1)" }} /> median
+          <span aria-hidden className="h-1.5 w-4 rounded-full" style={{ background: agentFill(["chief"]) }} /> median, in
+          the colour of the agent who does the step
         </span>
         <span className="flex items-center gap-1.5">
           <span aria-hidden className="h-2.5 w-0.5 rounded-full bg-ink" /> 95th percentile
@@ -349,7 +343,15 @@ function Log({
                 <Badge tone={KIND_TONE[event.kind]}>{event.kind}</Badge>
               </span>
               <span className="col-span-2 min-w-0 sm:col-span-1">
-                <span className="font-medium text-ink">{nodeName(event.source)}</span>{" "}
+                {agentsOfSource(event.source).length === 1 && (
+                  <AgentAvatar agent={agentsOfSource(event.source)[0]} size="xs" className="mr-1.5 align-[-5px]" />
+                )}
+                {agentsOfSource(event.source).length > 1 && (
+                  <span className="mr-1.5 inline-flex align-[-5px]">
+                    <AgentStack agents={agentsOfSource(event.source)} />
+                  </span>
+                )}
+                <span className="font-medium text-ink">{stepName(event.source)}</span>{" "}
                 <span className={event.kind === "error" ? "text-bad" : event.kind === "warning" ? "text-warn" : "text-ink-2"}>
                   {event.message}
                 </span>

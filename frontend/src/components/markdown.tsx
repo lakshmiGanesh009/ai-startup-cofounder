@@ -1,10 +1,14 @@
-// The agents' markdown, rendered safely: raw HTML in it is shown as text, and
-// figures they marked as assumptions are highlighted.
+// The agents' markdown, rendered safely: raw HTML in it is shown as text,
+// figures they marked as assumptions are highlighted, and the agents the Chief
+// of Staff cites ("[finance]") are set as tags in their colours.
 
 import ReactMarkdown, { type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { AGENTS, type AgentKey } from "@/lib/agents";
+
 const ASSUMPTION = /\((?:assumption|assumed|estimate|estimated)s?\)/gi;
+const CITATION = /\[(marketing|finance|technical|risk|research|chief(?: of staff)?)\]/gi;
 
 type Node = { type: string; value?: string; depth?: number; children?: Node[]; data?: Record<string, unknown> };
 
@@ -44,8 +48,9 @@ function remarkLabels({ level }: { level: number }) {
   };
 }
 
-// A remark plugin that turns "(assumption)" in the text into a <mark>.
-function remarkAssumptions() {
+// A remark plugin that sets each match of `pattern` in the text as the node
+// `wrap` makes of it.
+function remarkMatches(pattern: RegExp, wrap: (match: RegExpMatchArray) => Node) {
   function split(node: Node) {
     if (!node.children) return;
     node.children = node.children.flatMap((child): Node[] => {
@@ -55,14 +60,10 @@ function remarkAssumptions() {
       }
       const parts: Node[] = [];
       let last = 0;
-      for (const match of child.value.matchAll(ASSUMPTION)) {
+      for (const match of child.value.matchAll(pattern)) {
         const at = match.index ?? 0;
         if (at > last) parts.push({ type: "text", value: child.value.slice(last, at) });
-        parts.push({
-          type: "assumption",
-          data: { hName: "mark", hProperties: { className: "assumption" } },
-          children: [{ type: "text", value: match[0] }],
-        });
+        parts.push(wrap(match));
         last = at + match[0].length;
       }
       if (!parts.length) return [child];
@@ -70,8 +71,25 @@ function remarkAssumptions() {
       return parts;
     });
   }
-  return (tree: Node) => split(tree);
+  return () => (tree: Node) => split(tree);
 }
+
+// "(assumption)" in the text, as a <mark>.
+const remarkAssumptions = remarkMatches(ASSUMPTION, (match) => ({
+  type: "assumption",
+  data: { hName: "mark", hProperties: { className: "assumption" } },
+  children: [{ type: "text", value: match[0] }],
+}));
+
+// "[finance]", as a tag in the agent's colour that names it.
+const remarkCitations = remarkMatches(CITATION, (match) => {
+  const key = (match[1].toLowerCase().startsWith("chief") ? "chief" : match[1].toLowerCase()) as AgentKey;
+  return {
+    type: "citation",
+    data: { hName: "span", hProperties: { className: `cite agent-${key}`, title: `From ${AGENTS[key].name}` } },
+    children: [{ type: "text", value: AGENTS[key].short }],
+  };
+});
 
 // The agents' text set as a document (globals.css, `.doc`); `compact` for a
 // report shown inside another view, and `labels` to set a whole report's
@@ -87,8 +105,8 @@ export function Markdown({
 }) {
   const level = labels === true ? 3 : labels;
   const plugins: Options["remarkPlugins"] = level
-    ? [remarkGfm, [remarkLabels, { level }], remarkAssumptions]
-    : [remarkGfm, remarkAssumptions];
+    ? [remarkGfm, [remarkLabels, { level }], remarkAssumptions, remarkCitations]
+    : [remarkGfm, remarkAssumptions, remarkCitations];
   return (
     <div className={compact ? "doc doc-compact" : "doc"}>
       <ReactMarkdown remarkPlugins={plugins}>{children}</ReactMarkdown>

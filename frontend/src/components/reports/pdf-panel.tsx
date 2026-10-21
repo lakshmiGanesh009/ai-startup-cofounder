@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { GuardrailNotice } from "@/components/guardrail-notice";
+import { AgentAvatar, AgentStack } from "@/components/ui/agent";
 import { Button, buttonClass } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { DownloadIcon } from "@/components/ui/icons";
@@ -22,6 +23,7 @@ import {
   reportPdf,
   reviseProposal,
 } from "@/lib/api";
+import { PART_AGENT, TEAM } from "@/lib/agents";
 import { PART_AGENTS, PART_TITLES } from "@/lib/proposal";
 import { proposalWait } from "@/lib/team";
 
@@ -135,6 +137,11 @@ export function PdfPanel({
                       onChange={() => setPart(key)}
                       className="mt-1 accent-[var(--primary)]"
                     />
+                    {key === "whole" ? (
+                      <AgentStack agents={TEAM} />
+                    ) : (
+                      <AgentAvatar agent={PART_AGENT[key]} size="sm" />
+                    )}
                     <span>
                       <span className="block text-ink">{key === "whole" ? "The whole proposal" : PART_TITLES[key]}</span>
                       <span className="block text-xs text-ink-3">

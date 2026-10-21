@@ -5,6 +5,7 @@
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
 import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Markdown } from "@/components/markdown";
+import { AgentAvatar, AgentName, AgentStack, TeamStripe } from "@/components/ui/agent";
 import { Badge, Score } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { ArrowRightIcon } from "@/components/ui/icons";
@@ -13,7 +14,8 @@ import { Tabs } from "@/components/ui/tabs";
 import { Notice } from "@/components/ui/notice";
 import type { Answer, CompanyProfile, DeepResearch, EvaluateResponse, Research, ReviewResult } from "@/lib/api";
 import { citations } from "@/lib/brief";
-import { formatSeconds, specialistTitle } from "@/lib/team";
+import { agentClass, agentFill, agentOf, agentsOf, specialistAgent } from "@/lib/agents";
+import { formatSeconds, specialistTitle, stepName } from "@/lib/team";
 
 // What the founder added to the brief before the team ran: answers to the
 // Chief of Staff's questions, and the web research they kept.
@@ -71,15 +73,17 @@ function Summary({ run }: { run: Run }) {
     <aside aria-label="The team's reviews" className="space-y-8 xl:sticky xl:top-8 xl:self-start">
       <section>
         <h3 className="kicker">Reviews</h3>
-        <ul className="mt-3 space-y-3">
+        <ul className="mt-3 space-y-2">
           {Object.keys(result.analyses).map((name) => {
             const verdict = reviewed[name];
             return (
-              <li key={name} className="text-sm">
-                <p className="font-medium text-ink">{specialistTitle(name)}</p>
-                <p className="mt-1 flex items-center justify-between gap-3">
+              <li key={name} className={`${agentClass(specialistAgent(name))} rounded-lg bg-agent-soft px-3 py-2.5 text-sm`}>
+                <AgentName agent={specialistAgent(name)} size="sm" className="font-medium text-ink">
+                  {specialistTitle(name)}
+                </AgentName>
+                <p className="mt-2 flex items-center justify-between gap-3 pl-8">
                   {verdict ? (
-                    <Score score={verdict.review.score} />
+                    <Score score={verdict.review.score} agent={specialistAgent(name)} />
                   ) : (
                     <span className="text-xs text-ink-3">Kept from earlier</span>
                   )}
@@ -92,7 +96,8 @@ function Summary({ run }: { run: Run }) {
       </section>
       <section>
         <h3 className="kicker">Conflicts</h3>
-        <p className="mt-2 text-sm text-ink-2">
+        <p className="mt-2 flex items-center gap-2 text-sm text-ink-2">
+          {conflicts > 0 && <AgentAvatar agent="chief" size="xs" />}
           {conflicts ? `${conflicts} settled by the Chief of Staff.` : "None raised."}
         </p>
       </section>
@@ -121,17 +126,17 @@ function Summary({ run }: { run: Run }) {
       )}
       <section>
         <h3 className="kicker">This request</h3>
-        <dl className="mt-2 grid grid-cols-[1fr_auto] gap-y-1 text-sm">
-          <dt className="text-ink-3">Model calls</dt>
-          <dd className="text-right tabular">{calls}</dd>
-          <dt className="text-ink-3">Tokens</dt>
-          <dd className="text-right tabular">{tokens.toLocaleString("en-US")}</dd>
-          {run.seconds !== undefined && (
-            <>
-              <dt className="text-ink-3">Time</dt>
-              <dd className="text-right tabular">{formatSeconds(run.seconds)}</dd>
-            </>
-          )}
+        <dl className="mt-2 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-rule bg-rule text-center">
+          {[
+            ["Model calls", String(calls)],
+            ["Tokens", tokens >= 10_000 ? `${(tokens / 1000).toFixed(1)}k` : tokens.toLocaleString("en-US")],
+            ...(run.seconds !== undefined ? [["Time", formatSeconds(run.seconds)]] : []),
+          ].map(([label, value]) => (
+            <div key={label} className="flex flex-col-reverse bg-surface px-1 py-2.5">
+              <dt className="text-[11px] text-ink-3">{label}</dt>
+              <dd className="text-[15px] font-medium tabular">{value}</dd>
+            </div>
+          ))}
         </dl>
       </section>
       <ButtonLink href={`/reports?session=${encodeURIComponent(result.session_id)}`} size="sm" className="w-full">
@@ -147,20 +152,21 @@ function Reports({ result }: { result: EvaluateResponse }) {
   return (
     <div className="divide-y divide-rule border-y border-rule">
       {Object.entries(result.analyses).map(([name, report], index) => (
-        <details key={name} open={index === 0} className="group">
+        <details key={name} open={index === 0} className={`${agentClass(specialistAgent(name))} group`}>
           <summary className="flex cursor-pointer list-none items-center gap-3 py-3.5 [&::-webkit-details-marker]:hidden">
             <span aria-hidden className="w-3 text-ink-3 transition-transform group-open:rotate-90">
               ›
             </span>
+            <AgentAvatar agent={specialistAgent(name)} size="md" />
             <span className="font-medium">{specialistTitle(name)}</span>
             <span className="text-xs text-ink-3 tabular">{words(report ?? "")} words</span>
             {reviewed[name] && (
               <span className="ml-auto">
-                <Score score={reviewed[name].review.score} />
+                <Score score={reviewed[name].review.score} agent={specialistAgent(name)} />
               </span>
             )}
           </summary>
-          <div className="pb-7 pl-6">
+          <div className="mb-7 ml-[1.3rem] border-l-2 border-agent-line pl-[1.85rem]">
             <Markdown compact labels>{report ?? ""}</Markdown>
           </div>
         </details>
@@ -244,7 +250,9 @@ function ResearchTab({ brief, deep }: { brief?: Brief; deep?: DeepResearch | nul
                   <span aria-hidden className="w-3 text-ink-3 transition-transform group-open:rotate-90">
                     ›
                   </span>
-                  <span className="font-medium">{specialistTitle(name)}</span>
+                  <AgentName agent={specialistAgent(name)} size="sm" className="font-medium">
+                    {specialistTitle(name)}
+                  </AgentName>
                 </summary>
                 <div className="pb-6 pl-6">
                   <Markdown compact labels>
@@ -286,12 +294,18 @@ function ResearchTab({ brief, deep }: { brief?: Brief; deep?: DeepResearch | nul
 function Plan({ result }: { result: EvaluateResponse }) {
   return (
     <div className="max-w-3xl">
-      <p className="kicker">Objective</p>
-      <p className="mt-1.5 font-serif text-lg leading-snug">{result.objective}</p>
+      <p className="kicker flex items-center gap-2">
+        <AgentAvatar agent="chief" size="xs" /> The Chief of Staff&apos;s objective
+      </p>
+      <p className="mt-2 border-l-2 border-[var(--agent-chief)] pl-4 font-serif text-lg leading-snug">{result.objective}</p>
       <dl className="mt-6 divide-y divide-rule border-y border-rule">
         {Object.entries(result.assignments).map(([name, task]) => (
           <div key={name} className="grid grid-cols-1 gap-1 py-3 text-sm sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-6">
-            <dt className="font-medium">{specialistTitle(name)}</dt>
+            <dt className="font-medium">
+              <AgentName agent={specialistAgent(name)} size="sm">
+                {specialistTitle(name)}
+              </AgentName>
+            </dt>
             <dd className="text-ink-2">{task}</dd>
           </div>
         ))}
@@ -323,7 +337,9 @@ function Reviews({ result }: { result: EvaluateResponse }) {
             <tbody className="divide-y divide-rule">
               {reviewedIn(result, number).map(([name, review]) => (
                 <tr key={name} className="align-top">
-                  <td className="py-2.5 pr-4 font-medium whitespace-nowrap">{specialistTitle(name)}</td>
+                  <td className="py-2.5 pr-4 font-medium whitespace-nowrap">
+                    <AgentName agent={specialistAgent(name)}>{specialistTitle(name)}</AgentName>
+                  </td>
                   <td className="py-2.5 pr-4 whitespace-nowrap">
                     {review.approved ? (
                       <Badge tone="good">Approved</Badge>
@@ -332,7 +348,7 @@ function Reviews({ result }: { result: EvaluateResponse }) {
                     )}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <Score score={review.score} />
+                    <Score score={review.score} agent={specialistAgent(name)} />
                   </td>
                   <td className="py-2.5 text-ink-2">{review.feedback || "—"}</td>
                 </tr>
@@ -351,14 +367,17 @@ function Conflicts({ result }: { result: EvaluateResponse }) {
     <ol className="max-w-3xl divide-y divide-rule border-y border-rule">
       {result.resolutions.map(({ conflict, decision, revise }, index) => (
         <li key={index} className="py-4 text-sm">
-          <p className="font-medium">
-            {specialistTitle(conflict.raised_by)} <span className="font-normal text-ink-3">questioned</span>{" "}
-            {specialistTitle(conflict.about)}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-medium">
+            <AgentName agent={specialistAgent(conflict.raised_by)}>{specialistTitle(conflict.raised_by)}</AgentName>
+            <span className="font-normal text-ink-3">questioned</span>
+            <AgentName agent={specialistAgent(conflict.about)}>{specialistTitle(conflict.about)}</AgentName>
           </p>
-          <p className="mt-1 text-ink-2">{conflict.issue}</p>
-          <div className="mt-3 border-l-2 border-primary pl-3">
-            <p className="kicker">Decision</p>
-            <p className="mt-0.5 text-ink">{decision}</p>
+          <p className="mt-1.5 text-ink-2">{conflict.issue}</p>
+          <div className="agent-chief mt-3 rounded-r-md border-l-2 border-agent bg-agent-soft py-2 pr-3 pl-3">
+            <p className="kicker flex items-center gap-1.5">
+              <AgentAvatar agent="chief" size="xs" /> The Chief of Staff&apos;s decision
+            </p>
+            <p className="mt-1 text-ink">{decision}</p>
           </div>
           <p className="mt-2 text-xs text-ink-3">
             {revise ? `${specialistTitle(revise)} revised its report to match.` : "No report needed revising."}
@@ -385,7 +404,16 @@ function RunMetrics({ result }: { result: EvaluateResponse }) {
       <tbody className="divide-y divide-rule">
         {rows.map(([node, metric]) => (
           <tr key={node}>
-            <td className="py-2 pr-4">{node}</td>
+            <td className="py-2 pr-4">
+              {agentsOf(node).length > 1 ? (
+                <span className="inline-flex items-center gap-2">
+                  <AgentStack agents={agentsOf(node)} />
+                  {stepName(node)}
+                </span>
+              ) : (
+                <AgentName agent={agentOf(node)}>{stepName(node)}</AgentName>
+              )}
+            </td>
             <td className="py-2 pr-4 text-right tabular">{metric.calls}</td>
             <td className="py-2 pr-4 text-right tabular">{metric.tokens.toLocaleString("en-US")}</td>
             <td className="py-2">
@@ -393,7 +421,7 @@ function RunMetrics({ result }: { result: EvaluateResponse }) {
                 <div
                   aria-hidden
                   className="h-1.5 rounded-full"
-                  style={{ width: `${Math.max(2, (metric.seconds / longest) * 60)}%`, background: "var(--data-1)" }}
+                  style={{ width: `${Math.max(2, (metric.seconds / longest) * 60)}%`, background: agentFill(agentsOf(node)) }}
                 />
                 <span className="text-ink-2 tabular">{metric.seconds.toFixed(1)}</span>
               </div>
@@ -410,7 +438,10 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
   return (
     <article aria-label={`Request ${number}`}>
       <header className="max-w-3xl">
-        <p className="kicker">Launch strategy · Request {number}</p>
+        <p className="kicker flex items-center gap-3">
+          Launch strategy · Request {number}
+          <TeamStripe />
+        </p>
         <h2 className={`mt-2 font-serif ${titleSize(result.objective)} leading-snug font-medium tracking-[-0.01em]`}>
           {result.objective}
         </h2>
@@ -420,9 +451,13 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
         <GuardrailNotice flags={result.guardrails} className="mt-5" />
       </header>
       <div className="mt-10 grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="min-w-0">
-          <p className="mb-6 border-b border-rule pb-3 text-xs text-ink-3">
-            Written by the Chief of Staff from the specialists&apos; reviewed reports
+        <div className="min-w-0 rounded-xl border border-rule bg-surface px-5 py-6 shadow-[0_1px_2px_rgb(0_0_0/0.04),0_8px_24px_-12px_rgb(0_0_0/0.12)] sm:px-9 sm:py-8">
+          <p className="mb-6 flex items-center gap-2.5 border-b border-rule pb-4 text-xs text-ink-3">
+            <AgentAvatar agent="chief" size="md" />
+            <span>
+              <span className="block text-sm font-medium text-ink">Chief of Staff</span>
+              Written from the specialists&apos; reviewed reports
+            </span>
           </p>
           <Markdown labels>{result.final_strategy}</Markdown>
         </div>

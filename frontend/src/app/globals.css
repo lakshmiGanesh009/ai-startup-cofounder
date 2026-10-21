@@ -3,11 +3,14 @@
 /*
   The app's look: warm paper and ink, one navy accent (the PDF's), hairline
   rules instead of boxes, Newsreader for the documents the agents write and
-  Geist for everything around them. Status colours are kept for state (a
-  verdict, a risk, a failing check) and always sit beside words.
+  Geist for everything around them. Each agent has a colour of its own, worn
+  by everything it does: its steps, its reports, its reviews, its citations.
+  Status colours are kept for state (a verdict, a risk, a failing check) and
+  always sit beside words.
 */
 
 :root {
+  color-scheme: light;
   --paper: #f6f4ee;
   --surface: #fdfcf9;
   --sunken: #efece5;
@@ -45,47 +48,227 @@
   --sev-moderate: #f8e3ad;
   --sev-high: #f5cdb8;
   --sev-critical: #efb7b4;
+
+  /* The team, a colour each, validated as neighbours in this order in light
+     and dark. A colour always sits beside its agent's name or icon, and text
+     stays in ink; -deep is for an icon or a line on the agent's tint. Web
+     research is a tool, not an agent, so it is a neutral slate. */
+  --agent-chief: #4a3aa7;
+  --agent-chief-deep: #3b2e8a;
+  --agent-marketing: #eb6834;
+  --agent-marketing-deep: #b4461b;
+  --agent-finance: #1baf7a;
+  --agent-finance-deep: #0d7651;
+  --agent-technical: #2a78d6;
+  --agent-technical-deep: #1c5cab;
+  --agent-risk: #e87ba4;
+  --agent-risk-deep: #b03c6f;
+  --agent-research: #6b7889;
+  --agent-research-deep: #48525f;
+  /* A fill that carries a white mark (a check): the deep shade in light. */
+  --agent-chief-solid: #3b2e8a;
+  --agent-marketing-solid: #b4461b;
+  --agent-finance-solid: #0d7651;
+  --agent-technical-solid: #1c5cab;
+  --agent-risk-solid: #b03c6f;
+  --agent-research-solid: #48525f;
+  /* How much of an agent's colour its tint holds. */
+  --agent-tint: 14%;
 }
 
+/* Dark: a mid grey rather than black, so the team's colours and the tints
+   behind them read clearly; every mark clears 3:1 against it. It follows the
+   system unless the founder picks light or dark (data-theme, lib/theme.ts). */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #131311;
-    --surface: #1b1a17;
-    --sunken: #22211d;
-    --ink: #edebe4;
-    --ink-2: #bdb9ad;
-    --ink-3: #8b877c;
-    --rule: #302f2a;
-    --rule-strong: #46443c;
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #2a2b2f;
+    --surface: #323338;
+    --sunken: #3a3b41;
+    --ink: #f1f1f3;
+    --ink-2: #cbccd2;
+    --ink-3: #a3a5ac;
+    --rule: #45474d;
+    --rule-strong: #5a5c63;
 
-    --primary: #dfe8f6;
+    --primary: #e3e8f3;
     --primary-hover: #ffffff;
-    --primary-ink: #10294b;
-    --primary-soft: #1b2a40;
-    --link: #92b9ef;
-    --focus: #5598e7;
+    --primary-ink: #172c4d;
+    --primary-soft: #3a4558;
+    --link: #9cc0f2;
+    --focus: #6aa5ec;
 
-    --good: #86d394;
-    --good-soft: #17301d;
-    --warn: #efc56e;
-    --warn-soft: #382a0d;
-    --bad: #f0a19b;
-    --bad-soft: #3c1a18;
+    --good: #8fd89c;
+    --good-soft: #33473a;
+    --warn: #f0c978;
+    --warn-soft: #4d4330;
+    --bad: #f3a7a1;
+    --bad-soft: #553739;
 
-    --data-1: #3987e5;
-    --data-2: #d95926;
-    --data-3: #199e70;
-    --data-negative: #e66767;
-    --ramp-1: #5598e7;
-    --ramp-2: #3987e5;
-    --ramp-3: #2a78d6;
-    --ramp-4: #256abf;
-    --ramp-5: #1c5cab;
-    --sev-low: #1f3a23;
-    --sev-moderate: #45360f;
-    --sev-high: #4a2a1b;
-    --sev-critical: #4e2120;
+    --data-1: #4a93ea;
+    --data-2: #e0703f;
+    --data-3: #22aa79;
+    --data-negative: #ef7777;
+    --ramp-1: #86b6ef;
+    --ramp-2: #6da7ec;
+    --ramp-3: #5598e7;
+    --ramp-4: #3987e5;
+    --ramp-5: #2a78d6;
+    --sev-low: #3c5642;
+    --sev-moderate: #5f5130;
+    --sev-high: #634636;
+    --sev-critical: #683b3c;
+
+    --agent-chief: #9085e9;
+    --agent-chief-deep: #c3bdf7;
+    --agent-marketing: #e0652f;
+    --agent-marketing-deep: #f6a37d;
+    --agent-finance: #22aa79;
+    --agent-finance-deep: #6fdcb1;
+    --agent-technical: #4a93ea;
+    --agent-technical-deep: #9fc7f6;
+    --agent-risk: #d95c90;
+    --agent-risk-deep: #f3a6c6;
+    --agent-research: #8f9aaa;
+    --agent-research-deep: #c6ced9;
+    --agent-chief-solid: #9085e9;
+    --agent-marketing-solid: #e0652f;
+    --agent-finance-solid: #1b9468;
+    --agent-technical-solid: #4a93ea;
+    --agent-risk-solid: #d95c90;
+    --agent-research-solid: #7b8696;
+  --agent-tint: 24%;
   }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #2a2b2f;
+  --surface: #323338;
+  --sunken: #3a3b41;
+  --ink: #f1f1f3;
+  --ink-2: #cbccd2;
+  --ink-3: #a3a5ac;
+  --rule: #45474d;
+  --rule-strong: #5a5c63;
+
+  --primary: #e3e8f3;
+  --primary-hover: #ffffff;
+  --primary-ink: #172c4d;
+  --primary-soft: #3a4558;
+  --link: #9cc0f2;
+  --focus: #6aa5ec;
+
+  --good: #8fd89c;
+  --good-soft: #33473a;
+  --warn: #f0c978;
+  --warn-soft: #4d4330;
+  --bad: #f3a7a1;
+  --bad-soft: #553739;
+
+  --data-1: #4a93ea;
+  --data-2: #e0703f;
+  --data-3: #22aa79;
+  --data-negative: #ef7777;
+  --ramp-1: #86b6ef;
+  --ramp-2: #6da7ec;
+  --ramp-3: #5598e7;
+  --ramp-4: #3987e5;
+  --ramp-5: #2a78d6;
+  --sev-low: #3c5642;
+  --sev-moderate: #5f5130;
+  --sev-high: #634636;
+  --sev-critical: #683b3c;
+
+  --agent-chief: #9085e9;
+  --agent-chief-deep: #c3bdf7;
+  --agent-marketing: #e0652f;
+  --agent-marketing-deep: #f6a37d;
+  --agent-finance: #22aa79;
+  --agent-finance-deep: #6fdcb1;
+  --agent-technical: #4a93ea;
+  --agent-technical-deep: #9fc7f6;
+  --agent-risk: #d95c90;
+  --agent-risk-deep: #f3a6c6;
+  --agent-research: #8f9aaa;
+  --agent-research-deep: #c6ced9;
+  --agent-chief-solid: #9085e9;
+  --agent-marketing-solid: #e0652f;
+  --agent-finance-solid: #1b9468;
+  --agent-technical-solid: #4a93ea;
+  --agent-risk-solid: #d95c90;
+  --agent-research-solid: #7b8696;
+  --agent-tint: 24%;
+}
+
+/* An element of an agent's: everything inside it can use the agent utilities
+   (bg-agent, bg-agent-soft, text-agent-deep, border-agent...). */
+.agent-chief {
+  --agent: var(--agent-chief);
+  --agent-deep: var(--agent-chief-deep);
+  --agent-solid: var(--agent-chief-solid);
+}
+.agent-marketing {
+  --agent: var(--agent-marketing);
+  --agent-deep: var(--agent-marketing-deep);
+  --agent-solid: var(--agent-marketing-solid);
+}
+.agent-finance {
+  --agent: var(--agent-finance);
+  --agent-deep: var(--agent-finance-deep);
+  --agent-solid: var(--agent-finance-solid);
+}
+.agent-technical {
+  --agent: var(--agent-technical);
+  --agent-deep: var(--agent-technical-deep);
+  --agent-solid: var(--agent-technical-solid);
+}
+.agent-risk {
+  --agent: var(--agent-risk);
+  --agent-deep: var(--agent-risk-deep);
+  --agent-solid: var(--agent-risk-solid);
+}
+.agent-research {
+  --agent: var(--agent-research);
+  --agent-deep: var(--agent-research-deep);
+  --agent-solid: var(--agent-research-solid);
+}
+.agent-chief,
+.agent-marketing,
+.agent-finance,
+.agent-technical,
+.agent-risk,
+.agent-research {
+  --agent-soft: color-mix(in oklab, var(--agent) var(--agent-tint), var(--surface));
+  --agent-line: color-mix(in oklab, var(--agent) 40%, var(--surface));
+}
+
+/* An agent the Chief of Staff cites in its text, "[finance]", set as a small
+   tag in the agent's colour. */
+.cite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin-inline: 0.08em;
+  padding: 0.18em 0.55em 0.18em 0.45em;
+  border-radius: 999px;
+  background: var(--agent-soft);
+  color: var(--ink-2);
+  font-family: var(--font-sans);
+  font-size: 0.7em;
+  font-weight: 500;
+  font-style: normal;
+  line-height: 1.25;
+  vertical-align: 0.12em;
+  white-space: nowrap;
+}
+
+.cite::before {
+  content: "";
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 999px;
+  background: var(--agent);
 }
 
 @theme inline {
@@ -109,6 +292,11 @@
   --color-warn-soft: var(--warn-soft);
   --color-bad: var(--bad);
   --color-bad-soft: var(--bad-soft);
+  --color-agent: var(--agent);
+  --color-agent-deep: var(--agent-deep);
+  --color-agent-soft: var(--agent-soft);
+  --color-agent-line: var(--agent-line);
+  --color-agent-solid: var(--agent-solid);
   --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-serif: var(--font-newsreader), ui-serif, Georgia, serif;
@@ -420,8 +608,20 @@ mark.assumption {
   animation: working 1.4s ease-in-out infinite;
 }
 
+/* The ring of a stage several agents share, turning while they work. */
+@keyframes stage-turn {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.stage-turning {
+  animation: stage-turn 3s linear infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .working-dot {
+  .working-dot,
+  .stage-turning {
     animation: none;
   }
 

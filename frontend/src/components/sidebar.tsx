@@ -1,7 +1,7 @@
 "use client";
 
-// The app's rail: the mark, the pages, the reasoning sliders and whether the
-// API answers. On a phone it folds into a bar with a menu.
+// The app's rail: the mark, the pages, the reasoning sliders, where research
+// runs, light or dark, and whether the API answers. On a phone it folds into a bar with a menu.
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -10,6 +10,7 @@ import { useState } from "react";
 import { BackendStatus } from "@/components/backend-status";
 import { ReasoningSliders } from "@/components/reasoning-sliders";
 import { ResearchSwitch } from "@/components/research-switch";
+import { ThemeSwitch } from "@/components/theme-switch";
 import { CloseIcon, CompassIcon, DocumentIcon, FlowIcon, MenuIcon } from "@/components/ui/icons";
 import { TeamMark } from "@/components/ui/team-mark";
 
@@ -89,6 +90,9 @@ export function Sidebar() {
         </div>
         <div className="px-1">
           <ResearchSwitch />
+        </div>
+        <div className="px-1">
+          <ThemeSwitch />
         </div>
         <div className="mt-auto border-t border-rule px-1 pt-4">
           <BackendStatus />

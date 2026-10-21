@@ -5,13 +5,14 @@
 // the memo, and the routes the Chief of Staff's decisions take. Mermaid is
 // loaded only when a diagram is shown, and drawn in the page's own colours.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { Tabs } from "@/components/ui/tabs";
 import type { Pipeline } from "@/lib/api";
 import { decisionsDiagram, flowDiagram } from "@/lib/how";
+import { useDark } from "@/lib/use-theme";
 
 function token(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -84,24 +85,8 @@ function draw(source: string): Promise<string> {
   return job;
 }
 
-// Whether the page is dark. A diagram's colours are fixed when it is drawn, so
-// it is drawn again when the colour scheme changes.
-const DARK = "(prefers-color-scheme: dark)";
-
-function watchScheme(change: () => void): () => void {
-  if (typeof window.matchMedia !== "function") return () => undefined;
-  const query = window.matchMedia(DARK);
-  query.addEventListener("change", change);
-  return () => query.removeEventListener("change", change);
-}
-
-function useDark(): boolean {
-  return useSyncExternalStore(
-    watchScheme,
-    () => typeof window.matchMedia === "function" && window.matchMedia(DARK).matches,
-    () => false,
-  );
-}
+// A diagram's colours are fixed when it is drawn, so it is drawn again when
+// the page turns light or dark (useDark).
 
 export function MermaidDiagram({ source, label }: { source: string; label: string }) {
   const dark = useDark();

@@ -2,21 +2,19 @@
 // each, what it hands on, and where the founder decides. A dot travels along
 // the line to show the work moving (it stays still for reduced motion).
 
+import { AgentIcon, AgentName } from "@/components/ui/agent";
 import {
-  ChartIcon,
-  ChipIcon,
   CompassIcon,
   DocumentIcon,
   GavelIcon,
   GlobeIcon,
   HandIcon,
-  MegaphoneIcon,
   ScaleIcon,
   SearchIcon,
-  ShieldIcon,
   SwapIcon,
   UserIcon,
 } from "@/components/ui/icons";
+import { AGENTS, type AgentKey, agentClass, SPECIALIST_AGENTS, TEAM } from "@/lib/agents";
 import { type IconName, type Station, STATIONS } from "@/lib/how";
 
 const ICONS: Record<Exclude<IconName, "team">, (props: { className?: string }) => React.ReactNode> = {
@@ -30,28 +28,55 @@ const ICONS: Record<Exclude<IconName, "team">, (props: { className?: string }) =
   document: DocumentIcon,
 };
 
-// The four specialists in one circle.
+// Who takes each station: one agent's colour, the specialists' together, or
+// none for the founder's own steps.
+const STATION_AGENTS: Record<string, AgentKey[]> = {
+  prepare: ["chief"],
+  plan: ["chief"],
+  research: ["research"],
+  reports: SPECIALIST_AGENTS,
+  review: ["chief"],
+  "cross-check": SPECIALIST_AGENTS,
+  resolve: ["chief"],
+  strategy: ["chief"],
+};
+
+// The four specialists in one circle, each in its colour.
 function Team() {
   return (
     <span className="grid grid-cols-2 gap-0.5">
-      <MegaphoneIcon className="size-3" />
-      <ChartIcon className="size-3" />
-      <ChipIcon className="size-3" />
-      <ShieldIcon className="size-3" />
+      {SPECIALIST_AGENTS.map((agent) => (
+        <span key={agent} className={`${agentClass(agent)} text-agent-deep`}>
+          <AgentIcon agent={agent} className="size-3" />
+        </span>
+      ))}
     </span>
   );
 }
 
 function Mark({ station }: { station: Station }) {
   const Glyph = station.icon === "team" ? null : ICONS[station.icon];
-  const chief = station.who.startsWith("Chief of Staff");
+  const agents = STATION_AGENTS[station.key] ?? [];
+  const single = agents.length === 1 ? agents[0] : null;
+  const ring =
+    agents.length > 1
+      ? { background: `conic-gradient(${agents.map((a, i) => `var(--agent-${a}) ${i * 25}% ${(i + 1) * 25}%`).join(", ")})` }
+      : undefined;
   return (
     <span
-      className={`relative z-10 flex size-11 shrink-0 items-center justify-center rounded-full border ${
-        station.optional ? "border-dashed border-ink-3" : "border-rule-strong"
-      } ${chief ? "bg-primary-soft text-primary" : "bg-surface text-ink-2"} transition-transform group-hover:scale-105`}
+      className={`${single ? agentClass(single) : ""} relative z-10 flex size-11 shrink-0 items-center justify-center rounded-full ${
+        ring ? "" : "border"
+      } ${station.optional ? "border-dashed" : ""} ${
+        single
+          ? "border-agent-line bg-agent-soft text-agent-deep"
+          : ring
+            ? "text-ink-2"
+            : "border-rule-strong bg-surface text-ink-2"
+      } transition-transform group-hover:scale-105`}
+      style={ring}
     >
-      {Glyph ? <Glyph className="size-[18px]" /> : <Team />}
+      {ring && <span aria-hidden className="absolute inset-[2.5px] rounded-full bg-surface" />}
+      <span className="relative">{Glyph ? <Glyph className="size-[18px]" /> : <Team />}</span>
       {station.yours && (
         <span
           title="Your call"
@@ -92,9 +117,11 @@ export function PipelineMap() {
         ))}
       </ol>
       <figcaption className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-xs text-ink-3">
-        <span className="flex items-center gap-2">
-          <span aria-hidden className="size-3 rounded-full border border-rule-strong bg-primary-soft" /> The Chief of Staff
-        </span>
+        {[...TEAM, "research" as const].map((agent) => (
+          <AgentName key={agent} agent={agent}>
+            {AGENTS[agent].short}
+          </AgentName>
+        ))}
         <span className="flex items-center gap-2">
           <span aria-hidden className="size-3 rounded-full border border-dashed border-ink-3" /> Optional
         </span>
