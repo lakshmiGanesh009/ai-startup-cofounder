@@ -63,9 +63,9 @@ def test_the_tables_are_made_once_and_the_url_never_reaches_the_logs():
     lifetime(migrate_again)
 
     with psycopg.connect(URL) as conn:
-        assert conn.execute("SELECT version FROM cofounder_migrations").fetchall() == [(0,)]
+        assert conn.execute("SELECT version FROM cofounder_migrations ORDER BY version").fetchall() == [(0,), (1,)]
         tables = {row[0] for row in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
-    assert {"reports", "monitor_runs", "monitor_events", "checkpoints"} <= tables
+    assert {"reports", "report_versions", "monitor_runs", "monitor_events", "checkpoints"} <= tables
     assert persistence.where("postgresql://me:secret@db.example:6543/cofounder") == "db.example:6543/cofounder"
 
 
@@ -113,6 +113,30 @@ def test_reports_survive_a_restart_and_a_stale_edit_is_still_refused():
     assert outdated
     assert summaries == [("s1", False), ("s2", False)]
     assert reset == 3
+
+
+def test_a_reports_earlier_versions_survive_a_restart_and_only_the_latest_are_kept(monkeypatch):
+    monkeypatch.setattr(persistence, "KEEP_VERSIONS", 3)
+
+    async def write(storage):
+        store = ReportStore(storage.reports)
+        store.record("s1", _results())
+        for number in range(5):
+            store.save("s1", store.get("s1").version, [ReportSection(key="strategy", title="Strategy", body=f"Edit {number}.")])
+
+    async def read(storage):
+        store = ReportStore(storage.reports)
+        versions = [(v.version, v.change, v.current) for v in store.versions("s1")]
+        restored = store.restore("s1", 6, 4)
+        return versions, store.version("s1", 4).sections[0].body, restored
+
+    lifetime(write)
+    versions, fourth, restored = lifetime(read)
+
+    assert versions == [(6, "Edited the team's report", True), (5, "Edited the team's report", False),
+                        (4, "Edited the team's report", False), (3, "Edited the team's report", False)]
+    assert fourth == "Edit 2."
+    assert (restored.version, restored.change, restored.sections[0].body) == (7, "Restored version 4", "Edit 2.")
 
 
 def test_the_monitors_history_is_kept_trimmed_and_read_back(monkeypatch):

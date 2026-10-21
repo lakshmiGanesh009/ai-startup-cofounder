@@ -29,7 +29,14 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool, PoolTimeout
 
 from monitor import Event, Run
-from reports import MemoryReports, Report, ReportSummary, SessionResults, Stored
+from reports import (
+    KEEP_VERSIONS,
+    MemoryReports,
+    Report,
+    ReportSummary,
+    SessionResults,
+    Stored,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +60,15 @@ MIGRATIONS: list[list[str]] = [
         "CREATE INDEX reports_by_update ON reports (updated_at DESC)",
         "CREATE TABLE monitor_runs (id bigserial PRIMARY KEY, at timestamptz NOT NULL, run jsonb NOT NULL)",
         "CREATE TABLE monitor_events (id bigserial PRIMARY KEY, at timestamptz NOT NULL, event jsonb NOT NULL)",
+    ],
+    [
+        # Each report's earlier versions, to look at or restore (reports.KEEP_VERSIONS).
+        """CREATE TABLE report_versions (
+            session_id text NOT NULL,
+            version integer NOT NULL,
+            report jsonb NOT NULL,
+            PRIMARY KEY (session_id, version)
+        )""",
     ],
 ]
 
@@ -87,7 +103,10 @@ class PostgresReports:
             row = conn.execute(
                 "SELECT results, report FROM reports WHERE session_id = %s FOR UPDATE", (session_id,)
             ).fetchone()
-            stored = change(_stored(row) if row else None)
+            before = _stored(row) if row else None
+            stored = change(before)
+            if before and before.report.version != stored.report.version:
+                self._keep(conn, session_id, before.report)
             conn.execute(
                 """INSERT INTO reports (session_id, results, report, updated_at) VALUES (%s, %s, %s, %s)
                    ON CONFLICT (session_id) DO UPDATE
@@ -101,6 +120,27 @@ class PostgresReports:
                 ),
             )
         return stored
+
+    @staticmethod
+    def _keep(conn, session_id: str, report: Report) -> None:
+        """Keep a version that is being replaced, and only the latest few."""
+        conn.execute(
+            """INSERT INTO report_versions (session_id, version, report) VALUES (%s, %s, %s)
+               ON CONFLICT (session_id, version) DO NOTHING""",
+            (session_id, report.version, Jsonb(report.model_dump(mode="json", exclude={"investment", "checks"}))),
+        )
+        conn.execute(
+            """DELETE FROM report_versions WHERE session_id = %s AND version NOT IN (
+                   SELECT version FROM report_versions WHERE session_id = %s ORDER BY version DESC LIMIT %s)""",
+            (session_id, session_id, KEEP_VERSIONS),
+        )
+
+    def history(self, session_id: str) -> list[Report]:
+        with self.pool.connection() as conn:
+            rows = conn.execute(
+                "SELECT report FROM report_versions WHERE session_id = %s ORDER BY version DESC", (session_id,)
+            ).fetchall()
+        return [Report.model_validate(row["report"]) for row in rows]
 
     def summaries(self) -> list[ReportSummary]:
         with self.pool.connection() as conn:

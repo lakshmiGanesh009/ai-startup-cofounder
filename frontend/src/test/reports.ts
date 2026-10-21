@@ -4,7 +4,7 @@
 import type { Answering } from "@/test/backend";
 import { fakeBackend } from "@/test/backend";
 import sample from "@/test/sample-report.json";
-import type { Proposal, Report } from "@/lib/api";
+import type { Draft, FieldChange, Proposal, Report } from "@/lib/api";
 
 export const SAMPLE_REPORT = sample as unknown as Report;
 export const SESSION = SAMPLE_REPORT.session_id;
@@ -24,6 +24,44 @@ export function fakeReports({ proposal = false, failures = {} as Record<string, 
   const changed = (updates: Partial<Report>) => {
     state.report = { ...state.report, ...updates, version: state.report.version + 1 };
     return state.report;
+  };
+  const draftOf = (report: Report, summary: string, changes: FieldChange[]): Draft => ({
+    report,
+    summary,
+    changes,
+    base_version: state.report.version,
+  });
+  const revisedProposal = () =>
+    state.report.proposal && {
+      ...state.report.proposal,
+      market: { ...state.report.proposal.market, pricing_strategy: "Charge $129 a month." },
+    };
+  // As document.py makes them: a draft of each kind of change.
+  const draftFor = (change: Record<string, unknown>): Draft => {
+    const report = state.report;
+    switch (change.kind) {
+      case "currency":
+        return draftOf(
+          { ...report, settings: { ...report.settings, currency: String(change.to) } },
+          `Converted 22 figures and 15 amounts in the text from USD to ${change.to} at 1 USD = ${change.rate} ${change.to}.`,
+          [
+            { path: "proposal.financial.capex.0.amount", label: "Financial plan · CapEx · Build · Amount", before: 9000, after: 8280, money: true },
+            { path: "settings.currency", label: "Settings · Currency", before: "USD", after: String(change.to), money: false },
+          ],
+        );
+      case "redact":
+        return draftOf(report, `Redacted 2 occurrences of ${(change.terms as string[]).length} terms.`, [
+          { path: "sections.strategy", label: "Team report · Launch Strategy", before: "Hire Dana Reyes.", after: "Hire ██████████.", money: false },
+        ]);
+      case "remove":
+        return draftOf(report, "Removed a passage from Market & marketing · Pricing strategy.", [
+          { path: String(change.path), label: "Market & marketing · Pricing strategy", before: String(change.passage), after: "", money: false },
+        ]);
+      default:
+        return draftOf(report, `Made a ${change.kind} change.`, [
+          { path: "title", label: "Title", before: report.title, after: `${report.title}!`, money: false },
+        ]);
+    }
   };
   const answer = (key: string, ok: (body: { version?: number } & Record<string, unknown>) => unknown): Answering => (body) => {
     const status = state.failures[key];
@@ -53,9 +91,36 @@ export function fakeReports({ proposal = false, failures = {} as Record<string, 
       report: changed({ proposal: structuredClone(SAMPLE_REPORT.proposal), investment: structuredClone(SAMPLE_REPORT.investment) }),
       failed: [],
     })),
-    [`POST ${PATH}/proposal/revise`]: answer("revise", () => ({ report: changed({}), failed: ["Financial Plan & Projections"] })),
+    [`POST ${PATH}/proposal/revise`]: answer("revise", () => ({
+      draft: draftOf(
+        { ...state.report, proposal: revisedProposal() },
+        "The marketing agent revised Market & Marketing Strategy as you asked.",
+        [{ path: "proposal.market.pricing_strategy", label: "Market & marketing · Pricing strategy", before: "Charge $149 a month.", after: "Charge $129 a month.", money: false }],
+      ),
+      failed: ["Financial Plan & Projections"],
+    })),
+    [`POST ${PATH}/revise`]: answer("reviseText", (body) => ({
+      draft: draftOf(
+        { ...state.report, proposal: revisedProposal() },
+        "Rewrote a passage of Market & marketing · Pricing strategy as you asked.",
+        [{ path: String(body.path), label: "Market & marketing · Pricing strategy", before: String(body.passage), after: "A sharper passage.", money: false }],
+      ),
+      failed: [],
+    })),
+    [`POST ${PATH}/drafts`]: answer("draft", (body) => draftFor(body.change as Record<string, unknown>)),
+    [`POST ${PATH}/accept`]: answer("accept", (body) => {
+      const content = body.content as Partial<Report>;
+      return changed({ ...content, edited: true, change: String(body.change) });
+    }),
+    [`GET ${PATH}/versions`]: answer("versions", () => [
+      { version: state.report.version, updated_at: state.report.updated_at, change: state.report.change, has_proposal: Boolean(state.report.proposal), current: true },
+      { version: 0, updated_at: "2026-10-18T09:00:00Z", change: "Written by the team", has_proposal: false, current: false },
+    ]),
+    [`GET ${PATH}/versions/0`]: answer("version", () => ({ ...state.report, version: 0, change: "Written by the team", proposal: null })),
+    [`POST ${PATH}/versions/0/restore`]: answer("restore", () => changed({ proposal: null, investment: null, change: "Restored version 0" })),
     [`PUT ${PATH}/proposal`]: answer("saveProposal", (body) => changed({ proposal: body.proposal as Proposal, edited: true })),
     [`GET ${PATH}/pdf`]: answer("pdf", () => "%PDF"),
+    [`POST ${PATH}/pdf`]: answer("previewPdf", () => "%PDF"),
     ...extra,
   });
   return { ...backend, state };

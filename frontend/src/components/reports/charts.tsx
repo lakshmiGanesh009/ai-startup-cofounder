@@ -4,7 +4,7 @@
 // light-to-dark blue ramp for ordered stages, red only for cash below zero.
 
 import type { Level } from "@/lib/api";
-import { LEVELS, money, monthRange, type Severity, severity, usd } from "@/lib/proposal";
+import { full, LEVELS, money, monthRange, type Severity, severity, useCurrency } from "@/lib/proposal";
 
 export const DATA_1 = "var(--data-1)";
 export const DATA_2 = "var(--data-2)";
@@ -20,6 +20,7 @@ export type Bar = { label: string; value: number; color?: string; note?: string 
 
 // A bar per item, largest first unless `keepOrder`, each with its value.
 export function BarList({ items, color = DATA_1, keepOrder = false }: { items: Bar[]; color?: string; keepOrder?: boolean }) {
+  const currency = useCurrency();
   const rows = keepOrder ? items : [...items].sort((a, b) => b.value - a.value);
   const largest = Math.max(1, ...rows.map((row) => row.value));
   return (
@@ -29,14 +30,14 @@ export function BarList({ items, color = DATA_1, keepOrder = false }: { items: B
           <div className="flex items-baseline justify-between gap-4">
             <span className="text-ink-2">{row.label}</span>
             <span className="font-medium text-ink tabular">
-              {money(row.value)}
+              {money(row.value, currency)}
               {row.note && <span className="ml-2 text-xs font-normal text-ink-3">{row.note}</span>}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 rounded-full bg-sunken">
             <div
               className="h-full rounded-full"
-              title={`${row.label}: ${usd(row.value)}`}
+              title={`${row.label}: ${full(row.value, currency)}`}
               style={{ width: `${Math.max(0.6, (Math.max(row.value, 0) / largest) * 100)}%`, background: row.color ?? color }}
             />
           </div>
@@ -157,6 +158,7 @@ export function GroupedColumns({
   categories: string[];
   series: { name: string; color: string; values: number[] }[];
 }) {
+  const currency = useCurrency();
   const largest = Math.max(1, ...series.flatMap((one) => one.values));
   return (
     <figure>
@@ -166,10 +168,10 @@ export function GroupedColumns({
           <div key={category} className="flex h-full flex-1 items-end justify-center gap-1.5">
             {series.map((one) => (
               <div key={one.name} className="flex h-full w-9 flex-col items-center justify-end sm:w-12">
-                <span className="mb-1 text-[11px] text-ink-2 tabular">{money(one.values[index])}</span>
+                <span className="mb-1 text-[11px] text-ink-2 tabular">{money(one.values[index], currency)}</span>
                 <div
                   className="w-full rounded-t-[3px]"
-                  title={`${category}, ${one.name}: ${usd(one.values[index])}`}
+                  title={`${category}, ${one.name}: ${full(one.values[index], currency)}`}
                   style={{ height: `${(Math.max(one.values[index], 0) / largest) * 82}%`, background: one.color }}
                 />
               </div>
@@ -190,6 +192,7 @@ export function GroupedColumns({
 
 // The cumulative cash position, above or below zero.
 export function CashPosition({ points, note }: { points: { label: string; value: number }[]; note: string }) {
+  const currency = useCurrency();
   const top = Math.max(0, ...points.map((point) => point.value));
   const bottom = Math.min(0, ...points.map((point) => point.value));
   const span = top - bottom || 1;
@@ -214,7 +217,7 @@ export function CashPosition({ points, note }: { points: { label: string; value:
             <div key={point.label} className="relative flex-1">
               <div
                 className="absolute inset-x-[30%] rounded-[3px]"
-                title={`${point.label}: ${usd(point.value)}`}
+                title={`${point.label}: ${full(point.value, currency)}`}
                 style={{
                   top: above ? `${zero - height}%` : `${zero}%`,
                   height: `${Math.max(height, 0.5)}%`,
@@ -225,7 +228,7 @@ export function CashPosition({ points, note }: { points: { label: string; value:
                 className="absolute inset-x-0 text-center text-[11px] font-medium text-ink-2 tabular"
                 style={above ? { bottom: `${100 - zero + height + 2}%` } : { top: `${zero + height + 2}%` }}
               >
-                {money(point.value)}
+                {money(point.value, currency)}
               </span>
             </div>
           );

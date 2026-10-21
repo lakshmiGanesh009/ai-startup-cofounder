@@ -33,8 +33,9 @@ from pydantic_core import PydanticCustomError
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 OPEN_PATHS = frozenset({"/health"})
-# The requests that start a run: an evaluation, a brief, or a proposal written or revised.
-RUN_PATH = re.compile(r"/(evaluate(/stream)?|brief/prepare|reports/[^/]+/proposal(/revise)?)")
+# The requests that start a run: an evaluation, a brief, a proposal written or
+# revised, or one passage of a report revised.
+RUN_PATH = re.compile(r"/(evaluate(/stream)?|brief/prepare|reports/[^/]+/(proposal(/revise)?|revise))")
 
 Reason = Literal["key", "size", "rate", "busy"]
 

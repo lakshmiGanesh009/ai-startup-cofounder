@@ -113,7 +113,7 @@ def test_the_agents_write_the_proposal_from_the_report_as_it_stands(fake_llm):
     assert result["failed"] == []
     written = result["report"]
     assert written["proposal"] == SAMPLE.model_dump(mode="json")
-    assert written["investment"]["npv_usd"] == investment_metrics(SAMPLE.financial).npv_usd
+    assert written["investment"]["npv"] == investment_metrics(SAMPLE.financial).npv
     summary = next(s for s in client.get("/reports").json() if s["session_id"] == session_id)
     assert summary["has_proposal"]
     prompts = fake_llm.part_prompts
@@ -138,7 +138,7 @@ def test_the_agents_write_the_proposal_from_the_report_as_it_stands(fake_llm):
 
 def test_finance_corrects_figures_that_fail_a_check_once(fake_llm):
     years = SAMPLE.financial.years
-    low = [years[0].model_copy(update={"fixed_costs_month_usd": 100.0}), *years[1:]]
+    low = [years[0].model_copy(update={"fixed_costs_month": 100.0}), *years[1:]]
     fake_llm.proposal = SAMPLE.model_copy(
         update={"financial": SAMPLE.financial.model_copy(update={"projections": low})}
     )
@@ -170,7 +170,8 @@ def test_revising_a_part_brings_the_parts_built_on_it_into_line(fake_llm):
     assert "Your part as it stands:" in prompts["market"][0]
     assert "Add a referral channel." not in prompts["financial"][0]
     assert "These parts were just revised: Market & Marketing Strategy." in prompts["financial"][0]
-    assert response.json()["report"]["version"] == client.get(f"/reports/{session_id}").json()["version"]
+    # A revision is a draft: nothing is saved until the founder accepts it.
+    assert response.json()["draft"]["base_version"] == client.get(f"/reports/{session_id}").json()["version"]
 
 
 def test_an_instruction_for_the_whole_proposal_goes_to_every_part(fake_llm):
@@ -194,7 +195,7 @@ def test_a_part_that_cannot_be_revised_keeps_its_text(fake_llm):
 
     assert response.status_code == 200
     assert response.json()["failed"] == ["Financial Plan & Projections"]
-    assert response.json()["report"]["proposal"]["financial"] == SAMPLE.financial.model_dump(mode="json")
+    assert response.json()["draft"]["report"]["proposal"]["financial"] == SAMPLE.financial.model_dump(mode="json")
 
 
 def test_a_new_proposal_with_a_part_missing_is_not_saved(fake_llm):
@@ -232,7 +233,7 @@ def test_an_edited_proposal_is_saved(fake_llm):
 
     assert saved.status_code == 200
     assert saved.json()["edited"] and saved.json()["version"] == report["version"] + 1
-    assert saved.json()["investment"]["npv_usd"] != report["investment"]["npv_usd"]
+    assert saved.json()["investment"]["npv"] != report["investment"]["npv"]
     proposal["financial"]["projections"] = "three years"
     invalid = client.put(f"/reports/{session_id}/proposal",
                          json={"version": saved.json()["version"], "proposal": proposal})
@@ -323,11 +324,11 @@ def _proposal_report(**changes) -> Report:
 
 def test_the_proposal_pdf_draws_charts_for_any_figures():
     # Figures that turn every chart negative or empty must still draw.
-    loss = [p.model_copy(update={"average_customers": 0.0, "fixed_costs_month_usd": 5_000.0})
+    loss = [p.model_copy(update={"average_customers": 0.0, "fixed_costs_month": 5_000.0})
             for p in SAMPLE.financial.projections]
     reports = [
         _proposal_report(),
-        _proposal_report(projections=loss, variable_cost_per_customer_month_usd=500.0),
+        _proposal_report(projections=loss, variable_cost_per_customer_month=500.0),
         _proposal_report(capex=[], monthly_opex=[]),
         _proposal_report(projections=[]),
         _proposal_report(projections=SAMPLE.financial.projections * 2),
@@ -359,7 +360,7 @@ def test_the_chief_of_staff_is_told_to_face_weak_returns():
 
     assert "Note: the NPV is negative" in weak
     assert "not paid back within three years" in weak
-    assert investment_metrics(SAMPLE.financial).npv_usd > 0
+    assert investment_metrics(SAMPLE.financial).npv > 0
     assert "Note:" not in metrics_text(SAMPLE.financial)
 
 

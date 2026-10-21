@@ -10,17 +10,19 @@ report_pdf.py renders it as a PDF.
 Reports are kept in memory, or in PostgreSQL once the API has a database
 (persistence.py), so they survive a restart. Every change to a report's content
 raises its version, and a change made from an older version is refused, so two
-editors cannot silently overwrite each other.
+editors cannot silently overwrite each other. The versions before the current
+one are kept (the latest KEEP_VERSIONS), so any can be looked at or restored.
 """
 
 import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import NamedTuple, Protocol
+from typing import Literal, NamedTuple, Protocol
 
-from pydantic import BaseModel, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from agents.roles import ROLES, SPECIALISTS
+from currency import CURRENCIES, DEFAULT
 from proposal import InvestmentMetrics, Proposal, figure_checks, investment_metrics
 from state import DeepResearch, Research, Resolution
 
@@ -35,6 +37,29 @@ class ReportSection(BaseModel):
     key: str
     title: str
     body: str
+
+
+class DocumentSettings(BaseModel):
+    """What is set once for the whole document and applied everywhere by code
+    (document.py): the currency of every amount, the system its measurements
+    were last converted to, who it is from, and the sections left out."""
+
+    currency: str = Field(DEFAULT, description="The ISO 4217 code of every amount in the document.")
+    units: Literal["metric", "imperial"] | None = Field(
+        None, description="The system the measurements were last converted to; None while as written."
+    )
+    prepared_by: str = Field("AI Startup Co-Founder Team", min_length=1, max_length=80)
+    hidden: list[str] = Field(
+        default_factory=list, max_length=30,
+        description="Keys of the team report's sections left out of the document and its PDF.",
+    )
+
+    @field_validator("currency")
+    @classmethod
+    def _known(cls, code: str) -> str:
+        if code not in CURRENCIES:
+            raise ValueError(f"{code} is not a currency the document can use: {', '.join(CURRENCIES)}.")
+        return code
 
 
 class SessionResults(BaseModel):
@@ -75,6 +100,9 @@ class Report(BaseModel):
     version: int
     # The investment proposal, once the agents have written it.
     proposal: Proposal | None = None
+    settings: DocumentSettings = Field(default_factory=DocumentSettings)
+    # How this version came about, for the report's history.
+    change: str | None = None
     edited: bool = False
     # Newer results arrived after the report was edited or got its proposal, so
     # they were not applied; resetting the report applies them.
@@ -91,7 +119,28 @@ class Report(BaseModel):
     @property
     def checks(self) -> list[str]:
         """Where the proposal's figures disagree, calculated from them."""
-        return figure_checks(self.proposal.market, self.proposal.financial) if self.proposal else []
+        if not self.proposal:
+            return []
+        return figure_checks(self.proposal.market, self.proposal.financial, self.settings.currency)
+
+
+class ReportContent(BaseModel):
+    """What the founder can change in a report and save together: a draft they
+    accept (document.py), or an earlier version they restore."""
+
+    title: str = Field(min_length=1, max_length=4000)
+    objective: str = Field(max_length=4000)
+    sections: list[ReportSection]
+    proposal: Proposal | None = None
+    settings: DocumentSettings = Field(default_factory=DocumentSettings)
+
+
+class VersionSummary(BaseModel):
+    version: int
+    updated_at: datetime
+    change: str | None
+    has_proposal: bool
+    current: bool
 
 
 class ReportSummary(BaseModel):
@@ -218,6 +267,14 @@ class ReportBackend(Protocol):
 
     def summaries(self) -> list[ReportSummary]: ...
 
+    def history(self, session_id: str) -> list[Report]:
+        """The versions before the current one, newest first."""
+        ...
+
+
+# Versions kept before the current one, per report.
+KEEP_VERSIONS = 30
+
 
 class MemoryReports:
     """The reports in this process's memory: lost when the API restarts."""
@@ -225,6 +282,7 @@ class MemoryReports:
     def __init__(self):
         self._lock = threading.Lock()
         self._stored: dict[str, Stored] = {}
+        self._history: dict[str, list[Report]] = {}
 
     def get(self, session_id: str) -> Stored | None:
         with self._lock:
@@ -232,9 +290,17 @@ class MemoryReports:
 
     def update(self, session_id: str, change: Callable[[Stored | None], Stored]) -> Stored:
         with self._lock:
-            stored = change(self._stored.get(session_id))
+            before = self._stored.get(session_id)
+            stored = change(before)
+            if before and before.report.version != stored.report.version:
+                kept = [before.report, *self._history.get(session_id, [])]
+                self._history[session_id] = kept[:KEEP_VERSIONS]
             self._stored[session_id] = stored
             return stored
+
+    def history(self, session_id: str) -> list[Report]:
+        with self._lock:
+            return list(self._history.get(session_id, []))
 
     def summaries(self) -> list[ReportSummary]:
         with self._lock:
@@ -284,7 +350,9 @@ class ReportStore:
             report = stored.report if stored else None
             if report and (report.edited or report.proposal):
                 return Stored(results, report.model_copy(update={"outdated": True}))
-            return Stored(results, _from_results(session_id, results, report))
+            built = _from_results(session_id, results, report)
+            change = "Rebuilt from the latest evaluation" if report else "Written by the team"
+            return Stored(results, built.model_copy(update={"change": change}))
 
         self.backend.update(session_id, change)
 
@@ -303,23 +371,65 @@ class ReportStore:
 
         def change(stored: Stored | None) -> Stored:
             stored = _at_version(stored, session_id, version)
-            return stored._replace(report=_changed(stored.report, sections=sections, edited=True))
+            report = _changed(stored.report, sections=sections, edited=True, change="Edited the team's report")
+            return stored._replace(report=report)
 
         return self.backend.update(session_id, change).report
 
-    def save_proposal(self, session_id: str, version: int, proposal: Proposal,
-                      edited: bool = True) -> Report:
-        """Replace the proposal, if nobody changed the report since `version`.
+    def save_proposal(self, session_id: str, version: int, proposal: Proposal, edited: bool = True,
+                      change: str = "Edited the proposal", settings: DocumentSettings | None = None) -> Report:
+        """Replace the proposal, if nobody changed the report since `version`;
+        with `settings`, those too (the currency a new proposal is written in).
 
         `edited` is False when the agents wrote it rather than the founder.
         """
 
-        def change(stored: Stored | None) -> Stored:
+        def apply(stored: Stored | None) -> Stored:
             stored = _at_version(stored, session_id, version)
             report = stored.report
-            return stored._replace(report=_changed(report, proposal=proposal, edited=report.edited or edited))
+            return stored._replace(report=_changed(
+                report, proposal=proposal, edited=report.edited or edited, change=change,
+                settings=settings or report.settings,
+            ))
 
-        return self.backend.update(session_id, change).report
+        return self.backend.update(session_id, apply).report
+
+    def accept(self, session_id: str, version: int, content: ReportContent, change: str) -> Report:
+        """Save a draft the founder accepted, or an earlier version they restored,
+        if nobody changed the report since `version`."""
+
+        def apply(stored: Stored | None) -> Stored:
+            stored = _at_version(stored, session_id, version)
+            report = _changed(stored.report, **dict(content), edited=True, change=change)
+            return stored._replace(report=report)
+
+        return self.backend.update(session_id, apply).report
+
+    def versions(self, session_id: str) -> list[VersionSummary]:
+        """The current version and those kept before it, newest first."""
+        current = self.get(session_id)
+        return [
+            VersionSummary(version=report.version, updated_at=report.updated_at, change=report.change,
+                           has_proposal=report.proposal is not None, current=report is current)
+            for report in [current, *self.backend.history(session_id)]
+        ]
+
+    def version(self, session_id: str, version: int) -> Report:
+        """The report as it was at `version`."""
+        current = self.get(session_id)
+        if version == current.version:
+            return current
+        for report in self.backend.history(session_id):
+            if report.version == version:
+                return report
+        raise ReportNotFound(f"{session_id} v{version}")
+
+    def restore(self, session_id: str, version: int, wanted: int) -> Report:
+        """The content of version `wanted` saved as the newest version, if
+        nobody changed the report since `version`."""
+        old = self.version(session_id, wanted)
+        content = ReportContent(**old.model_dump(include=set(ReportContent.model_fields)))
+        return self.accept(session_id, version, content, f"Restored version {wanted}")
 
     def reset(self, session_id: str) -> Report:
         """Rebuild the report from the latest results, dropping edits and the proposal."""
@@ -327,7 +437,8 @@ class ReportStore:
         def change(stored: Stored | None) -> Stored:
             if stored is None:
                 raise ReportNotFound(session_id)
-            return stored._replace(report=_from_results(session_id, stored.results, stored.report))
+            rebuilt = _from_results(session_id, stored.results, stored.report)
+            return stored._replace(report=rebuilt.model_copy(update={"change": "Reset to the latest results"}))
 
         return self.backend.update(session_id, change).report
 

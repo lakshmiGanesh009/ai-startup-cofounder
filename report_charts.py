@@ -12,6 +12,8 @@ import re
 
 from fpdf import FPDF
 
+import currency
+
 FONT = "DejaVu"
 
 INK = "#0b0b0b"
@@ -43,14 +45,8 @@ def tint(color: str, amount: float) -> str:
 
 
 def money(value: float) -> str:
-    """A compact dollar amount: $750, $12k, $1.2M."""
-    sign, value = ("-" if value < 0 else ""), abs(value)
-    for size, suffix in ((1e9, "B"), (1e6, "M"), (1e3, "k")):
-        if value >= size:
-            number = value / size
-            text = f"{number:.0f}" if number >= 100 else f"{number:.1f}".removesuffix(".0")
-            return f"{sign}${text}{suffix}"
-    return f"{sign}${value:,.0f}"
+    """A compact amount in the document's currency: $750, €12k, £1.2M."""
+    return currency.compact(value)
 
 
 def room(pdf: FPDF, height: float) -> None:

@@ -66,16 +66,16 @@
   "market": {
    "personas": "**Practice manager Maria** runs a 3-doctor clinic; values calm days and full calendars; loses an hour a day chasing follow-ups.\n\n**Dr. Okafor, owner-physician**, wants fewer no-shows without new software to learn.",
    "tam": {
-    "value_usd": 216000000.0,
-    "basis": "120,000 US outpatient clinics \u00d7 $1,800 a year"
+    "value": 216000000.0,
+    "basis": "120,000 US outpatient clinics × $1,800 a year"
    },
    "sam": {
-    "value_usd": 32400000.0,
-    "basis": "18,000 independent clinics with 1-5 doctors \u00d7 $1,800"
+    "value": 32400000.0,
+    "basis": "18,000 independent clinics with 1-5 doctors × $1,800"
    },
    "som": {
-    "value_usd": 540000.0,
-    "basis": "300 clinics won in three years \u00d7 $1,800"
+    "value": 540000.0,
+    "basis": "300 clinics won in three years × $1,800"
    },
    "competitors": [
     {
@@ -105,12 +105,12 @@
     {
      "channel": "Direct outreach",
      "approach": "Founder calls 20 clinics a week",
-     "monthly_budget_usd": 200.0
+     "monthly_budget": 200.0
     },
     {
      "channel": "Practice-manager communities",
      "approach": "Posts and a webinar a month",
-     "monthly_budget_usd": 300.0
+     "monthly_budget": 300.0
     }
    ],
    "pricing_strategy": "**$149 per clinic per month**, flat; pilot at $49 for the first two months.",
@@ -219,29 +219,29 @@
    "capex": [
     {
      "item": "MVP build (contract developer)",
-     "amount_usd": 9000.0
+     "amount": 9000.0
     },
     {
      "item": "HIPAA review and BAAs",
-     "amount_usd": 2500.0
+     "amount": 2500.0
     },
     {
      "item": "Setup and tools",
-     "amount_usd": 500.0
+     "amount": 500.0
     }
    ],
    "monthly_opex": [
     {
      "item": "Cloud and AI",
-     "amount_usd": 250.0
+     "amount": 250.0
     },
     {
      "item": "Marketing",
-     "amount_usd": 500.0
+     "amount": 500.0
     },
     {
      "item": "Software tools",
-     "amount_usd": 100.0
+     "amount": 100.0
     }
    ],
    "projections": [
@@ -249,50 +249,50 @@
      "year": 1,
      "customers": 12,
      "average_customers": 6.0,
-     "one_off_revenue_usd": 490.0,
-     "fixed_costs_month_usd": 850.0,
-     "cac_usd": 500.0
+     "one_off_revenue": 490.0,
+     "fixed_costs_month": 850.0,
+     "cac": 500.0
     },
     {
      "year": 2,
      "customers": 60,
      "average_customers": 36.0,
-     "one_off_revenue_usd": 0.0,
-     "fixed_costs_month_usd": 3000.0,
-     "cac_usd": 400.0
+     "one_off_revenue": 0.0,
+     "fixed_costs_month": 3000.0,
+     "cac": 400.0
     },
     {
      "year": 3,
      "customers": 160,
      "average_customers": 110.0,
-     "one_off_revenue_usd": 0.0,
-     "fixed_costs_month_usd": 8000.0,
-     "cac_usd": 350.0
+     "one_off_revenue": 0.0,
+     "fixed_costs_month": 8000.0,
+     "cac": 350.0
     }
    ],
-   "price_per_customer_month_usd": 149.0,
-   "variable_cost_per_customer_month_usd": 20.0,
+   "price_per_customer_month": 149.0,
+   "variable_cost_per_customer_month": 20.0,
    "discount_rate": 0.3,
-   "assumptions": "- Year 1: 12 clinics by year end, averaging 6.7 paying \u00d7 $149 \u00d7 12 \u2248 **$12k**.\n- Churn 3% a month."
+   "assumptions": "- Year 1: 12 clinics by year end, averaging 6.7 paying × $149 × 12 ≈ **$12k**.\n- Churn 3% a month."
   }
  },
  "edited": false,
  "outdated": false,
  "updated_at": "2026-10-19T09:30:00Z",
  "investment": {
-  "capex_usd": 12000.0,
-  "monthly_fixed_costs_usd": 850.0,
-  "revenue_usd": [
+  "capex": 12000.0,
+  "monthly_fixed_costs": 850.0,
+  "revenue": [
    11218.0,
    64368.0,
    196680.0
   ],
-  "opex_usd": [
+  "opex": [
    11640.0,
    44640.0,
    122400.0
   ],
-  "net_cash_flow_usd": [
+  "net_cash_flow": [
    -12000.0,
    -422.0,
    19728.0,
@@ -303,10 +303,17 @@
    0.3065,
    0.3777
   ],
-  "npv_usd": 33158.5,
+  "npv": 33158.5,
   "irr": 1.1191,
   "payback_months": 19.6,
   "break_even_customers": 7
  },
- "checks": []
+ "checks": [],
+ "settings": {
+  "currency": "USD",
+  "units": null,
+  "prepared_by": "AI Startup Co-Founder Team",
+  "hidden": []
+ },
+ "change": "Written by the team"
 }

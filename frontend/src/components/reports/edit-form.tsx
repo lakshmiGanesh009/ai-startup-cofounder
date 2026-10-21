@@ -11,6 +11,7 @@ import { inputClass } from "@/components/ui/field";
 import { CloseIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
 import type { PartKey } from "@/lib/api";
+import { CURRENCIES, useCurrency } from "@/lib/proposal";
 
 type Kind = "text" | "long" | "number" | "choice";
 export type Column = { key: string; label: string; kind: Kind; options?: readonly string[] };
@@ -66,7 +67,7 @@ export const PART_FIELDS: Record<PartKey, FieldSpec[]> = {
       columns: [
         { key: "channel", label: "Channel", kind: "text" },
         { key: "approach", label: "How it is used", kind: "text" },
-        { key: "monthly_budget_usd", label: "Monthly budget ($)", kind: "number" },
+        { key: "monthly_budget", label: "Monthly budget ($)", kind: "number" },
       ],
     },
     { key: "pricing_strategy", label: "Pricing strategy", kind: "long" },
@@ -134,7 +135,7 @@ export const PART_FIELDS: Record<PartKey, FieldSpec[]> = {
       kind: "table",
       columns: [
         { key: "item", label: "Item", kind: "text" },
-        { key: "amount_usd", label: "Amount ($)", kind: "number" },
+        { key: "amount", label: "Amount ($)", kind: "number" },
       ],
     },
     {
@@ -143,7 +144,7 @@ export const PART_FIELDS: Record<PartKey, FieldSpec[]> = {
       kind: "table",
       columns: [
         { key: "item", label: "Item", kind: "text" },
-        { key: "amount_usd", label: "Amount ($)", kind: "number" },
+        { key: "amount", label: "Amount ($)", kind: "number" },
       ],
     },
     {
@@ -154,13 +155,13 @@ export const PART_FIELDS: Record<PartKey, FieldSpec[]> = {
         { key: "year", label: "Year", kind: "number" },
         { key: "customers", label: "Customers (year end)", kind: "number" },
         { key: "average_customers", label: "Average customers", kind: "number" },
-        { key: "one_off_revenue_usd", label: "One-off revenue ($)", kind: "number" },
-        { key: "fixed_costs_month_usd", label: "Fixed costs ($ a month)", kind: "number" },
-        { key: "cac_usd", label: "CAC ($)", kind: "number" },
+        { key: "one_off_revenue", label: "One-off revenue ($)", kind: "number" },
+        { key: "fixed_costs_month", label: "Fixed costs ($ a month)", kind: "number" },
+        { key: "cac", label: "CAC ($)", kind: "number" },
       ],
     },
-    { key: "price_per_customer_month_usd", label: "Price per customer ($ a month)", kind: "number" },
-    { key: "variable_cost_per_customer_month_usd", label: "Cost to serve a customer ($ a month)", kind: "number" },
+    { key: "price_per_customer_month", label: "Price per customer ($ a month)", kind: "number" },
+    { key: "variable_cost_per_customer_month", label: "Cost to serve a customer ($ a month)", kind: "number" },
     { key: "discount_rate", label: "Discount rate (0.30 = 30%)", kind: "number" },
     { key: "assumptions", label: "Assumptions", kind: "long" },
   ],
@@ -336,7 +337,16 @@ export function EditForm({
   const [draft, setDraft] = useState<Data>(() => structuredClone(value));
   const [saving, setSaving] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const fields = PART_FIELDS[part].filter((field) => !only || only.includes(field.key));
+  const symbol = (CURRENCIES[useCurrency()]?.symbol ?? "$").trim();
+  // The labels say "$"; the form says the report's currency.
+  const named = (label: string) => label.replaceAll("$", symbol);
+  const fields = PART_FIELDS[part]
+    .filter((field) => !only || only.includes(field.key))
+    .map((field) =>
+      "columns" in field
+        ? { ...field, label: named(field.label), columns: field.columns.map((column) => ({ ...column, label: named(column.label) })) }
+        : { ...field, label: named(field.label) },
+    );
   const set = (key: string, next: unknown) => setDraft((current) => ({ ...current, [key]: next }));
 
   return (
@@ -372,10 +382,10 @@ export function EditForm({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-[11rem_minmax(0,1fr)]">
                 <Input
                   id={`${id}-value`}
-                  label="Value ($ a year)"
+                  label={named("Value ($ a year)")}
                   kind="number"
-                  value={size.value_usd}
-                  onChange={(next) => set(field.key, { ...size, value_usd: next })}
+                  value={size.value}
+                  onChange={(next) => set(field.key, { ...size, value: next })}
                 />
                 <Input
                   id={`${id}-basis`}

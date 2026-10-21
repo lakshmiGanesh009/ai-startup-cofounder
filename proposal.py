@@ -13,13 +13,20 @@ model, so the figures always add up.
 import math
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
+
+import currency
 
 Level = Literal["Low", "Medium", "High"]
 
 
+def _renamed(name: str) -> AliasChoices:
+    """Money fields were once named "..._usd"; reports saved then still load."""
+    return AliasChoices(name, f"{name}_usd")
+
+
 class MarketSize(BaseModel):
-    value_usd: float = Field(description="Annual market value in US dollars.")
+    value: float = Field(validation_alias=_renamed("value"), description="Annual market value, in the proposal's currency.")
     basis: str = Field(description="How the figure was estimated, in one sentence.")
 
 
@@ -34,7 +41,7 @@ class Competitor(BaseModel):
 class Channel(BaseModel):
     channel: str = Field(description="A short name, at most five words, such as 'Founder-led outbound'.")
     approach: str = Field(description="How the channel is used, in one sentence.")
-    monthly_budget_usd: float
+    monthly_budget: float = Field(validation_alias=_renamed("monthly_budget"), description="In the proposal's currency.")
 
 
 class FunnelStage(BaseModel):
@@ -97,7 +104,7 @@ class RiskPlan(BaseModel):
 
 class CostLine(BaseModel):
     item: str = Field(description="A short name, at most six words; details go in the assumptions.")
-    amount_usd: float
+    amount: float = Field(validation_alias=_renamed("amount"), description="In the proposal's currency.")
 
 
 class YearProjection(BaseModel):
@@ -106,14 +113,16 @@ class YearProjection(BaseModel):
     year: int = Field(description="1, 2 or 3.")
     customers: int = Field(description="Paying customers at the end of the year.")
     average_customers: float = Field(description="Average paying customers during the year.")
-    one_off_revenue_usd: float = Field(
+    one_off_revenue: float = Field(
+        validation_alias=_renamed("one_off_revenue"),
         description="Revenue outside the monthly price in the year, such as pilot or setup fees; 0 if none."
     )
-    fixed_costs_month_usd: float = Field(
+    fixed_costs_month: float = Field(
+        validation_alias=_renamed("fixed_costs_month"),
         description="Average fixed costs a month during the year (team, tools, hosting, marketing), "
         "without the cost to serve customers."
     )
-    cac_usd: float = Field(description="Customer acquisition cost.")
+    cac: float = Field(validation_alias=_renamed("cac"), description="Customer acquisition cost.")
 
 
 class FinancialPlan(BaseModel):
@@ -122,8 +131,8 @@ class FinancialPlan(BaseModel):
     capex: list[CostLine] = Field(description="One-off costs before launch.")
     monthly_opex: list[CostLine] = Field(description="Recurring monthly costs at launch.")
     projections: list[YearProjection] = Field(description="Exactly three years.")
-    price_per_customer_month_usd: float
-    variable_cost_per_customer_month_usd: float
+    price_per_customer_month: float = Field(validation_alias=_renamed("price_per_customer_month"))
+    variable_cost_per_customer_month: float = Field(validation_alias=_renamed("variable_cost_per_customer_month"))
     discount_rate: float = Field(description="Annual rate for the NPV, for example 0.12.")
     assumptions: str = Field(description="The assumptions behind the figures (markdown).")
 
@@ -134,12 +143,12 @@ class FinancialPlan(BaseModel):
 
     def revenue(self, year: YearProjection) -> float:
         """Subscriptions over the year, plus its one-off fees."""
-        return year.average_customers * self.price_per_customer_month_usd * 12 + year.one_off_revenue_usd
+        return year.average_customers * self.price_per_customer_month * 12 + year.one_off_revenue
 
     def opex(self, year: YearProjection) -> float:
         """Fixed costs over the year, plus the cost to serve its customers."""
-        return 12 * (year.fixed_costs_month_usd
-                     + year.average_customers * self.variable_cost_per_customer_month_usd)
+        return 12 * (year.fixed_costs_month
+                     + year.average_customers * self.variable_cost_per_customer_month)
 
 
 class Kpi(BaseModel):
@@ -201,13 +210,13 @@ TITLES = {
 
 
 class InvestmentMetrics(BaseModel):
-    capex_usd: float
-    monthly_fixed_costs_usd: float
-    revenue_usd: list[float] = Field(description="Years 1-3.")
-    opex_usd: list[float] = Field(description="Years 1-3, including the cost to serve customers.")
-    net_cash_flow_usd: list[float] = Field(description="Year 0 (the CapEx) to year 3.")
+    capex: float
+    monthly_fixed_costs: float
+    revenue: list[float] = Field(description="Years 1-3.")
+    opex: list[float] = Field(description="Years 1-3, including the cost to serve customers.")
+    net_cash_flow: list[float] = Field(description="Year 0 (the CapEx) to year 3.")
     net_margin: list[float | None] = Field(description="Years 1-3; None without revenue.")
-    npv_usd: float
+    npv: float
     irr: float | None = Field(description="None when the cash flows never turn positive.")
     payback_months: float | None = Field(description="None when not paid back within three years.")
     break_even_customers: int | None = Field(description="None when each customer loses money.")
@@ -249,7 +258,7 @@ def _payback_months(cash_flows: list[float]) -> float | None:
 
 def describe_irr(metrics: InvestmentMetrics) -> tuple[str, str]:
     """The IRR as shown to a reader, and a note on what it rests on."""
-    irr, flows = metrics.irr, metrics.net_cash_flow_usd
+    irr, flows = metrics.irr, metrics.net_cash_flow
     if irr is None:
         if all(cash >= 0 for cash in flows):
             return "None", "nothing is invested up front"
@@ -277,41 +286,46 @@ def describe_break_even(metrics: InvestmentMetrics) -> str:
 
 def investment_metrics(plan: FinancialPlan) -> InvestmentMetrics:
     years = plan.years
-    capex = sum(line.amount_usd for line in plan.capex)
-    fixed = sum(line.amount_usd for line in plan.monthly_opex)
+    capex = sum(line.amount for line in plan.capex)
+    fixed = sum(line.amount for line in plan.monthly_opex)
     revenue = [round(plan.revenue(p), 2) for p in years]
     opex = [round(plan.opex(p), 2) for p in years]
     cash_flows = [-capex] + [r - o for r, o in zip(revenue, opex)]
-    margin_per_customer = plan.price_per_customer_month_usd - plan.variable_cost_per_customer_month_usd
+    margin_per_customer = plan.price_per_customer_month - plan.variable_cost_per_customer_month
     return InvestmentMetrics(
-        capex_usd=capex,
-        monthly_fixed_costs_usd=fixed,
-        revenue_usd=revenue,
-        opex_usd=opex,
-        net_cash_flow_usd=cash_flows,
+        capex=capex,
+        monthly_fixed_costs=fixed,
+        revenue=revenue,
+        opex=opex,
+        net_cash_flow=cash_flows,
         net_margin=[round((r - o) / r, 4) if r > 0 else None for r, o in zip(revenue, opex)],
-        npv_usd=round(_npv(plan.discount_rate, cash_flows), 2),
+        npv=round(_npv(plan.discount_rate, cash_flows), 2),
         irr=_irr(cash_flows),
         payback_months=_payback_months(cash_flows),
         break_even_customers=math.ceil(fixed / margin_per_customer) if margin_per_customer > 0 else None,
     )
 
 
-def figure_checks(market: MarketPlan, financial: FinancialPlan) -> list[str]:
+def figure_checks(market: MarketPlan, financial: FinancialPlan, code: str | None = None) -> list[str]:
     """Where the financial plan's figures disagree with themselves or with the
-    market, each as a sentence; empty when they agree."""
+    market, each as a sentence, with amounts in `code` (else the currency in
+    use); empty when they agree."""
+
+    def money(value: float) -> str:
+        return currency.full(value, code)
+
     m = investment_metrics(financial)
     years = financial.years
     issues = []
-    if years and years[0].fixed_costs_month_usd < 0.9 * m.monthly_fixed_costs_usd:
+    if years and years[0].fixed_costs_month < 0.9 * m.monthly_fixed_costs:
         issues.append(
-            f"Year 1's fixed costs (${years[0].fixed_costs_month_usd:,.0f} a month) are below "
-            f"the monthly OpEx at launch (${m.monthly_fixed_costs_usd:,.0f})."
+            f"Year 1's fixed costs ({money(years[0].fixed_costs_month)} a month) are below "
+            f"the monthly OpEx at launch ({money(m.monthly_fixed_costs)})."
         )
-    if years and m.revenue_usd[-1] > 1.1 * market.som.value_usd:
+    if years and m.revenue[-1] > 1.1 * market.som.value:
         issues.append(
-            f"Year {years[-1].year}'s revenue (${m.revenue_usd[-1]:,.0f}) is more than the "
-            f"serviceable obtainable market (${market.som.value_usd:,.0f} a year)."
+            f"Year {years[-1].year}'s revenue ({money(m.revenue[-1])}) is more than the "
+            f"serviceable obtainable market ({money(market.som.value)} a year)."
         )
     for year in years:
         if year.average_customers > 1.5 * max(year.customers, 1):

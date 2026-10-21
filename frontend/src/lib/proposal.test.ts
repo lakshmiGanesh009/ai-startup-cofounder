@@ -1,17 +1,17 @@
 import { describe, expect, test } from "vitest";
 
 import type { InvestmentMetrics } from "@/lib/api";
-import { describeBreakEven, describeIrr, describePayback, money, percent, severity, usd } from "@/lib/proposal";
+import { describeBreakEven, describeIrr, describePayback, full, money, percent, severity } from "@/lib/proposal";
 
 function metrics(changes: Partial<InvestmentMetrics>): InvestmentMetrics {
   return {
-    capex_usd: 10_000,
-    monthly_fixed_costs_usd: 1_000,
-    revenue_usd: [],
-    opex_usd: [],
-    net_cash_flow_usd: [-10_000, -3_200, 7_200, 24_000],
+    capex: 10_000,
+    monthly_fixed_costs: 1_000,
+    revenue: [],
+    opex: [],
+    net_cash_flow: [-10_000, -3_200, 7_200, 24_000],
     net_margin: [],
-    npv_usd: 0,
+    npv: 0,
     irr: 0.5,
     payback_months: 27,
     break_even_customers: 13,
@@ -27,17 +27,26 @@ describe("the proposal's figures in words (as proposal.py says them)", () => {
     expect(money(216_000_000)).toBe("$216M");
     expect(money(1_200_000_000)).toBe("$1.2B");
     expect(money(-72_398)).toBe("-$72.4k");
-    expect(usd(-6_000)).toBe("-$6,000");
-    expect(usd(149)).toBe("$149");
+    expect(full(-6_000)).toBe("-$6,000");
+    expect(full(149)).toBe("$149");
     expect(percent(0.3)).toBe("30%");
+  });
+
+  test("money is in the document's currency, as the PDF shows it", () => {
+    expect(money(12_500, "EUR")).toBe("€12.5k");
+    expect(full(-6_000, "GBP")).toBe("-£6,000");
+    expect(full(1_500, "CHF")).toBe("CHF 1,500");
+    expect(money(1_234_000, "INR")).toBe("₹1.2M");
+    // A code the table lacks is still shown, by its code.
+    expect(full(10, "XYZ")).toBe("XYZ 10");
   });
 
   test("the IRR, or why there is none", () => {
     expect(describeIrr(metrics({}))).toEqual(["50%", "on the three-year cash flows"]);
     expect(describeIrr(metrics({ irr: 21.35 }))[0]).toBe("> 1,000%");
-    expect(describeIrr(metrics({ irr: null, net_cash_flow_usd: [0, 5, 5, 5] }))[1]).toBe("nothing is invested up front");
-    expect(describeIrr(metrics({ irr: null, net_cash_flow_usd: [-5, -5, -5, 0] }))[1]).toBe("the cash flows never turn positive");
-    expect(describeIrr(metrics({ irr: null, net_cash_flow_usd: [-5, 10, -10, 0] }))[1]).toBe("not defined for these cash flows");
+    expect(describeIrr(metrics({ irr: null, net_cash_flow: [0, 5, 5, 5] }))[1]).toBe("nothing is invested up front");
+    expect(describeIrr(metrics({ irr: null, net_cash_flow: [-5, -5, -5, 0] }))[1]).toBe("the cash flows never turn positive");
+    expect(describeIrr(metrics({ irr: null, net_cash_flow: [-5, 10, -10, 0] }))[1]).toBe("not defined for these cash flows");
   });
 
   test("payback and break-even", () => {

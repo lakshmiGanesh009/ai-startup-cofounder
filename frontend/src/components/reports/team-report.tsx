@@ -17,9 +17,12 @@ import { SECTION_AGENTS } from "@/lib/proposal";
 
 export function TeamReport({
   sections,
+  hidden = [],
   onSave,
 }: {
   sections: ReportSection[];
+  // Sections left out of the document and its PDF, shown faded here.
+  hidden?: string[];
   onSave: (sections: ReportSection[]) => Promise<string | null>;
 }) {
   const [draft, setDraft] = useState<ReportSection[] | null>(null);
@@ -37,15 +40,20 @@ export function TeamReport({
         </div>
         <div className="mt-4 space-y-14">
           {sections.map((section) => (
-            <section key={section.key} aria-label={section.title}>
+            <section key={section.key} aria-label={section.title} className={hidden.includes(section.key) ? "opacity-55" : undefined}>
               <div className="mb-5 flex items-center gap-3 border-b border-rule pb-3">
                 {SECTION_AGENT[section.key] && <AgentAvatar agent={SECTION_AGENT[section.key]} size="md" />}
                 <div>
                   <h3 className="font-serif text-[1.5rem] leading-snug font-medium">{section.title}</h3>
-                  <p className="mt-0.5 text-xs text-ink-3">{SECTION_AGENTS[section.key] ?? "Edited by you"}</p>
+                  <p className="mt-0.5 text-xs text-ink-3">
+                    {SECTION_AGENTS[section.key] ?? "Edited by you"}
+                    {hidden.includes(section.key) && <span className="ml-2 rounded bg-sunken px-1.5 py-0.5 text-ink-2">Left out of the document</span>}
+                  </p>
                 </div>
               </div>
-              <Markdown labels={4}>{section.body}</Markdown>
+              <Markdown labels={4} path={`sections.${section.key}`}>
+                {section.body}
+              </Markdown>
             </section>
           ))}
         </div>

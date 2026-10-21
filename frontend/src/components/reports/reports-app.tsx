@@ -4,13 +4,16 @@
 // edited in place. Until the agents write the investment proposal it is the
 // team's report; after, a chapter per section of the proposal, numbered as the
 // PDF is, each with its charts, the agent that wrote it and an Edit button.
-// "Open PDF" shows the document in a pop-up, beside the prompt that asks the
-// team to revise it.
+// Each paragraph can be revised or removed on its own. "Open PDF" shows the
+// document in the studio, beside its tools: the team's revisions, the
+// settings (currency, units), find and replace, redaction and the history.
+// Every change is shown as a draft before it is saved.
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
 import { EditForm } from "@/components/reports/edit-form";
-import { PdfPanel } from "@/components/reports/pdf-panel";
+import { type PassageAction, PassageContext } from "@/components/reports/passages";
+import { PdfPanel, type Tool } from "@/components/reports/pdf-panel";
 import {
   ExecutiveSection,
   FinancialSection,
@@ -34,24 +37,31 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs } from "@/components/ui/tabs";
 import {
   ApiError,
+  type Draft,
   getReport,
+  type GuardrailFlag,
   listReports,
+  makeDraft,
   type PartKey,
   type Proposal,
   type Report,
   type ReportSection,
   type ReportSummary,
   resetReport,
+  reviseText,
   saveProposal,
   saveReport,
   writeProposal,
 } from "@/lib/api";
 import { useBackend } from "@/lib/backend";
 import { agentClass, PART_AGENT } from "@/lib/agents";
-import { PART_AGENTS, PART_TITLES } from "@/lib/proposal";
+import { CURRENCIES, CurrencyContext, PART_AGENTS, PART_TITLES } from "@/lib/proposal";
 import { proposalWait } from "@/lib/team";
 
 type Message = { tone: Tone; text: string };
+// The studio pop-up: the tool it opens on, a draft to review, and whether the
+// revise prompt takes the focus.
+type Studio = { tool: Tool; draft: Draft | null; flags: GuardrailFlag[]; focus: boolean; opened: number };
 
 const DESCRIPTION =
   "Each session's report. Read it, edit it, have the agents write it up as an investment proposal, and share the PDF.";
@@ -144,10 +154,17 @@ function Cover({ report }: { report: Report }) {
           {report.objective}
         </h2>
       )}
-      <dl className="mt-8 grid max-w-3xl grid-cols-2 gap-x-8 gap-y-4 border-t border-rule pt-4 text-sm sm:grid-cols-4">
+      <dl className="mt-8 grid max-w-4xl grid-cols-2 gap-x-8 gap-y-4 border-t border-rule pt-4 text-sm sm:grid-cols-5">
         <div>
           <dt className="kicker">Prepared by</dt>
-          <dd className="mt-1">AI Co-Founder Team</dd>
+          <dd className="mt-1">{report.settings.prepared_by}</dd>
+        </div>
+        <div>
+          <dt className="kicker">Currency</dt>
+          <dd className="mt-1" title={CURRENCIES[report.settings.currency]?.name}>
+            {report.settings.currency}
+            {report.settings.units && <span className="text-ink-3"> · {report.settings.units}</span>}
+          </dd>
         </div>
         <div>
           <dt className="kicker">Version</dt>
@@ -239,8 +256,14 @@ function Reports() {
   const [message, setMessage] = useState<Message | null>(null);
   const [writing, setWriting] = useState(false);
   const [confirm, setConfirm] = useState<"rewrite" | "reset" | null>(null);
-  // The PDF pop-up, open with the document or with the revise prompt in focus.
-  const [pdf, setPdf] = useState<"document" | "revise" | null>(null);
+  const [studio, setStudio] = useState<Studio | null>(null);
+  // A passage being revised by its writer, while the team works on it.
+  const [revisingPassage, setRevisingPassage] = useState(false);
+  const [currency, setCurrency] = useState<string | null>(null);
+
+  function open(tool: Tool, draft: Draft | null = null, flags: GuardrailFlag[] = [], focus = false) {
+    setStudio({ tool, draft, flags, focus, opened: Date.now() });
+  }
 
   useEffect(() => {
     listReports()
@@ -280,7 +303,7 @@ function Reports() {
     setMessage(null);
     setWriting(true);
     try {
-      const result = await writeProposal(report.session_id, report.version, reasoning);
+      const result = await writeProposal(report.session_id, report.version, reasoning, currency ?? report.settings.currency);
       setReport(result.report);
       setMessage({
         tone: "good",
@@ -302,6 +325,29 @@ function Reports() {
       setMessage({ tone: "good", text: "The report was rebuilt from the session's latest results." });
     } catch (error) {
       setMessage({ tone: "bad", text: (error as Error).message });
+    }
+  }
+
+  // A paragraph revised by its writer, or removed: a draft, shown in the studio.
+  async function passage(action: PassageAction): Promise<boolean> {
+    if (!report) return false;
+    setMessage(null);
+    if (action.kind === "revise") setRevisingPassage(true);
+    try {
+      if (action.kind === "remove") {
+        const draft = await makeDraft(report.session_id, report.version, { kind: "remove", path: action.path, passage: action.passage });
+        open("revise", draft);
+      } else {
+        const result = await reviseText(report.session_id, report.version, action.path, action.instruction, action.passage, reasoning);
+        open("revise", result.draft, result.guardrails ?? []);
+      }
+      return true;
+    } catch (error) {
+      const text = failed(error);
+      if (text !== CHANGED_ELSEWHERE) setMessage({ tone: "bad", text });
+      return false;
+    } finally {
+      setRevisingPassage(false);
     }
   }
 
@@ -337,7 +383,7 @@ function Reports() {
         onChange={(event) => {
           setSelected(event.target.value);
           setMessage(null);
-          setPdf(null);
+          setStudio(null);
         }}
       >
         {summaries.map((summary) => (
@@ -386,15 +432,21 @@ function Reports() {
         <Cover report={report} />
 
         <div className="mt-8 flex flex-wrap items-center gap-2">
-          <Button variant={view ? "primary" : "secondary"} onClick={() => setPdf("document")} disabled={writing}>
+          <Button variant={view ? "primary" : "secondary"} onClick={() => open(view ? "revise" : "settings")} disabled={writing}>
             <DocumentIcon />
             Open PDF
           </Button>
           {view && (
-            <Button onClick={() => setPdf("revise")} disabled={writing}>
+            <Button onClick={() => open("revise", null, [], true)} disabled={writing}>
               Revise with the team
             </Button>
           )}
+          <Button onClick={() => open("settings")} disabled={writing}>
+            Currency, units and text
+          </Button>
+          <Button variant="quiet" onClick={() => open("history")} disabled={writing}>
+            History
+          </Button>
           <Menu
             label="More actions"
             items={[
@@ -426,6 +478,13 @@ function Reports() {
             </Notice>
           )}
           {message && <Notice tone={message.tone}>{message.text}</Notice>}
+          {revisingPassage && (
+            <Progress
+              title="The passage's writer is revising it."
+              wait="This takes ten to thirty seconds."
+              stages={["Its writer rewrites just that passage", "You see the change before it is saved"]}
+            />
+          )}
           {writing && (
             <Progress
               title="The agents are writing the investment proposal."
@@ -439,6 +498,8 @@ function Reports() {
           )}
         </div>
 
+        <CurrencyContext.Provider value={report.settings.currency}>
+        <PassageContext.Provider value={passage}>
         <div className="mt-14">
           {view ? (
             <Tabs
@@ -480,7 +541,12 @@ function Reports() {
                         </p>
                       </div>
                       <div className="mt-8">
-                        <TeamReport key={report.version} sections={report.sections} onSave={saveSections} />
+                        <TeamReport
+                          key={report.version}
+                          sections={report.sections}
+                          hidden={report.settings.hidden}
+                          onSave={saveSections}
+                        />
                       </div>
                     </div>
                   ),
@@ -498,33 +564,58 @@ function Reports() {
                     {proposalWait(reasoning)}
                   </p>
                 </div>
-                <Button variant="primary" onClick={write} disabled={writing}>
-                  Write the investment proposal
-                </Button>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="w-36">
+                    <Label htmlFor="proposal-currency">In</Label>
+                    <Select
+                      id="proposal-currency"
+                      value={currency ?? report.settings.currency}
+                      onChange={(event) => setCurrency(event.target.value)}
+                    >
+                      {Object.entries(CURRENCIES).map(([code, { name }]) => (
+                        <option key={code} value={code} title={name}>
+                          {code}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                  <Button variant="primary" onClick={write} disabled={writing}>
+                    Write the investment proposal
+                  </Button>
+                </div>
               </section>
               <div className="mt-14">
                 <TeamReport
                   key={`${report.session_id}-${report.version}`}
                   sections={report.sections}
+                  hidden={report.settings.hidden}
                   onSave={saveSections}
                 />
               </div>
             </>
           )}
         </div>
+        </PassageContext.Provider>
+        </CurrencyContext.Provider>
 
         <Dialog
-          open={pdf !== null}
-          title="Report PDF"
+          open={studio !== null}
+          title="The document"
           description={view ? view.proposal.executive.project_name : report.objective}
-          onClose={() => setPdf(null)}
+          onClose={() => setStudio(null)}
         >
-          <PdfPanel
-            report={report}
-            reasoning={reasoning}
-            focusPrompt={pdf === "revise"}
-            onChanged={(revised) => (revised ? setReport(revised) : load(report.session_id))}
-          />
+          {studio && (
+            <PdfPanel
+              key={studio.opened}
+              report={report}
+              reasoning={reasoning}
+              focusPrompt={studio.focus}
+              initialTool={studio.tool}
+              initialDraft={studio.draft}
+              initialFlags={studio.flags}
+              onChanged={(revised) => (revised ? setReport(revised) : load(report.session_id))}
+            />
+          )}
         </Dialog>
 
         <Dialog

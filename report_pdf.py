@@ -21,6 +21,7 @@ from fpdf import FPDF
 from fpdf.fonts import FontFace, TextStyle
 from markdown_it import MarkdownIt
 
+import currency
 import report_charts as chart
 from agents.roles import ROLES
 from proposal import (
@@ -130,8 +131,8 @@ def _agent(key: str) -> str:
     return "the Chief of Staff" if key == "chief" else f"the {ROLES[key].title} Agent"
 
 
-def _usd(value: float) -> str:
-    return f"-${-value:,.0f}" if value < 0 else f"${value:,.0f}"
+def _full(value: float) -> str:
+    return currency.full(value)
 
 
 def _months(start: int, length: int) -> str:
@@ -200,7 +201,7 @@ def _document_control(pdf: FPDF, report: Report, label: str, value: str) -> None
     _table(
         pdf,
         [label, "Prepared by", "Date", "Version", "Status"],
-        [[value, PREPARED_BY, f"{report.updated_at:%d %b %Y}", f"v{report.version}",
+        [[value, report.settings.prepared_by, f"{report.updated_at:%d %b %Y}", f"v{report.version}",
           _status(report)]],
         [28, 26, 15, 11, 20],
     )
@@ -221,11 +222,11 @@ def _executive(pdf: FPDF, report: Report, p: Proposal) -> None:
     chart.subheading(pdf, "1.4 Financial Snapshot", ("Calculated", "from the financial plan"),
                      then=48)
     chart.tiles(pdf, [
-        ("Total CapEx", money(m.capex_usd), "one-off, before launch"),
+        ("Total CapEx", money(m.capex), "one-off, before launch"),
         ("Revenue, years 1-3",
-         f"{money(m.revenue_usd[0])} → {money(m.revenue_usd[-1])}" if years else "-",
+         f"{money(m.revenue[0])} → {money(m.revenue[-1])}" if years else "-",
          "Finance agent's projection"),
-        ("NPV", money(m.npv_usd), f"at a {f.discount_rate:.0%} discount rate"),
+        ("NPV", money(m.npv), f"at a {f.discount_rate:.0%} discount rate"),
         ("IRR", *describe_irr(m)),
         ("Payback", describe_payback(m), "from the start of the project"),
         ("Break-even", describe_break_even(m), "paying customers cover fixed costs"),
@@ -241,9 +242,9 @@ def _market(pdf: FPDF, p: Proposal) -> None:
     _text(pdf, mk.personas)
     chart.subheading(pdf, "2.2 Market Size", then=50)
     chart.market_circles(pdf, [
-        ("TAM", "Total addressable market", mk.tam.value_usd, mk.tam.basis),
-        ("SAM", "Serviceable addressable market", mk.sam.value_usd, mk.sam.basis),
-        ("SOM", "Serviceable obtainable market", mk.som.value_usd, mk.som.basis),
+        ("TAM", "Total addressable market", mk.tam.value, mk.tam.basis),
+        ("SAM", "Serviceable addressable market", mk.sam.value, mk.sam.basis),
+        ("SOM", "Serviceable obtainable market", mk.som.value, mk.som.basis),
     ])
     chart.subheading(pdf, "2.3 Competitive Landscape", then=30)
     _table(pdf, ["Competitor", "Type", "Est. share", "Strengths", "Weaknesses"],
@@ -252,10 +253,10 @@ def _market(pdf: FPDF, p: Proposal) -> None:
     chart.subheading(pdf, "2.4 Unique Value Proposition")
     chart.callout(pdf, "Why customers choose us", mk.value_proposition, BLUE[450])
     chart.subheading(pdf, "2.5 Go-to-Market Channels", then=30)
-    total = sum(c.monthly_budget_usd for c in mk.channels)
+    total = sum(c.monthly_budget for c in mk.channels)
     _table(pdf, ["Channel", "How it is used", "Monthly budget"],
-           [[c.channel, c.approach, f"${c.monthly_budget_usd:,.0f}"] for c in mk.channels]
-           + [[("Total", FontFace(emphasis="BOLD")), "", (f"${total:,.0f}", FontFace(emphasis="BOLD"))]],
+           [[c.channel, c.approach, _full(c.monthly_budget)] for c in mk.channels]
+           + [[("Total", FontFace(emphasis="BOLD")), "", (_full(total), FontFace(emphasis="BOLD"))]],
            [30, 52, 18], ["LEFT", "LEFT", "RIGHT"])
     chart.subheading(pdf, "2.6 Pricing Strategy")
     _text(pdf, mk.pricing_strategy)
@@ -304,47 +305,47 @@ def _financial(pdf: FPDF, p: Proposal) -> None:
     chart.subheading(pdf, "4.1 Capital & Operating Expenditures",
                      then=chart.hbars_height(max(len(f.capex), len(f.monthly_opex))))
     top = pdf.get_y()
-    left = chart.hbars(pdf, f"CapEx: {money(m.capex_usd)} one-off",
-                       [(c.item, c.amount_usd) for c in f.capex], width=half)
+    left = chart.hbars(pdf, f"CapEx: {money(m.capex)} one-off",
+                       [(c.item, c.amount) for c in f.capex], width=half)
     pdf.set_y(top)
-    right = chart.hbars(pdf, f"OpEx at launch: {money(m.monthly_fixed_costs_usd)} a month",
-                        [(c.item, c.amount_usd) for c in f.monthly_opex],
+    right = chart.hbars(pdf, f"OpEx at launch: {money(m.monthly_fixed_costs)} a month",
+                        [(c.item, c.amount) for c in f.monthly_opex],
                         x=pdf.l_margin + half + 8, width=half, color=chart.SERIES[1])
     pdf.set_y(top + max(left, right) + 4)
     chart.subheading(pdf, "4.2 Three-Year Projections", _written_by("financial"), then=70)
     labels = [f"Year {y.year}" for y in years]
     if years:
-        chart.grouped_bars(pdf, labels, [("Revenue", m.revenue_usd),
-                                         ("Operating costs (OpEx)", m.opex_usd)])
+        chart.grouped_bars(pdf, labels, [("Revenue", m.revenue),
+                                         ("Operating costs (OpEx)", m.opex)])
     margins = [f"{n:.0%}" if n is not None else "-" for n in m.net_margin]
     calculated = FontFace(color=SECONDARY, emphasis="ITALICS")
     bold = FontFace(emphasis="BOLD")
     _table(pdf, ["Drivers from the Financial Planning Agent", *labels], [
         ["Paying customers (year end)", *(f"{y.customers:,}" for y in years)],
         ["Average paying customers", *(f"{y.average_customers:,.1f}".removesuffix(".0") for y in years)],
-        ["Fixed costs a month", *(_usd(y.fixed_costs_month_usd) for y in years)],
-        ["One-off revenue", *(_usd(y.one_off_revenue_usd) for y in years)],
-        ["Customer acquisition cost", *(_usd(y.cac_usd) for y in years)],
+        ["Fixed costs a month", *(_full(y.fixed_costs_month) for y in years)],
+        ["One-off revenue", *(_full(y.one_off_revenue) for y in years)],
+        ["Customer acquisition cost", *(_full(y.cac) for y in years)],
         [("Calculated from them", calculated), *[("", calculated)] * len(years)],
-        ["Revenue", *(_usd(v) for v in m.revenue_usd)],
-        ["Operating costs (OpEx), with the cost to serve", *(_usd(v) for v in m.opex_usd)],
-        [("Net cash flow", bold), *((_usd(c), bold) for c in m.net_cash_flow_usd[1:])],
+        ["Revenue", *(_full(v) for v in m.revenue)],
+        ["Operating costs (OpEx), with the cost to serve", *(_full(v) for v in m.opex)],
+        [("Net cash flow", bold), *((_full(c), bold) for c in m.net_cash_flow[1:])],
         ["Net margin", *margins],
     ], [44] + [18] * len(years), ["LEFT"] + ["RIGHT"] * len(years))
     chart.subheading(pdf, "4.3 Investment Metrics", ("Calculated", "from the figures above"),
                      then=48)
-    contribution = f.price_per_customer_month_usd - f.variable_cost_per_customer_month_usd
+    contribution = f.price_per_customer_month - f.variable_cost_per_customer_month
     chart.tiles(pdf, [
-        ("NPV", money(m.npv_usd), f"at a {f.discount_rate:.0%} discount rate"),
+        ("NPV", money(m.npv), f"at a {f.discount_rate:.0%} discount rate"),
         ("IRR", *describe_irr(m)),
         ("Payback", describe_payback(m), "cumulative cash back to zero"),
-        ("Break-even", describe_break_even(m), f"at {money(m.monthly_fixed_costs_usd)} fixed costs a month"),
+        ("Break-even", describe_break_even(m), f"at {money(m.monthly_fixed_costs)} fixed costs a month"),
         ("Contribution", f"{money(contribution)}/mo", "per customer, after cost to serve"),
-        ("Price", f"{money(f.price_per_customer_month_usd)}/mo",
-         f"per customer; {money(f.variable_cost_per_customer_month_usd)} to serve"),
+        ("Price", f"{money(f.price_per_customer_month)}/mo",
+         f"per customer; {money(f.variable_cost_per_customer_month)} to serve"),
     ])
     cumulative, total = [], 0.0
-    for cash in m.net_cash_flow_usd:
+    for cash in m.net_cash_flow:
         total += cash
         cumulative.append(total)
     note = (f"Paid back: {describe_payback(m).lower()}" if m.payback_months is not None
@@ -390,7 +391,8 @@ def _source(key: str) -> tuple[str, str]:
 
 
 def _team_sections(pdf: FPDF, report: Report, numbered: bool, new_pages: bool) -> None:
-    for index, section in enumerate(report.sections):
+    shown = [section for section in report.sections if section.key not in report.settings.hidden]
+    for index, section in enumerate(shown):
         if new_pages and index:
             pdf.add_page()
         number = str(index + 1) if numbered else chr(ord("A") + index)
@@ -400,7 +402,13 @@ def _team_sections(pdf: FPDF, report: Report, numbered: bool, new_pages: bool) -
 
 def render_pdf(report: Report) -> bytes:
     """The report as PDF bytes: the investment proposal if it has one, else
-    the team's report with each section on a page of its own."""
+    the team's report with each section on a page of its own; every amount in
+    the report's currency."""
+    with currency.using(report.settings.currency):
+        return _render(report)
+
+
+def _render(report: Report) -> bytes:
     proposal = report.proposal
     if proposal is None:
         title = report.title if len(report.title) <= 70 else f"{report.title[:67]}..."

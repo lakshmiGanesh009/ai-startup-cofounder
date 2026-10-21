@@ -15,7 +15,8 @@ import {
   percent,
   severity,
   share,
-  usd,
+  full,
+  useCurrency,
 } from "@/lib/proposal";
 
 export type View = { proposal: Proposal; metrics: InvestmentMetrics; checks: string[] };
@@ -111,16 +112,16 @@ const VERDICT_COLOR: Record<Proposal["executive"]["verdict"], string> = {
   "Not yet": "var(--bad)",
 };
 
-function snapshot(proposal: Proposal, metrics: InvestmentMetrics): [string, string, string][] {
-  const revenue = metrics.revenue_usd;
+function snapshot(proposal: Proposal, metrics: InvestmentMetrics, currency: string): [string, string, string][] {
+  const revenue = metrics.revenue;
   return [
-    ["Total CapEx", money(metrics.capex_usd), "one-off, before launch"],
+    ["Total CapEx", money(metrics.capex, currency), "one-off, before launch"],
     [
       "Revenue, years 1–3",
-      revenue.length ? `${money(revenue[0])} → ${money(revenue[revenue.length - 1])}` : "–",
+      revenue.length ? `${money(revenue[0], currency)} → ${money(revenue[revenue.length - 1], currency)}` : "–",
       "from the Financial Planning Agent's drivers",
     ],
-    ["NPV", money(metrics.npv_usd), `at a ${percent(proposal.financial.discount_rate)} discount rate`],
+    ["NPV", money(metrics.npv, currency), `at a ${percent(proposal.financial.discount_rate)} discount rate`],
     ["IRR", ...describeIrr(metrics)],
     ["Payback", describePayback(metrics), "from the start of the project"],
     ["Break-even", describeBreakEven(metrics), "paying customers to cover the fixed costs"],
@@ -128,6 +129,7 @@ function snapshot(proposal: Proposal, metrics: InvestmentMetrics): [string, stri
 }
 
 export function ExecutiveSection({ proposal, metrics }: View) {
+  const currency = useCurrency();
   const e = proposal.executive;
   return (
     <div>
@@ -136,24 +138,24 @@ export function ExecutiveSection({ proposal, metrics }: View) {
           {e.verdict}
         </p>
         <div className="mt-2">
-          <Markdown compact>{e.recommendation}</Markdown>
+          <Markdown compact path="proposal.executive.recommendation">{e.recommendation}</Markdown>
         </div>
       </Callout>
       <div className="mt-12">
         <Sub number="1.1" title="Project overview">
-          <Markdown>{e.overview}</Markdown>
+          <Markdown path="proposal.executive.overview">{e.overview}</Markdown>
         </Sub>
         <Sub number="1.2" title="The opportunity">
-          <Markdown>{e.opportunity}</Markdown>
+          <Markdown path="proposal.executive.opportunity">{e.opportunity}</Markdown>
         </Sub>
         <Sub number="1.3" title="Strategic alignment">
-          <Markdown>{e.strategic_alignment}</Markdown>
+          <Markdown path="proposal.executive.strategic_alignment">{e.strategic_alignment}</Markdown>
         </Sub>
         <Sub number="1.4" title="Financial snapshot" note="Calculated from the financial plan">
-          <Figures items={snapshot(proposal, metrics)} />
+          <Figures items={snapshot(proposal, metrics, currency)} />
           <div className="mt-6">
             <Callout label="What the numbers say" color="var(--primary)">
-              <Markdown compact>{e.financial_case}</Markdown>
+              <Markdown compact path="proposal.executive.financial_case">{e.financial_case}</Markdown>
             </Callout>
           </div>
         </Sub>
@@ -163,24 +165,25 @@ export function ExecutiveSection({ proposal, metrics }: View) {
 }
 
 export function MarketSection({ proposal }: View) {
+  const currency = useCurrency();
   const m = proposal.market;
   const sizes = [
     ["TAM", "Total addressable market", m.tam, ""],
-    ["SAM", "Serviceable addressable market", m.sam, m.tam.value_usd ? `${share(m.sam.value_usd, m.tam.value_usd)} of TAM` : ""],
-    ["SOM", "Serviceable obtainable market", m.som, m.sam.value_usd ? `${share(m.som.value_usd, m.sam.value_usd)} of SAM` : ""],
+    ["SAM", "Serviceable addressable market", m.sam, m.tam.value ? `${share(m.sam.value, m.tam.value)} of TAM` : ""],
+    ["SOM", "Serviceable obtainable market", m.som, m.sam.value ? `${share(m.som.value, m.sam.value)} of SAM` : ""],
   ] as const;
-  const budget = m.channels.reduce((sum, channel) => sum + channel.monthly_budget_usd, 0);
+  const budget = m.channels.reduce((sum, channel) => sum + channel.monthly_budget, 0);
   return (
     <div>
       <Sub number="2.1" title="Target audience and buyer personas">
-        <Markdown>{m.personas}</Markdown>
+        <Markdown path="proposal.market.personas">{m.personas}</Markdown>
       </Sub>
       <Sub number="2.2" title="Market size">
         <BarList
           keepOrder
           items={sizes.map(([short, , size, share], index) => ({
             label: short,
-            value: size.value_usd,
+            value: size.value,
             color: ramp(index * 2, 5),
             note: share,
           }))}
@@ -212,18 +215,18 @@ export function MarketSection({ proposal }: View) {
           head={["Channel", "How it is used", "Monthly budget"]}
           numeric={[2]}
           rows={[
-            ...m.channels.map((c) => [c.channel, c.approach, usd(c.monthly_budget_usd)]),
-            ["Total", "", <span key="v" className="font-medium text-ink">{usd(budget)}</span>],
+            ...m.channels.map((c) => [c.channel, c.approach, full(c.monthly_budget, currency)]),
+            ["Total", "", <span key="v" className="font-medium text-ink">{full(budget, currency)}</span>],
           ]}
         />
         {m.channels.length > 1 && (
           <div className="mt-6 max-w-xl">
-            <BarList items={m.channels.map((c) => ({ label: c.channel, value: c.monthly_budget_usd }))} />
+            <BarList items={m.channels.map((c) => ({ label: c.channel, value: c.monthly_budget }))} />
           </div>
         )}
       </Sub>
       <Sub number="2.6" title="Pricing strategy">
-        <Markdown>{m.pricing_strategy}</Markdown>
+        <Markdown path="proposal.market.pricing_strategy">{m.pricing_strategy}</Markdown>
       </Sub>
       <Sub number="2.7" title="Sales funnel" note="Estimated monthly volumes at the end of year 1">
         <Funnel stages={m.funnel} />
@@ -240,13 +243,13 @@ export function TechnicalSection({ proposal }: View) {
   return (
     <div>
       <Sub number="3.1" title="Infrastructure">
-        <Markdown>{t.infrastructure}</Markdown>
+        <Markdown path="proposal.technical.infrastructure">{t.infrastructure}</Markdown>
       </Sub>
       <Sub number="3.2" title="Technology stack">
-        <Markdown>{t.stack}</Markdown>
+        <Markdown path="proposal.technical.stack">{t.stack}</Markdown>
       </Sub>
       <Sub number="3.3" title="Scalability and performance">
-        <Markdown>{t.scalability}</Markdown>
+        <Markdown path="proposal.technical.scalability">{t.scalability}</Markdown>
       </Sub>
       <Sub number="3.4" title="Implementation roadmap">
         <Gantt phases={phases} />
@@ -269,11 +272,12 @@ export function TechnicalSection({ proposal }: View) {
 }
 
 export function FinancialSection({ proposal, metrics, checks }: View) {
+  const currency = useCurrency();
   const f = proposal.financial;
   const years = [...f.projections].sort((a, b) => a.year - b.year).slice(0, 3);
   const labels = years.map((year) => `Year ${year.year}`);
-  const contribution = f.price_per_customer_month_usd - f.variable_cost_per_customer_month_usd;
-  const flows = metrics.net_cash_flow_usd;
+  const contribution = f.price_per_customer_month - f.variable_cost_per_customer_month;
+  const flows = metrics.net_cash_flow;
   const cumulative = flows.map((_, index) => ({
     label: index ? `End of year ${index}` : "Start",
     value: flows.slice(0, index + 1).reduce((sum, cash) => sum + cash, 0),
@@ -295,17 +299,17 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
         <div className="grid grid-cols-1 gap-10 md:grid-cols-2">
           <div>
             <p className="mb-3 text-sm">
-              <span className="font-medium">CapEx</span> <span className="text-ink-3">· {money(metrics.capex_usd)} one-off</span>
+              <span className="font-medium">CapEx</span> <span className="text-ink-3">· {money(metrics.capex, currency)} one-off</span>
             </p>
             {/* Blue is revenue in this chapter and orange operating costs; one-off spend is neither. */}
-            <BarList color="var(--ink-3)" items={f.capex.map((line) => ({ label: line.item, value: line.amount_usd }))} />
+            <BarList color="var(--ink-3)" items={f.capex.map((line) => ({ label: line.item, value: line.amount }))} />
           </div>
           <div>
             <p className="mb-3 text-sm">
               <span className="font-medium">OpEx at launch</span>{" "}
-              <span className="text-ink-3">· {money(metrics.monthly_fixed_costs_usd)} a month</span>
+              <span className="text-ink-3">· {money(metrics.monthly_fixed_costs, currency)} a month</span>
             </p>
-            <BarList color={DATA_2} items={f.monthly_opex.map((line) => ({ label: line.item, value: line.amount_usd }))} />
+            <BarList color={DATA_2} items={f.monthly_opex.map((line) => ({ label: line.item, value: line.amount }))} />
           </div>
         </div>
       </Sub>
@@ -314,8 +318,8 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
           <GroupedColumns
             categories={labels}
             series={[
-              { name: "Revenue", color: DATA_1, values: metrics.revenue_usd },
-              { name: "Operating costs", color: DATA_2, values: metrics.opex_usd },
+              { name: "Revenue", color: DATA_1, values: metrics.revenue },
+              { name: "Operating costs", color: DATA_2, values: metrics.opex },
             ]}
           />
         )}
@@ -326,9 +330,9 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
           rows={[
             row("Paying customers (year end)", years.map((y) => y.customers.toLocaleString("en-US"))),
             row("Average paying customers", years.map((y) => String(Number(y.average_customers.toFixed(1))))),
-            row("Fixed costs a month", years.map((y) => usd(y.fixed_costs_month_usd))),
-            row("One-off revenue", years.map((y) => usd(y.one_off_revenue_usd))),
-            row("Customer acquisition cost", years.map((y) => usd(y.cac_usd))),
+            row("Fixed costs a month", years.map((y) => full(y.fixed_costs_month, currency))),
+            row("One-off revenue", years.map((y) => full(y.one_off_revenue, currency))),
+            row("Customer acquisition cost", years.map((y) => full(y.cac, currency))),
           ]}
         />
         <p className="mt-8 mb-1 kicker">Results</p>
@@ -340,9 +344,9 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
           head={["", ...labels]}
           numeric={labels.map((_, index) => index + 1)}
           rows={[
-            row("Revenue", metrics.revenue_usd.map(usd)),
-            row("Operating costs (OpEx), with the cost to serve", metrics.opex_usd.map(usd)),
-            row("Net cash flow", metrics.net_cash_flow_usd.slice(1).map(usd)),
+            row("Revenue", metrics.revenue.map((value) => full(value, currency))),
+            row("Operating costs (OpEx), with the cost to serve", metrics.opex.map((value) => full(value, currency))),
+            row("Net cash flow", metrics.net_cash_flow.slice(1).map((value) => full(value, currency))),
             row("Net margin", metrics.net_margin.map((margin) => (margin === null ? "–" : percent(margin)))),
           ]}
         />
@@ -350,12 +354,12 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
       <Sub number="4.3" title="Investment metrics" note="Calculated from the figures above">
         <Figures
           items={[
-            ["NPV", money(metrics.npv_usd), `at a ${percent(f.discount_rate)} discount rate`],
+            ["NPV", money(metrics.npv, currency), `at a ${percent(f.discount_rate)} discount rate`],
             ["IRR", ...describeIrr(metrics)],
             ["Payback", describePayback(metrics), "cumulative cash back to zero"],
-            ["Break-even", describeBreakEven(metrics), `at ${money(metrics.monthly_fixed_costs_usd)} fixed costs a month`],
-            ["Contribution", `${money(contribution)}/mo`, "per customer, after the cost to serve"],
-            ["Price", `${money(f.price_per_customer_month_usd)}/mo`, `per customer; ${money(f.variable_cost_per_customer_month_usd)} to serve`],
+            ["Break-even", describeBreakEven(metrics), `at ${money(metrics.monthly_fixed_costs, currency)} fixed costs a month`],
+            ["Contribution", `${money(contribution, currency)}/mo`, "per customer, after the cost to serve"],
+            ["Price", `${money(f.price_per_customer_month, currency)}/mo`, `per customer; ${money(f.variable_cost_per_customer_month, currency)} to serve`],
           ]}
         />
         <div className="mt-10">
@@ -366,7 +370,7 @@ export function FinancialSection({ proposal, metrics, checks }: View) {
         </div>
       </Sub>
       <Sub number="4.4" title="Assumptions">
-        <Markdown>{f.assumptions}</Markdown>
+        <Markdown path="proposal.financial.assumptions">{f.assumptions}</Markdown>
       </Sub>
     </div>
   );
@@ -380,10 +384,10 @@ export function RiskSection({ proposal }: View) {
   return (
     <div>
       <Sub number="5.1" title="Data protection">
-        <Markdown>{r.data_protection}</Markdown>
+        <Markdown path="proposal.risk.data_protection">{r.data_protection}</Markdown>
       </Sub>
       <Sub number="5.2" title="Compliance">
-        <Markdown>{r.compliance}</Markdown>
+        <Markdown path="proposal.risk.compliance">{r.compliance}</Markdown>
       </Sub>
       <Sub number="5.3" title="Risk matrix">
         <RiskMatrix risks={risks} />

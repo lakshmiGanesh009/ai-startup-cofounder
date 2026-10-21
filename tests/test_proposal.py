@@ -23,15 +23,15 @@ DRIVERS = [(5, 4_000, 1_000), (20, 0, 1_000), (50, 0, 2_000)]
 
 def _plan(drivers=DRIVERS, price=100.0, cost=20.0, rate=0.1):
     return FinancialPlan(
-        capex=[CostLine(item="Build", amount_usd=10_000)],
-        monthly_opex=[CostLine(item="Team", amount_usd=1_000)],
+        capex=[CostLine(item="Build", amount=10_000)],
+        monthly_opex=[CostLine(item="Team", amount=1_000)],
         projections=[
             YearProjection(year=year, customers=int(average * 1.5), average_customers=average,
-                           one_off_revenue_usd=one_off, fixed_costs_month_usd=fixed, cac_usd=100)
+                           one_off_revenue=one_off, fixed_costs_month=fixed, cac=100)
             for year, (average, one_off, fixed) in enumerate(drivers, start=1)
         ],
-        price_per_customer_month_usd=price,
-        variable_cost_per_customer_month_usd=cost,
+        price_per_customer_month=price,
+        variable_cost_per_customer_month=cost,
         discount_rate=rate,
         assumptions="",
     )
@@ -41,10 +41,10 @@ def test_each_years_revenue_and_costs_follow_from_its_drivers():
     m = investment_metrics(_plan())
 
     # 5 customers × $100 × 12 + $4,000 of pilot fees, then 20 and 50 customers.
-    assert m.revenue_usd == [10_000, 24_000, 60_000]
+    assert m.revenue == [10_000, 24_000, 60_000]
     # ($1,000 fixed + 5 customers × $20 to serve) × 12, and so on.
-    assert m.opex_usd == [13_200, 16_800, 36_000]
-    assert m.net_cash_flow_usd == [-10_000, -3_200, 7_200, 24_000]
+    assert m.opex == [13_200, 16_800, 36_000]
+    assert m.net_cash_flow == [-10_000, -3_200, 7_200, 24_000]
     assert m.net_margin == [-0.32, 0.3, 0.4]
 
 
@@ -52,8 +52,8 @@ def test_the_investment_metrics_follow_from_the_cash_flows():
     m = investment_metrics(_plan())
 
     # -10,000 - 3,200/1.1 + 7,200/1.21 + 24,000/1.331
-    assert m.npv_usd == pytest.approx(11_072.88, abs=0.01)
-    assert _npv(m.irr, m.net_cash_flow_usd) == pytest.approx(0, abs=5)
+    assert m.npv == pytest.approx(11_072.88, abs=0.01)
+    assert _npv(m.irr, m.net_cash_flow) == pytest.approx(0, abs=5)
     # 6,000 still to recover after year 2; year 3 brings in 24,000, 2,000 a month.
     assert m.payback_months == pytest.approx(27.0)
     # $1,000 of fixed costs a month over an $80 contribution per customer.
@@ -67,18 +67,18 @@ def test_a_venture_that_never_pays_back():
     assert m.payback_months is None
     assert m.net_margin[0] is None  # no revenue, no margin
     assert m.break_even_customers is None  # each customer costs more than it pays
-    assert m.npv_usd < 0
+    assert m.npv < 0
 
 
 def test_the_projections_are_read_in_year_order():
     plan = _plan()
     plan.projections.reverse()
 
-    assert investment_metrics(plan).net_cash_flow_usd == [-10_000, -3_200, 7_200, 24_000]
+    assert investment_metrics(plan).net_cash_flow == [-10_000, -3_200, 7_200, 24_000]
 
 
 def test_figures_that_disagree_are_flagged():
-    market = SAMPLE.market.model_copy(update={"som": MarketSize(value_usd=50_000, basis="Small.")})
+    market = SAMPLE.market.model_copy(update={"som": MarketSize(value=50_000, basis="Small.")})
     # Year 1 runs on less than the launch costs, year 3 earns more than the SOM,
     # and year 2's average customers are far above its year-end count.
     plan = _plan(drivers=[(5, 4_000, 500), (40, 0, 1_000), (50, 0, 2_000)])
@@ -97,11 +97,11 @@ def test_figures_that_disagree_are_flagged():
 def test_the_irr_of_a_venture_that_pays_back_in_months():
     # $4,800 in, $89,920 back in year one: an IRR far above 1,000%, not "none".
     plan = _plan(drivers=[(80, 0, 1_000), (80, 0, 1_000), (80, 0, 1_000)])
-    plan.capex = [CostLine(item="Setup", amount_usd=4_800)]
+    plan.capex = [CostLine(item="Setup", amount=4_800)]
     m = investment_metrics(plan)
 
     assert m.irr is not None and m.irr > 10
-    assert _npv(m.irr, m.net_cash_flow_usd) == pytest.approx(0, abs=1)
+    assert _npv(m.irr, m.net_cash_flow) == pytest.approx(0, abs=1)
     assert describe_irr(m) == ("> 1,000%", "on the three-year cash flows")
     assert describe_irr(investment_metrics(_plan(drivers=[(0, 0, 1_000)] * 3)))[1] == (
         "the cash flows never turn positive"
@@ -110,7 +110,7 @@ def test_the_irr_of_a_venture_that_pays_back_in_months():
 
 def test_the_metrics_read_as_words():
     plan = _plan(drivers=[(80, 0, 1_000)] * 3)
-    plan.capex = [CostLine(item="Setup", amount_usd=4_800)]  # back in 0.9 months
+    plan.capex = [CostLine(item="Setup", amount=4_800)]  # back in 0.9 months
     quick = investment_metrics(plan)
 
     assert describe_payback(quick) == "Under a month"
@@ -123,8 +123,8 @@ def test_an_irr_that_cannot_be_worked_out_says_why():
     from proposal import InvestmentMetrics
 
     def metrics(flows):
-        return InvestmentMetrics(capex_usd=0, monthly_fixed_costs_usd=0, revenue_usd=[], opex_usd=[],
-                                 net_cash_flow_usd=flows, net_margin=[], npv_usd=0, irr=None,
+        return InvestmentMetrics(capex=0, monthly_fixed_costs=0, revenue=[], opex=[],
+                                 net_cash_flow=flows, net_margin=[], npv=0, irr=None,
                                  payback_months=None, break_even_customers=None)
 
     assert describe_irr(metrics([0, 5_000, 5_000, 5_000]))[1] == "nothing is invested up front"

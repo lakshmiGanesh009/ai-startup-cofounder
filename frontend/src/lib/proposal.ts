@@ -2,6 +2,8 @@
 // and the calculated metrics in words. The wording mirrors proposal.py's
 // describe_* functions, so the page and the PDF say the same.
 
+import { createContext, useContext } from "react";
+
 import type { InvestmentMetrics, Level, PartKey } from "@/lib/api";
 
 export const PART_TITLES: Record<PartKey, string> = {
@@ -31,8 +33,46 @@ export const SECTION_AGENTS: Record<string, string> = {
   research: "Found on the web",
 };
 
-// A compact dollar amount: $750, $12k, $1.2M.
-export function money(value: number): string {
+// The currencies a document can be in, with the symbol each amount is shown
+// with, as currency.py has them; the PDF uses the same.
+export const CURRENCIES: Record<string, { symbol: string; name: string }> = {
+  USD: { symbol: "$", name: "US dollar" },
+  EUR: { symbol: "€", name: "Euro" },
+  GBP: { symbol: "£", name: "Pound sterling" },
+  INR: { symbol: "₹", name: "Indian rupee" },
+  JPY: { symbol: "¥", name: "Japanese yen" },
+  CNY: { symbol: "CN¥", name: "Chinese yuan" },
+  CAD: { symbol: "CA$", name: "Canadian dollar" },
+  AUD: { symbol: "A$", name: "Australian dollar" },
+  NZD: { symbol: "NZ$", name: "New Zealand dollar" },
+  SGD: { symbol: "S$", name: "Singapore dollar" },
+  HKD: { symbol: "HK$", name: "Hong Kong dollar" },
+  CHF: { symbol: "CHF ", name: "Swiss franc" },
+  SEK: { symbol: "SEK ", name: "Swedish krona" },
+  NOK: { symbol: "NOK ", name: "Norwegian krone" },
+  DKK: { symbol: "DKK ", name: "Danish krone" },
+  PLN: { symbol: "PLN ", name: "Polish złoty" },
+  ZAR: { symbol: "R ", name: "South African rand" },
+  BRL: { symbol: "R$", name: "Brazilian real" },
+  MXN: { symbol: "MX$", name: "Mexican peso" },
+  AED: { symbol: "AED ", name: "UAE dirham" },
+  SAR: { symbol: "SAR ", name: "Saudi riyal" },
+  KRW: { symbol: "₩", name: "South Korean won" },
+};
+
+// The currency of the report on show, for every amount inside it.
+export const CurrencyContext = createContext("USD");
+
+export function useCurrency(): string {
+  return useContext(CurrencyContext);
+}
+
+function symbol(code: string): string {
+  return CURRENCIES[code]?.symbol ?? `${code} `;
+}
+
+// A compact amount: $750, €12k, £1.2M.
+export function money(value: number, code = "USD"): string {
   const sign = value < 0 ? "-" : "";
   const size = Math.abs(value);
   for (const [unit, suffix] of [
@@ -43,15 +83,15 @@ export function money(value: number): string {
     if (size >= unit) {
       const number = size / unit;
       const text = number >= 100 ? number.toFixed(0) : number.toFixed(1).replace(/\.0$/, "");
-      return `${sign}$${text}${suffix}`;
+      return `${sign}${symbol(code)}${text}${suffix}`;
     }
   }
-  return `${sign}$${Math.round(size).toLocaleString("en-US")}`;
+  return `${sign}${symbol(code)}${Math.round(size).toLocaleString("en-US")}`;
 }
 
-// A full dollar amount: $12,000 or -$6,000.
-export function usd(value: number): string {
-  return `${value < 0 ? "-" : ""}$${Math.round(Math.abs(value)).toLocaleString("en-US")}`;
+// A whole amount: $12,000, -€6,000, CHF 1,500.
+export function full(value: number, code = "USD"): string {
+  return `${value < 0 ? "-" : ""}${symbol(code)}${Math.round(Math.abs(value)).toLocaleString("en-US")}`;
 }
 
 export function percent(value: number): string {
@@ -74,7 +114,7 @@ export function monthRange(start: number, duration: number): string {
 }
 
 export function describeIrr(metrics: InvestmentMetrics): [string, string] {
-  const { irr, net_cash_flow_usd: flows } = metrics;
+  const { irr, net_cash_flow: flows } = metrics;
   if (irr === null) {
     if (flows.every((cash) => cash >= 0)) return ["None", "nothing is invested up front"];
     if (flows.every((cash) => cash <= 0)) return ["None", "the cash flows never turn positive"];

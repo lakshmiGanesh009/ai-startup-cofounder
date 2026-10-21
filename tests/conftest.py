@@ -28,6 +28,7 @@ from langchain_core.messages import AIMessage, SystemMessage
 
 import llm
 from agents.proposal_writer import SCHEMAS as PROPOSAL_SCHEMAS
+from agents.proposal_writer import Rewritten
 from brief import BriefReview, Question, SearchPlan
 from deep_research import Competitor, Competitors
 from state import (
@@ -114,6 +115,9 @@ class FakeModel:
         self.delay = 0.0
         self.proposal = SAMPLE
         self.part_prompts: dict[str, list[str]] = {}
+        # A passage or field rewritten on request: the text it comes back as, and the prompts.
+        self.rewrite = "A sharper passage."
+        self.rewrite_prompts: list[str] = []
         self.fail_parts: set[str] = set()
         self.search_plan = SearchPlan(queries=["clinic scheduling software market size", "clinic scheduling software prices"])
         self.brief_review = BriefReview(
@@ -175,6 +179,10 @@ class FakeModel:
                         raise _provider_error()
         return AIMessage(f"[role: {system}]\n{human}", usage_metadata=self.USAGE)
 
+    def _rewritten_for(self, prompt: str) -> Rewritten:
+        self.rewrite_prompts.append(prompt)
+        return Rewritten(text=self.rewrite)
+
     def _part_for(self, key: str):
         def produce(prompt: str):
             self.part_prompts.setdefault(key, []).append(prompt)
@@ -193,6 +201,7 @@ class FakeModel:
             SearchPlan: self._search_plan_for,
             BriefReview: self._brief_review_for,
             Competitors: self._competitors_for,
+            Rewritten: self._rewritten_for,
             **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)

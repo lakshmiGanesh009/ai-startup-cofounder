@@ -14,17 +14,22 @@ Finance's figures are then checked in code (figure_checks); if a check fails,
 Finance gets one more call to correct them, and whatever still fails is shown
 to the founder. A revision applies the founder's instruction to one part, or to
 every part, and then brings the parts that build on it into line in the same
-order.
+order; or, with revise_text, rewrites one text or one passage of it and leaves
+everything else as it is. Every amount is in the report's currency, which the
+agents are told and never change (currency.py converts it).
 """
 
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables.config import ContextThreadPoolExecutor
+from pydantic import BaseModel, Field
 
+import currency
 from agents.chief_of_staff import structured_invoke
 from agents.roles import ROLES
-from guardrails import RULES, fence
+from document import label, text_at
+from guardrails import RULES, fence, unfenced
 from llm import CHIEF, LLM_ERRORS, SPECIALIST
 from metrics import track
 from proposal import (
@@ -79,8 +84,8 @@ _PARTS = {
         "- personas: two or three buyer personas. For each, a bold name, then who they "
         "are (role, organisation size or demographics), what they value, their pain "
         "points and what makes them buy now.\n"
-        "- tam, sam, som: annual market value in US dollars, each with its basis showing "
-        "the arithmetic (for example '12,000 US clinics × $1,800 a year'). SAM is the "
+        "- tam, sam, som: annual market value, each with its basis showing "
+        "the arithmetic (for example '12,000 clinics × 1,800 a year'). SAM is the "
         "part of TAM the launch scope can serve; SOM is what this team can realistically "
         "win within three years, and agrees with the customer numbers in the report. "
         "SOM ≤ SAM ≤ TAM.\n"
@@ -153,8 +158,8 @@ _PARTS = {
         "between the counts at the start and the end of the year, and the counts stay "
         "within what the funnel, the channels and the SOM can deliver. CAC is the year's "
         "sales and marketing spend divided by the customers won that year.\n"
-        "- price_per_customer_month_usd: the average monthly price per paying customer.\n"
-        "- variable_cost_per_customer_month_usd: what one customer costs to serve per "
+        "- price_per_customer_month: the average monthly price per paying customer.\n"
+        "- variable_cost_per_customer_month: what one customer costs to serve per "
         "month (hosting, AI calls, payment fees, support).\n"
         "- discount_rate: the annual rate to discount the cash flows, for the venture's "
         "risk: about 0.10 to 0.15 for a project of an established company, 0.25 to 0.40 "
@@ -199,10 +204,22 @@ _EXECUTIVE = (
 )
 
 
+def _currency_rule() -> str:
+    """Every amount in the document's currency, which only the founder changes."""
+    money = currency.current()
+    return (
+        f"\n\nEvery amount in this document is in {money.code} ({money.name}): write "
+        f"each figure as a plain number in it, and amounts in the text with "
+        f"'{money.symbol.strip()}'. Never convert between currencies or change the "
+        f"currency: the founder does that in the document's settings, where code "
+        f"converts every figure."
+    )
+
+
 def _system(part: str) -> str:
     if part == "executive":
-        return _EXECUTIVE + RULES
-    return f"{ROLES[OWNERS[part]].brief} {_PARTS[part]}\n{_STYLE}{RULES}"
+        return _EXECUTIVE + _currency_rule() + RULES
+    return f"{ROLES[OWNERS[part]].brief} {_PARTS[part]}\n{_STYLE}{_currency_rule()}{RULES}"
 
 
 def _background(report: Report) -> str:
@@ -216,16 +233,16 @@ def _background(report: Report) -> str:
 
 
 def _money(value: float) -> str:
-    return f"-${-value:,.0f}" if value < 0 else f"${value:,.0f}"
+    return currency.full(value)
 
 
 def metrics_text(plan: FinancialPlan, market: MarketPlan | None = None) -> str:
     """The calculated investment metrics, as the Chief of Staff is given them,
     and any checks on the figures that still fail."""
     m = investment_metrics(plan)
-    revenue = ", ".join(f"year {n}: {_money(v)}" for n, v in enumerate(m.revenue_usd, start=1))
-    opex = ", ".join(f"year {n}: {_money(v)}" for n, v in enumerate(m.opex_usd, start=1))
-    flows = ", ".join(f"year {year}: {_money(cash)}" for year, cash in enumerate(m.net_cash_flow_usd))
+    revenue = ", ".join(f"year {n}: {_money(v)}" for n, v in enumerate(m.revenue, start=1))
+    opex = ", ".join(f"year {n}: {_money(v)}" for n, v in enumerate(m.opex, start=1))
+    flows = ", ".join(f"year {year}: {_money(cash)}" for year, cash in enumerate(m.net_cash_flow))
     shown, note = describe_irr(m)
     irr = f"{shown} ({note})"
     payback = (describe_payback(m).lower() if m.payback_months is not None
@@ -234,12 +251,12 @@ def metrics_text(plan: FinancialPlan, market: MarketPlan | None = None) -> str:
                   else "never (each customer costs more to serve than it pays)")
     return (
         "Investment metrics, calculated from the financial plan:\n"
-        f"- Total CapEx: {_money(m.capex_usd)}\n"
-        f"- Fixed costs at launch: {_money(m.monthly_fixed_costs_usd)} a month\n"
+        f"- Total CapEx: {_money(m.capex)}\n"
+        f"- Fixed costs at launch: {_money(m.monthly_fixed_costs)} a month\n"
         f"- Revenue: {revenue}\n"
         f"- OpEx, including the cost to serve customers: {opex}\n"
         f"- Net cash flow (year 0 is the CapEx): {flows}\n"
-        f"- NPV at a {plan.discount_rate:.0%} discount rate: {_money(m.npv_usd)}\n"
+        f"- NPV at a {plan.discount_rate:.0%} discount rate: {_money(m.npv)}\n"
         f"- IRR: {irr}\n"
         f"- Payback: {payback}\n"
         f"- Break-even: {break_even}"
@@ -249,8 +266,8 @@ def metrics_text(plan: FinancialPlan, market: MarketPlan | None = None) -> str:
 def _weak_returns(m) -> str:
     """A reminder the executive summary must face, when the returns are weak."""
     weak = []
-    if m.npv_usd < 0:
-        weak.append(f"the NPV is negative ({_money(m.npv_usd)})")
+    if m.npv < 0:
+        weak.append(f"the NPV is negative ({_money(m.npv)})")
     if m.payback_months is None:
         weak.append("the investment is not paid back within three years")
     if not weak:
@@ -272,9 +289,9 @@ def _costs_to_cover(parts: dict) -> str:
     lines = []
     if "market" in parts:
         channels = parts["market"].channels
-        total = sum(c.monthly_budget_usd for c in channels)
+        total = sum(c.monthly_budget for c in channels)
         lines.append(f"- The channels in the market part cost {_money(total)} a month in all: "
-                     + "; ".join(f"{c.channel} {_money(c.monthly_budget_usd)}" for c in channels))
+                     + "; ".join(f"{c.channel} {_money(c.monthly_budget)}" for c in channels))
     if "technical" in parts:
         technical = parts["technical"]
         fte = sum(s.count for s in technical.staffing)
@@ -347,7 +364,13 @@ def write_proposal(report: Report, instruction: str = "",
     None) and the parts written from it are brought into line. Returns the
     proposal and the titles of the parts that could not be revised, which keep
     their text. Raises ProposalNotWritten if a part of a new proposal fails.
+    Every amount is in the report's currency.
     """
+    with currency.using(report.settings.currency):
+        return _write_proposal(report, instruction, part)
+
+
+def _write_proposal(report: Report, instruction: str, part: str | None) -> tuple[Proposal, list[str]]:
     current = report.proposal
     redo = parts_to_write(current, part)
     background = _background(report)
@@ -391,3 +414,54 @@ def write_proposal(report: Report, instruction: str = "",
         report.session_id, ", ".join(redo), metric.calls, metric.tokens, metric.seconds,
     )
     return Proposal(**parts), failed
+
+
+class Rewritten(BaseModel):
+    text: str = Field(description="The rewritten text, as finished markdown in the same style.")
+
+
+# Who rewrites a section of the team's report: its writer, or the Chief of Staff.
+SECTION_OWNERS = {name: name for name in ("marketing", "finance", "technical", "risk")}
+
+
+def _owner(path: str) -> str:
+    parts = path.split(".")
+    if parts[0] == "proposal" and len(parts) > 1 and parts[1] in OWNERS:
+        return OWNERS[parts[1]]
+    if parts[0] == "sections" and len(parts) > 1:
+        return SECTION_OWNERS.get(parts[1], "chief")
+    return "chief"
+
+
+def revise_text(report: Report, path: str, instruction: str, passage: str | None = None) -> str:
+    """One field of the report rewritten as the founder asks by the agent who
+    wrote it, or only `passage` of it; returns the field's new text, the rest
+    of it as it was. Every other field is left alone: a granular change, unlike
+    revising a whole part. Raises an LLM error if the call fails."""
+    with currency.using(report.settings.currency):
+        current = text_at(report, path)
+        owner = _owner(path)
+        role = "You are the Chief of Staff of a startup founding team." if owner == "chief" else ROLES[owner].brief
+        system = (
+            f"{role} Revise one passage of the founder's {('investment proposal' if path.startswith('proposal') else 'report')} "
+            f"exactly as the founder asks, and nothing else. Keep its facts and figures unless the change asks "
+            f"for others, keep its markdown style, and add no remarks about the change.{_currency_rule()}{RULES}"
+        )
+        where = label(report, path)
+        human = f"{_background(report)}\n\nThe part to revise is {where}. It reads:\n{fence(current, 'the team report')}"
+        if passage:
+            human += (f"\n\nRewrite only this passage of it, and return just the passage rewritten:\n"
+                      f"{fence(passage, 'the team report')}")
+        else:
+            human += "\n\nReturn the whole of it rewritten."
+        human += f"\n\nThe founder asks for this change:\n{fence(instruction, 'founder')}"
+        role_kind = CHIEF if owner == "chief" else SPECIALIST
+        metrics: dict = {}
+        with track("revise", metrics) as tracker:
+            rewritten = structured_invoke(Rewritten, [SystemMessage(system), HumanMessage(human)], tracker, role_kind)
+        text = unfenced(rewritten.text).strip()
+        logger.info("Revised %s for %s: %d calls, %d tokens", where, report.session_id,
+                    metrics["revise"].calls, metrics["revise"].tokens)
+        if passage:
+            return current.replace(passage, text, 1)
+        return text

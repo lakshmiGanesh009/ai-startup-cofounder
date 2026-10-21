@@ -286,6 +286,14 @@ export function MonitorIcon(props: IconProps) {
   );
 }
 
+export function TrashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.75 4.25h10.5M6.25 4.25V2.75h3.5v1.5M4 4.25l.7 9h6.6l.7-9M6.6 6.75v4.5M9.4 6.75v4.5" />
+    </Icon>
+  );
+}
+
 // The Chief of Staff: the hub the four specialists report to.
 export function ChiefIcon(props: IconProps) {
   return (

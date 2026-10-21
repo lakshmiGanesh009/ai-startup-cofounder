@@ -453,7 +453,7 @@ export type ReportSummary = {
 };
 
 export type Level = "Low" | "Medium" | "High";
-export type MarketSize = { value_usd: number; basis: string };
+export type MarketSize = { value: number; basis: string };
 export type Competitor = {
   name: string;
   kind: "Direct" | "Indirect";
@@ -461,7 +461,7 @@ export type Competitor = {
   strengths: string;
   weaknesses: string;
 };
-export type Channel = { channel: string; approach: string; monthly_budget_usd: number };
+export type Channel = { channel: string; approach: string; monthly_budget: number };
 export type FunnelStage = { stage: string; monthly_volume: number };
 export type MarketPlan = {
   personas: string;
@@ -491,21 +491,21 @@ export type RiskItem = {
   mitigation: string;
 };
 export type RiskPlan = { data_protection: string; compliance: string; risks: RiskItem[] };
-export type CostLine = { item: string; amount_usd: number };
+export type CostLine = { item: string; amount: number };
 export type YearProjection = {
   year: number;
   customers: number;
   average_customers: number;
-  one_off_revenue_usd: number;
-  fixed_costs_month_usd: number;
-  cac_usd: number;
+  one_off_revenue: number;
+  fixed_costs_month: number;
+  cac: number;
 };
 export type FinancialPlan = {
   capex: CostLine[];
   monthly_opex: CostLine[];
   projections: YearProjection[];
-  price_per_customer_month_usd: number;
-  variable_cost_per_customer_month_usd: number;
+  price_per_customer_month: number;
+  variable_cost_per_customer_month: number;
   discount_rate: number;
   assumptions: string;
 };
@@ -531,16 +531,26 @@ export type PartKey = keyof Proposal;
 
 // Calculated by the API from the financial plan (proposal.investment_metrics).
 export type InvestmentMetrics = {
-  capex_usd: number;
-  monthly_fixed_costs_usd: number;
-  revenue_usd: number[];
-  opex_usd: number[];
-  net_cash_flow_usd: number[];
+  capex: number;
+  monthly_fixed_costs: number;
+  revenue: number[];
+  opex: number[];
+  net_cash_flow: number[];
   net_margin: (number | null)[];
-  npv_usd: number;
+  npv: number;
   irr: number | null;
   payback_months: number | null;
   break_even_customers: number | null;
+};
+
+// Set once for the whole document and applied by code (document.py): the
+// currency of every amount, the system its measurements were last converted
+// to, who it is from, and the team report's sections left out.
+export type DocumentSettings = {
+  currency: string;
+  units: "metric" | "imperial" | null;
+  prepared_by: string;
+  hidden: string[];
 };
 
 export type Report = {
@@ -551,6 +561,9 @@ export type Report = {
   sections: ReportSection[];
   version: number;
   proposal: Proposal | null;
+  settings: DocumentSettings;
+  // How this version came about, for the history.
+  change: string | null;
   edited: boolean;
   outdated: boolean;
   updated_at: string;
@@ -560,6 +573,46 @@ export type Report = {
 };
 
 export type ProposalResult = { report: Report; failed: string[]; guardrails?: GuardrailFlag[] };
+
+// What the founder can change in a report and save together.
+export type ReportContent = Pick<Report, "title" | "objective" | "sections" | "proposal" | "settings">;
+
+// One field a change touches: where, for a person, and its value before and after.
+export type FieldChange = {
+  path: string;
+  label: string;
+  before: string | number | null;
+  after: string | number | null;
+  // A figure in the document's currency.
+  money: boolean;
+};
+
+// A report as a change would leave it, saved only if accepted.
+export type Draft = { report: Report; changes: FieldChange[]; summary: string; base_version: number };
+
+export type RevisionResult = { draft: Draft; failed: string[]; guardrails?: GuardrailFlag[] };
+
+// The changes code makes exactly (document.py).
+export type DraftChange =
+  | { kind: "currency"; to: string; rate: number; relabel?: boolean }
+  | { kind: "units"; to: "metric" | "imperial" }
+  | { kind: "replace"; find: string; by: string; match_case?: boolean; whole_words?: boolean }
+  | { kind: "redact"; terms: string[] }
+  | { kind: "remove"; path: string; passage: string }
+  | { kind: "settings"; prepared_by: string; hidden: string[] };
+
+export type VersionSummary = {
+  version: number;
+  updated_at: string;
+  change: string | null;
+  has_proposal: boolean;
+  current: boolean;
+};
+
+export function contentOf(report: Report): ReportContent {
+  const { title, objective, sections, proposal, settings } = report;
+  return { title, objective, sections, proposal, settings };
+}
 
 function send<T>(method: "POST" | "PUT", path: string, body?: unknown): Promise<T> {
   return request(path, {
@@ -589,30 +642,83 @@ export function resetReport(sessionId: string): Promise<Report> {
   return send("POST", `${reportPath(sessionId)}/reset`);
 }
 
-// The agents write the proposal: about one to two minutes at the default efforts.
-export function writeProposal(sessionId: string, version: number, reasoning: Reasoning | null): Promise<ProposalResult> {
-  return send("POST", `${reportPath(sessionId)}/proposal`, { version, reasoning });
+// The agents write the proposal, in `currency` if given: about one to two
+// minutes at the default efforts.
+export function writeProposal(
+  sessionId: string,
+  version: number,
+  reasoning: Reasoning | null,
+  currency?: string,
+): Promise<ProposalResult> {
+  return send("POST", `${reportPath(sessionId)}/proposal`, { version, reasoning, currency });
 }
 
-// Applies an instruction to one part (all of them when `part` is null).
+// Applies an instruction to one part (all of them when `part` is null), as a
+// draft to accept or discard.
 export function reviseProposal(
   sessionId: string,
   version: number,
   instruction: string,
   part: PartKey | null,
   reasoning: Reasoning | null,
-): Promise<ProposalResult> {
+): Promise<RevisionResult> {
   return send("POST", `${reportPath(sessionId)}/proposal/revise`, { version, instruction, part, reasoning });
+}
+
+// One text of the report, or a passage of it, rewritten by the agent who wrote
+// it, as a draft; everything else is left alone.
+export function reviseText(
+  sessionId: string,
+  version: number,
+  path: string,
+  instruction: string,
+  passage: string | null,
+  reasoning: Reasoning | null,
+): Promise<RevisionResult> {
+  return send("POST", `${reportPath(sessionId)}/revise`, { version, path, instruction, passage, reasoning });
+}
+
+// A change code makes exactly, as a draft to preview.
+export function makeDraft(sessionId: string, version: number, change: DraftChange): Promise<Draft> {
+  return send("POST", `${reportPath(sessionId)}/drafts`, { version, change });
+}
+
+// Saves a draft; a 409 means the report changed since the draft was made.
+export function acceptDraft(sessionId: string, draft: Draft): Promise<Report> {
+  return send("POST", `${reportPath(sessionId)}/accept`, {
+    version: draft.base_version,
+    content: contentOf(draft.report),
+    change: draft.summary,
+  });
+}
+
+export function listVersions(sessionId: string): Promise<VersionSummary[]> {
+  return request(`${reportPath(sessionId)}/versions`);
+}
+
+export function getVersion(sessionId: string, version: number): Promise<Report> {
+  return request(`${reportPath(sessionId)}/versions/${version}`);
+}
+
+// Makes an earlier version the newest; `current` is the report's version now.
+export function restoreVersion(sessionId: string, current: number, version: number): Promise<Report> {
+  return send("POST", `${reportPath(sessionId)}/versions/${version}/restore`, { version: current });
 }
 
 export function saveProposal(sessionId: string, version: number, proposal: Proposal): Promise<Report> {
   return send("PUT", `${reportPath(sessionId)}/proposal`, { version, proposal });
 }
 
-export async function reportPdf(sessionId: string): Promise<Blob> {
+// The report as a PDF; with `content`, a draft or an earlier version, unsaved.
+export async function reportPdf(sessionId: string, content?: ReportContent): Promise<Blob> {
   let response: Response;
   try {
-    response = await fetch(`${API_URL}${reportPath(sessionId)}/pdf`);
+    response = await fetch(
+      `${API_URL}${reportPath(sessionId)}/pdf`,
+      content
+        ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(content) }
+        : undefined,
+    );
   } catch {
     throw new ApiError(UNREACHABLE);
   }

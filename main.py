@@ -22,7 +22,8 @@ from pydantic import BaseModel, Field, field_validator
 import brief as brief_module
 import deep_research
 from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS
-from agents.proposal_writer import ProposalNotWritten, parts_to_write, write_proposal
+import document
+from agents.proposal_writer import ProposalNotWritten, parts_to_write, revise_text, write_proposal
 from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
 from brief import PreparedBrief, Template, load_templates, prepare_brief
 from config import (
@@ -56,19 +57,25 @@ from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session
 from persistence import open_storage
 from guardrails import log_flags, scan, scan_context
 from progress import summarize
-from proposal import Proposal
+from currency import CURRENCIES
+from document import Draft
+from proposal import OWNERS, TITLES, Proposal
 from report_pdf import render_pdf
 from reports import (
+    DocumentSettings,
     Report,
     ReportChanged,
+    ReportContent,
     ReportNotFound,
     ReportSection,
     ReportSummary,
     SessionResults,
+    VersionSummary,
     store,
 )
 import providers
 from security import (
+    MAX_FIELD_CHARS,
     MAX_PROMPT_CHARS,
     MAX_SECTIONS,
     SESSION_ID,
@@ -527,6 +534,16 @@ PartKey = Literal["executive", "market", "technical", "risk", "financial"]
 class ProposalRequest(BaseModel):
     version: int = Field(description="The report version the request was made from.")
     reasoning: Reasoning | None = None
+    currency: str | None = Field(
+        None, description="For a new proposal: the currency to write it in (ISO 4217); else the report's."
+    )
+
+    @field_validator("currency")
+    @classmethod
+    def _known_currency(cls, code: str | None) -> str | None:
+        if code is not None and code not in CURRENCIES:
+            raise ValueError(f"{code} is not a currency the document can use.")
+        return code
 
 
 class ProposalRevision(ProposalRequest):
@@ -539,6 +556,89 @@ class ProposalRevision(ProposalRequest):
 class ProposalEdit(BaseModel):
     version: int = Field(description="The report version the edits were made to.")
     proposal: Proposal
+
+
+class RevisionResult(BaseModel):
+    draft: Draft = Field(description="The report as the revision would leave it; nothing is saved until accepted.")
+    failed: list[str] = Field(
+        default_factory=list, description="Titles of the parts that could not be revised; they keep their text."
+    )
+    guardrails: list[Flag] = Field(default_factory=list)
+
+
+# Where a text is in a report: "title", "sections.strategy", "proposal.market.pricing_strategy".
+TextPath = Annotated[
+    str, Field(max_length=200, pattern=r"^(title|objective|sections\.[A-Za-z0-9_-]+|proposal(\.[A-Za-z0-9_]+)+)$")
+]
+
+
+class TextRevision(BaseModel):
+    version: int
+    path: TextPath
+    instruction: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS)
+    passage: str | None = Field(None, max_length=MAX_FIELD_CHARS, description="Only this part of the text.")
+    reasoning: Reasoning | None = None
+
+
+class CurrencyChange(BaseModel):
+    kind: Literal["currency"]
+    to: str = Field(description="ISO 4217 code.")
+    rate: float = Field(gt=0, lt=1e6, description="One unit of the document's currency, in `to`.")
+    relabel: bool = Field(False, description="Show the amounts in `to` without converting them.")
+
+
+class UnitsChange(BaseModel):
+    kind: Literal["units"]
+    to: Literal["metric", "imperial"]
+
+
+class ReplaceChange(BaseModel):
+    kind: Literal["replace"]
+    find: str = Field(min_length=1, max_length=200)
+    by: str = Field(max_length=200)
+    match_case: bool = False
+    whole_words: bool = True
+
+
+class RedactChange(BaseModel):
+    kind: Literal["redact"]
+    terms: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(min_length=1, max_length=20)
+
+
+class RemoveChange(BaseModel):
+    kind: Literal["remove"]
+    path: TextPath
+    passage: str = Field(min_length=1, max_length=MAX_FIELD_CHARS)
+
+
+class SettingsChange(BaseModel):
+    kind: Literal["settings"]
+    prepared_by: str = Field(min_length=1, max_length=80)
+    hidden: list[Annotated[str, Field(max_length=64)]] = Field(default_factory=list, max_length=30)
+
+
+class DraftRequest(BaseModel):
+    version: int = Field(description="The report version the change is made to.")
+    change: Annotated[
+        CurrencyChange | UnitsChange | ReplaceChange | RedactChange | RemoveChange | SettingsChange,
+        Field(discriminator="kind"),
+    ]
+
+
+class Acceptance(BaseModel):
+    version: int = Field(description="The report version the draft was made from.")
+    content: ReportContent
+    change: str = Field(min_length=1, max_length=300, description="What the change was, for the history.")
+
+    @field_validator("content")
+    @classmethod
+    def _sections_within_limits(cls, content: ReportContent) -> ReportContent:
+        check_sections(content.sections)
+        return content
+
+
+class Restore(BaseModel):
+    version: int = Field(description="The report's current version.")
 
 
 class ProposalResult(BaseModel):
@@ -603,8 +703,9 @@ def _report_at(session_id: str, version: int) -> Report:
 
 
 async def _write(report: Report, choice: Reasoning | None, instruction: str = "",
-                 part: str | None = None) -> ProposalResult:
-    """Run the proposal writer off the event loop and save what it wrote."""
+                 part: str | None = None) -> ProposalResult | RevisionResult:
+    """Run the proposal writer off the event loop. A new proposal is saved; a
+    revision comes back as a draft, to be seen before it is accepted."""
     started = time.perf_counter()
     doing = "Revising" if report.proposal else "Writing"
     # What the founder wrote that the writers read: the change asked for, and the edits.
@@ -625,7 +726,6 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         monitor.count("proposals", ok=False)
         monitor.event("error", "proposal", "Nothing could be revised: every LLM call failed.", report.session_id)
         raise HTTPException(status_code=502, detail="Nothing could be revised: every LLM call failed.")
-    saved = await run_in_threadpool(store.save_proposal, report.session_id, report.version, proposal, False)
     monitor.count("proposals")
     done = "Revised" if report.proposal else "Wrote"
     monitor.event(
@@ -634,23 +734,46 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         + (f"; {len(failed)} parts kept their text." if failed else "."),
         report.session_id,
     )
+    if report.proposal:
+        draft = document.draft(report, report.model_copy(update={"proposal": proposal}), _revised(part, failed),
+                               allow_unchanged=True)
+        return RevisionResult(draft=draft, failed=failed, guardrails=flags)
+    saved = await run_in_threadpool(
+        store.save_proposal, report.session_id, report.version, proposal, False,
+        f"The agents wrote the investment proposal in {report.settings.currency}", report.settings,
+    )
     return ProposalResult(report=saved, failed=failed, guardrails=flags)
+
+
+def _revised(part: str | None, failed: list[str]) -> str:
+    """What a revision did, for the preview and the history."""
+    if part is None:
+        said = "Every agent revised its part as you asked"
+    else:
+        followed = [TITLES[key] for key in parts_to_write(None, None) if key != part
+                    and key in parts_to_write(Proposal.model_construct(), part)]
+        said = f"The {OWNERS[part]} agent revised {TITLES[part]} as you asked"
+        if followed:
+            said += f", and {', '.join(followed)} followed"
+    return said + (f"; {', '.join(failed)} kept their text." if failed else ".")
 
 
 @app.post("/reports/{session_id}/proposal", response_model=ProposalResult)
 async def write_report_proposal(session_id: SessionId, request: ProposalRequest):
     """Have the agents write the investment proposal from the report as it stands,
-    replacing any proposal it has. Takes about two minutes."""
+    replacing any proposal it has, in `currency` if given. Takes about two minutes."""
     bind_session(session_id)
     report = await run_in_threadpool(_report_at, session_id, request.version)
-    return await _write(report.model_copy(update={"proposal": None}), request.reasoning)
+    settings = report.settings.model_copy(update={"currency": request.currency or report.settings.currency})
+    return await _write(report.model_copy(update={"proposal": None, "settings": settings}), request.reasoning)
 
 
-@app.post("/reports/{session_id}/proposal/revise", response_model=ProposalResult)
+@app.post("/reports/{session_id}/proposal/revise", response_model=RevisionResult)
 async def revise_report_proposal(session_id: SessionId, revision: ProposalRevision):
     """Apply the founder's instruction to one part of the proposal (or all of it):
     the part's agent rewrites it, then the parts written from it are brought into
-    line. A part whose call fails keeps its text and is listed in `failed`."""
+    line. Returns a draft, saved only when accepted. A part whose call fails keeps
+    its text and is listed in `failed`."""
     bind_session(session_id)
     report = await run_in_threadpool(_report_at, session_id, revision.version)
     if not report.proposal:
@@ -662,6 +785,94 @@ async def revise_report_proposal(session_id: SessionId, revision: ProposalRevisi
 def save_report_proposal(session_id: SessionId, edit: ProposalEdit):
     """Save an edited proposal. Returns 409 if the report changed since `version`."""
     return store.save_proposal(session_id, edit.version, edit.proposal)
+
+
+@app.post("/reports/{session_id}/revise", response_model=RevisionResult)
+async def revise_report_text(session_id: SessionId, revision: TextRevision):
+    """Rewrite one text of the report, or only a passage of it, as the founder
+    asks: the agent who wrote it rewrites just that and leaves everything else
+    alone. Returns a draft, saved only when accepted."""
+    bind_session(session_id)
+    report = await run_in_threadpool(_report_at, session_id, revision.version)
+    try:
+        current = document.text_at(report, revision.path)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="The report has no such text.") from error
+    if revision.passage and revision.passage not in current:
+        raise HTTPException(status_code=409, detail="That passage is no longer in the report. Reload it.")
+    flags = log_flags(scan(revision.instruction, "your requested change"))
+    with reasoning(**_efforts(revision.reasoning)):
+        try:
+            text = await run_in_threadpool(revise_text, report, revision.path, revision.instruction, revision.passage)
+        except LLMNotConfigured as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except LLM_ERRORS as error:
+            monitor.event("error", "proposal", f"Revising a passage failed: {error}", session_id)
+            raise HTTPException(status_code=502, detail=failure(error)) from error
+    where = document.label(report, revision.path)
+    draft = document.draft(report, document.set_text(report, revision.path, text),
+                           f"Rewrote {'a passage of ' if revision.passage else ''}{where} as you asked.",
+                           allow_unchanged=True)
+    monitor.event("proposal", "proposal", draft.summary, session_id)
+    return RevisionResult(draft=draft, guardrails=flags)
+
+
+@app.post("/reports/{session_id}/drafts", response_model=Draft)
+def make_draft(session_id: SessionId, request: DraftRequest):
+    """A change made exactly by code, as a draft to preview: the currency or the
+    units converted, text replaced or redacted, a passage removed, or the
+    document's settings. Nothing is saved until the draft is accepted."""
+    report = _report_at(session_id, request.version)
+    change = request.change
+    try:
+        match change:
+            case CurrencyChange():
+                if change.to not in CURRENCIES:
+                    raise HTTPException(status_code=422, detail=f"{change.to} is not a currency the document can use.")
+                return document.convert_currency(report, change.to, change.rate, change.relabel)
+            case UnitsChange():
+                return document.convert_units(report, change.to)
+            case ReplaceChange():
+                return document.replace(report, change.find, change.by, change.match_case, change.whole_words)
+            case RedactChange():
+                return document.redact(report, change.terms)
+            case RemoveChange():
+                return document.remove_passage(report, change.path, change.passage)
+            case SettingsChange():
+                settings = DocumentSettings(currency=report.settings.currency, prepared_by=change.prepared_by,
+                                            hidden=change.hidden)
+                return document.settings(report, settings)
+    except document.Unchanged as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail="The report has no such text.") from error
+
+
+@app.post("/reports/{session_id}/accept", response_model=Report)
+def accept_draft(session_id: SessionId, acceptance: Acceptance):
+    """Save a draft the founder accepted. Returns 409 if the report changed
+    since the version the draft was made from; the version it replaces is kept."""
+    return store.accept(session_id, acceptance.version, acceptance.content, acceptance.change)
+
+
+@app.get("/reports/{session_id}/versions", response_model=list[VersionSummary])
+def report_versions(session_id: SessionId):
+    """The report's current version and those kept before it, newest first,
+    each with how it came about."""
+    return store.versions(session_id)
+
+
+@app.get("/reports/{session_id}/versions/{version}", response_model=Report)
+def report_version(session_id: SessionId, version: int):
+    """The report as it was at an earlier version."""
+    return store.version(session_id, version)
+
+
+@app.post("/reports/{session_id}/versions/{version}/restore", response_model=Report)
+def restore_version(session_id: SessionId, version: int, restore: Restore):
+    """Make an earlier version the newest. Returns 409 if the report changed
+    since `restore.version`; the version it replaces is kept too."""
+    return store.restore(session_id, restore.version, version)
 
 
 @app.get(
@@ -681,6 +892,20 @@ async def download_report(session_id: SessionId):
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{kind}-{name}.pdf"'},
     )
+
+
+@app.post(
+    "/reports/{session_id}/pdf",
+    response_class=Response,
+    responses={200: {"content": {"application/pdf": {}}}},
+)
+async def preview_report(session_id: SessionId, content: ReportContent):
+    """A draft, or an earlier version, as a PDF, without saving anything."""
+    report = await run_in_threadpool(store.get, session_id)
+    check_sections(content.sections)
+    pdf = await run_in_threadpool(render_pdf, report.model_copy(update=dict(content)))
+    return Response(pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": 'inline; filename="preview.pdf"'})
 
 
 if __name__ == "__main__":
