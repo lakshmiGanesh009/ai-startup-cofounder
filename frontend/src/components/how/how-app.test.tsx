@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import HowItWorksPage from "@/app/how-it-works/page";
 import { BackendProvider } from "@/lib/backend";
-import { fakeBackend, MONITORING, PIPELINE } from "@/test/backend";
+import { fakeBackend, MONITORING } from "@/test/backend";
 
 const mermaid = vi.hoisted(() => ({
   initialize: vi.fn(),
@@ -78,15 +78,21 @@ describe("the How it works page", () => {
     renderPage();
     await screen.findByRole("heading", { name: "One orchestrator, four specialists" });
 
-    await user.click(screen.getAllByRole("button", { name: "Show the diagrams" })[0]);
+    expect(screen.getAllByRole("button", { name: "Show the diagrams" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Show the diagrams" }));
 
     const dialog = screen.getByRole("dialog", { name: "Diagrams" });
     const graph = await within(dialog).findByRole("figure", { name: "The LangGraph state machine" });
     await waitFor(() => expect(graph.querySelector("svg")).toBeTruthy());
-    expect(mermaid.render).toHaveBeenCalledWith(expect.stringMatching(/^diagram-/), PIPELINE.mermaid);
+    // The graph as LangGraph draws it, each node and edge in its agent's colours.
+    const [, drawn] = mermaid.render.mock.calls.find(([, text]) => text.startsWith("graph TD;"))!;
+    expect(drawn).toContain("\t__start__ --> plan;");
+    expect(drawn).toMatch(/class plan chief\n/);
+    expect(drawn).toContain("linkStyle 0 stroke:");
     expect(mermaid.initialize).toHaveBeenCalledWith(expect.objectContaining({ theme: "base", securityLevel: "strict" }));
+    expect(within(graph).getByRole("list", { name: "Colours" }).textContent).toContain("Chief of Staff");
     await user.click(within(graph).getByRole("button", { name: "Copy the Mermaid source" }));
-    expect(await navigator.clipboard.readText()).toBe(PIPELINE.mermaid);
+    expect(await navigator.clipboard.readText()).toBe(drawn);
     expect(within(graph).getByRole("button", { name: "Copied" })).toBeTruthy();
 
     await user.click(within(dialog).getByRole("tab", { name: "How data flows" }));
@@ -114,7 +120,7 @@ describe("the How it works page", () => {
     renderPage();
     await screen.findByRole("heading", { name: "One orchestrator, four specialists" });
 
-    await user.click(screen.getAllByRole("button", { name: "Show the diagrams" })[0]);
+    await user.click(screen.getByRole("button", { name: "Show the diagrams" }));
     const graph = await screen.findByRole("figure", { name: "The LangGraph state machine" });
     await waitFor(() => expect(graph.querySelector("svg")).toBeTruthy());
     await waitFor(() => expect(mermaid.render).toHaveBeenCalledTimes(3)); // one for each tab
@@ -127,6 +133,33 @@ describe("the How it works page", () => {
     await waitFor(() => expect(graph.querySelector("svg")!.getAttribute("data-id")).not.toBe(first));
   });
 
+  test("the specialists together are drawn in their four colours, and each participant in its own", async () => {
+    fakeBackend();
+    mermaid.render.mockImplementation(async (id: string) => ({
+      svg: `<svg id="${id}" xmlns="http://www.w3.org/2000/svg"><g class="node team"><rect/></g><rect class="actor" name="C"/><rect class="actor" name="S"/>` +
+        `<path class="edge-pattern-dotted edge-pattern-solid flowchart-link" style="stroke-dasharray: 0 0 280 2"/></svg>`,
+    }));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole("heading", { name: "One orchestrator, four specialists" });
+
+    await user.click(screen.getByRole("button", { name: "Show the diagrams" }));
+    const graph = await screen.findByRole("figure", { name: "The LangGraph state machine" });
+    await waitFor(() => expect(graph.querySelector("svg")).toBeTruthy());
+
+    const id = graph.querySelector("svg")!.id;
+    expect(graph.querySelectorAll(`linearGradient[id^="${id}-team"] stop`)).toHaveLength(8);
+    expect(graph.querySelector(".node.team rect")!.getAttribute("style")).toContain(`url(#${id}-team-fill)`);
+    expect(graph.querySelector('rect[name="S"]')!.getAttribute("style")).toContain(`url(#${id}-team-line)`);
+    expect(graph.querySelector('rect[name="C"]')!.getAttribute("style")).toMatch(/^fill:.*;stroke:.*;stroke-width:2px$/);
+    // A dotted edge is dotted all along, whatever dashes Mermaid gave it.
+    expect(graph.querySelector("path.flowchart-link")!.getAttribute("style")).toMatch(/;stroke-dasharray:3 3$/);
+    mermaid.render.mockReset();
+    mermaid.render.mockImplementation(async (id: string, text: string) => ({
+      svg: `<svg data-id="${id}"><text>${text.split("\n")[0]}</text></svg>`,
+    }));
+  });
+
   test("a diagram Mermaid cannot draw shows its source instead", async () => {
     fakeBackend();
     mermaid.render.mockRejectedValueOnce(new Error("Parse error on line 2"));
@@ -134,7 +167,7 @@ describe("the How it works page", () => {
     renderPage();
     await screen.findByRole("heading", { name: "One orchestrator, four specialists" });
 
-    await user.click(screen.getAllByRole("button", { name: "Show the diagrams" })[0]);
+    await user.click(screen.getByRole("button", { name: "Show the diagrams" }));
 
     const dialog = screen.getByRole("dialog", { name: "Diagrams" });
     expect((await within(dialog).findByRole("alert")).textContent).toContain("could not be drawn (Parse error on line 2)");
@@ -146,7 +179,7 @@ describe("the How it works page", () => {
     renderPage();
 
     expect((await screen.findByRole("alert")).textContent).toContain("needs the API running");
-    expect(screen.getAllByRole("button", { name: "Show the diagrams" })[0].hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByRole("button", { name: "Show the diagrams" })).toBeNull();
   });
 });
 

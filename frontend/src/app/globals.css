@@ -271,6 +271,14 @@
   background: var(--agent);
 }
 
+/* The four specialists together, in a diagram's legend: their four colours. */
+.team-swatch {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--sunken), var(--sunken)) padding-box,
+    linear-gradient(90deg, var(--agent-marketing), var(--agent-finance), var(--agent-technical), var(--agent-risk)) border-box;
+}
+
 /* A passage of the founder's documents an agent cites, "[D1 · page 3]": the
    document's mark, then where in it. */
 .doc-cite {

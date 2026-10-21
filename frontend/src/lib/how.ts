@@ -1,8 +1,9 @@
 // What the How it works page explains: the steps from a brief to a decision,
 // who reads and writes what, where the founder's judgement matters, the stack,
-// and two of its diagrams. The numbers come from the backend (/pipeline), so
-// the page says what the code does.
+// and its diagrams, each drawn in the team's colours. The numbers come from
+// the backend (/pipeline), so the page says what the code does.
 
+import type { AgentKey } from "@/lib/agents";
 import type { Pipeline } from "@/lib/api";
 
 export type IconName =
@@ -223,8 +224,111 @@ export const USER_FLOW: { title: string; does: string; yours?: boolean }[] = [
   { title: "Share", does: "Revise with the team, then download the PDF.", yours: true },
 ];
 
-// How the data moves, as a sequence: the founder, the page, the API and the agents.
-export function flowDiagram(rules: Pipeline["rules"]): string {
+// ---- The diagrams, in the team's colours ----
+
+// Who a part of a diagram belongs to: an agent, the four specialists together
+// ("team", drawn in all four colours once Mermaid has drawn it), or the
+// founder and the app ("you").
+export type DiagramRole = AgentKey | "team" | "you";
+
+// A role's colours: its line (and arrows), and its tint for a box.
+export type Swatch = { line: string; fill: string };
+
+// The colours a diagram is drawn in, read from the page's tokens as it is drawn
+// (components/how/diagrams.tsx), so it suits light and dark; text stays in ink.
+export type Palette = { roles: Record<DiagramRole, Swatch>; ink: string; muted: string; surface: string };
+
+export const DIAGRAM_ROLES: DiagramRole[] = ["you", "chief", "research", "marketing", "finance", "technical", "risk", "team"];
+
+// A hex colour at `alpha`, for the bands behind a sequence's steps.
+export function translucent(hex: string, alpha: number): string {
+  const value = hex.replace("#", "");
+  const full = value.length === 3 ? [...value].map((digit) => digit + digit).join("") : value.slice(0, 6);
+  const [r, g, b] = [0, 2, 4].map((at) => parseInt(full.slice(at, at + 2), 16));
+  return [r, g, b].some(Number.isNaN) ? hex : `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// A flowchart's boxes in their roles' colours: a class for each role, and the
+// boxes put in them. The specialists together get only the class: their four
+// colours are painted on once drawn, which a class's colours (set !important
+// by Mermaid) would hide.
+function styled(palette: Palette, members: Partial<Record<DiagramRole, string[]>>): string {
+  const lines: string[] = [];
+  for (const role of DIAGRAM_ROLES) {
+    const nodes = members[role];
+    if (!nodes?.length) continue;
+    const { line, fill } = palette.roles[role];
+    const colours = role === "team" ? "" : `fill:${fill},stroke:${line},stroke-width:2px,`;
+    lines.push(`  classDef ${role} ${colours}color:${palette.ink}`);
+    lines.push(`  class ${nodes.join(",")} ${role}`);
+  }
+  return lines.join("\n");
+}
+
+// The graph's nodes in the order the work runs, and whose each one is.
+const GRAPH_NODES: [string, DiagramRole][] = [
+  ["__start__", "you"],
+  ["plan", "chief"],
+  ["research", "research"],
+  ["marketing", "marketing"],
+  ["finance", "finance"],
+  ["technical", "technical"],
+  ["risk", "risk"],
+  ["review", "chief"],
+  ["critique", "team"],
+  ["resolve", "chief"],
+  ["synthesis", "chief"],
+  ["__end__", "you"],
+];
+const GRAPH_ROLE = new Map(GRAPH_NODES);
+const GRAPH_RANK = new Map(GRAPH_NODES.map(([node], rank) => [node, rank]));
+const NODE_LINE = /^\s*(\w+)(\(\[.*\]\)|\(.*\)|\[.*\])\s*;?\s*$/;
+const EDGE_LINE = /^\s*(\w+)\s*(-->|-\.->)\s*(\w+)\s*;?\s*$/;
+
+// The graph LangGraph draws (GET /pipeline), with its nodes and edges in the
+// order the work runs, each node in its agent's colours, and each edge in the
+// colour of the node it leaves. An edge back up the graph (a report sent back
+// to its specialist) is written the other way round, without its arrowhead, so
+// the layout reads from top to bottom; the arrowhead goes back on at its start
+// once Mermaid has drawn it (BACKWARDS, components/how/diagrams.tsx). A source
+// it cannot read is returned as it is.
+export function graphDiagram(source: string, palette: Palette): string {
+  const lines = source.split("\n");
+  const nodes = lines.filter((line) => NODE_LINE.test(line));
+  const edges = lines
+    .map((line) => line.match(EDGE_LINE))
+    .filter((edge): edge is RegExpMatchArray => edge !== null);
+  if (!edges.length) return source;
+  const rank = (node: string) => GRAPH_RANK.get(node) ?? GRAPH_NODES.length;
+  const head = lines.filter((line) => !NODE_LINE.test(line) && !EDGE_LINE.test(line) && line.trim());
+  // [where it is drawn from, the arrow, where it is drawn to, the node it leaves]
+  const drawn = edges.map(([, from, arrow, to]) =>
+    rank(to) < rank(from) ? [to, arrow === "-->" ? "---" : "-.-", from, from] : [from, arrow, to, from],
+  );
+  const ordered = drawn.sort(([a, , b], [c, , d]) => rank(a) - rank(c) || rank(b) - rank(d));
+  const members: Partial<Record<DiagramRole, string[]>> = {};
+  for (const line of nodes) {
+    const node = line.match(NODE_LINE)![1];
+    const role = GRAPH_ROLE.get(node);
+    if (role) (members[role] ??= []).push(node);
+  }
+  return [
+    ...head,
+    ...[...nodes].sort((a, b) => rank(a.match(NODE_LINE)![1]) - rank(b.match(NODE_LINE)![1])),
+    ...ordered.map(([from, arrow, to]) => `\t${from} ${arrow} ${to};`),
+    styled(palette, members),
+    ...ordered.map(([, , , leaves], index) => {
+      const role = GRAPH_ROLE.get(leaves);
+      const colour = role && role !== "team" ? palette.roles[role].line : palette.muted;
+      return `  linkStyle ${index} stroke:${colour},stroke-width:1.5px`;
+    }),
+  ].join("\n");
+}
+
+// How the data moves, as a sequence: the founder, the page, the API and the
+// agents, with each stretch of the work on a band in the colour of who does it.
+export function flowDiagram(rules: Pipeline["rules"], palette: Palette): string {
+  const band = (role: DiagramRole) => `rect ${translucent(palette.roles[role].line, 0.1)}`;
   return `sequenceDiagram
   autonumber
   actor F as Founder
@@ -233,43 +337,65 @@ export function flowDiagram(rules: Pipeline["rules"]): string {
   participant C as Chief of Staff
   participant W as Web (Azure OpenAI or Tavily)
   participant S as Specialists
-  F->>UI: Brief, context, template
+  F->>UI: Brief, context, documents
   UI->>API: POST /brief/prepare
-  API->>C: Plan two to four searches
-  C->>W: Search
-  W-->>C: Results with their sources
-  C-->>UI: Up to ${rules.max_facts} facts with [n], up to ${rules.max_questions} questions
+  ${band("chief")}
+    API->>C: Plan two to four searches
+    C->>W: Search
+    W-->>C: Results with their sources
+    C-->>UI: Up to ${rules.max_facts} facts with [n], up to ${rules.max_questions} questions
+  end
   F->>UI: Answers, the facts kept
   UI->>API: POST /evaluate/stream
-  API->>C: Plan the objective and the tasks
-  opt Deep research is on
-    API->>W: A task per area, a profile per competitor
-    W-->>API: Cited reports
+  ${band("chief")}
+    API->>C: Plan the objective and the tasks
   end
-  par Each assigned specialist, at once
-    API->>S: Task, brief, answers, facts, research
-    S-->>API: Report, citing [n]
+  ${band("research")}
+    opt Deep research is on
+      API->>W: A task per area, a profile per competitor
+      W-->>API: Cited reports
+    end
   end
-  API->>C: Review each report
-  alt Below ${rules.approval_score} of 5
-    C-->>S: Feedback, revise once
+  ${band("team")}
+    par Each assigned specialist, at once
+      API->>S: Task, brief, answers, facts, research
+      S-->>API: Report, citing [n]
+    end
   end
-  API->>S: Cross-check each other's reports
-  S-->>C: Conflicts
-  C-->>S: Decisions, and who revises
-  API->>C: Write the strategy
-  C-->>API: Launch strategy
+  ${band("chief")}
+    API->>C: Review each report
+    alt Below ${rules.approval_score} of 5
+      C-->>S: Feedback, revise once
+    end
+  end
+  ${band("team")}
+    API->>S: Cross-check each other's reports
+    S-->>C: Conflicts
+  end
+  ${band("chief")}
+    C-->>S: Decisions, and who revises
+    API->>C: Write the strategy
+    C-->>API: Launch strategy
+  end
   API-->>UI: Each step as it finishes, then the result
   UI-->>F: The memo, the reviews, the research`;
 }
 
-// The routes the Chief of Staff's decisions take through the graph (graph.py).
-export function decisionsDiagram(rules: Pipeline["rules"]): string {
+// Whose each participant of the sequence is, for its box.
+export const FLOW_ROLES: Record<string, DiagramRole> = { F: "you", UI: "you", API: "you", C: "chief", W: "research", S: "team" };
+
+// The routes the Chief of Staff's decisions take through the graph (graph.py),
+// each box in the colours of who does it.
+export function decisionsDiagram(rules: Pipeline["rules"], palette: Palette): string {
   return `flowchart TD
   brief([Your brief]) --> plan[Plan: the objective and a task per specialist]
   plan -->|deep research on| research[Research each area and the main competitors]
-  plan -->|otherwise| work[The specialists write their reports, at once]
+  plan -->|otherwise| work
   research --> work
+  subgraph work [The specialists write their reports, at once]
+    direction LR
+    marketing[Marketing] ~~~ finance[Finance] ~~~ technical[Technical] ~~~ risk[Risk & Compliance]
+  end
   work --> review{Does each report score at least ${rules.approval_score} of 5?}
   review -->|no, and not yet revised| back[Back to its specialist with feedback]
   back --> work
@@ -282,5 +408,16 @@ export function decisionsDiagram(rules: Pipeline["rules"]): string {
   decide -->|a report must change| revise[That specialist revises]
   revise --> strategy
   decide -->|nothing to change| strategy
-  strategy --> out([Memo, report and proposal])`;
+  strategy --> out([Memo, report and proposal])
+  style work fill:${palette.surface},stroke:${palette.muted},stroke-dasharray:4 3
+${styled(palette, {
+  you: ["brief", "out"],
+  chief: ["plan", "review", "many", "conflicts", "decide", "strategy"],
+  research: ["research"],
+  marketing: ["marketing"],
+  finance: ["finance"],
+  technical: ["technical"],
+  risk: ["risk"],
+  team: ["back", "critique", "revise"],
+})}`;
 }

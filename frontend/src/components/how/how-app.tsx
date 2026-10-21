@@ -45,16 +45,9 @@ export function HowItWorks() {
       .catch((error: Error) => setProblem(error.message));
   }, []);
 
-  const showDiagrams = (
-    <Button variant="primary" onClick={() => setDiagrams(true)} disabled={!pipeline}>
-      <FlowIcon />
-      Show the diagrams
-    </Button>
-  );
-
   return (
     <div>
-      <PageHeader title="How it works" description={DESCRIPTION} aside={showDiagrams} />
+      <PageHeader title="How it works" description={DESCRIPTION} />
       {problem && (
         <Notice tone="bad" className="mt-8">
           {problem} The page asks the API how the pipeline is set up, so it needs the API running.
@@ -89,7 +82,10 @@ export function HowItWorks() {
                         See the real graph LangGraph runs, how the data flows from your brief to the memo, and the routes
                         the Chief of Staff&apos;s decisions take.
                       </p>
-                      {showDiagrams}
+                      <Button variant="primary" onClick={() => setDiagrams(true)}>
+                        <FlowIcon />
+                        Show the diagrams
+                      </Button>
                     </div>
                   </section>
                   <TeamSection pipeline={pipeline} reasoning={reasoning} />
