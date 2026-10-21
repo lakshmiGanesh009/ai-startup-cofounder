@@ -646,6 +646,40 @@ question any report (`extract.py`, `library.py`).
   back to their passages, so the response lists the sources it really cites
   and drops any it made up. A question counts as a run for the limits.
 
+## Look-ups through MCP
+
+The team reads official figures and competitors' own pages through MCP
+servers (`lookups.py`), as planned look-ups rather than tools an agent calls
+at will: the Chief of Staff decides what to look up, code fetches it and does
+the sums, and the specialists read the result, so the time, the credits and
+the figures stay predictable.
+
+- **FRED.** The app's own MCP server (`fred_server.py`, two tools:
+  `search_series` and `series_data`) runs as a subprocess of the API over
+  stdio, with only the FRED key in its environment; FRED takes the key in the
+  query string, so the server cuts it out of the request lines httpx logs.
+  After the plan, the `lookup` node has the Chief of Staff name up to four
+  searches. FRED's own search ranks loosely, so code lists the current series
+  whose titles cover each search, and the Chief of Staff picks up to four that
+  fit the venture's market and place, saying why (if that call fails, code
+  takes the closest); the 10-year Treasury yield and consumer prices are read
+  too. Two years of each are read, and code works out the latest value and the
+  change over the year. The figures reach every specialist fenced as data, to
+  cite as `[FRED · id]`, and stay in the session's state for follow-ups.
+- **Beside deep research.** The plan routes to `lookup` and to `research` in
+  the same step, so they run at once; each routes on to the specialists, who
+  start once both are done and run once.
+- **Tavily.** With deep research on Tavily, its hosted MCP server (streamable
+  HTTP, the key in an `Authorization` header, never the address) searches
+  "<competitor> pricing", keeps only a result on the competitor's own domain,
+  pricing pages first, and reads them in one extract; the passages that speak
+  of prices become the profile's `site`, numbered with the session's sources
+  and scanned by the guardrails.
+- **Failure.** Every look-up runs within a time limit; one that fails, or a
+  server that cannot be reached, leaves its part out with a note, and the run
+  goes on. In the tests, both servers are replaced by in-process ones and the
+  real ones refuse, so no test leaves the machine.
+
 ## A request, end to end
 
 For "Identify risks in our go-to-market plan.":
