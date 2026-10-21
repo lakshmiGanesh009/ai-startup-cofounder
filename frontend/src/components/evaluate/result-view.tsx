@@ -13,7 +13,15 @@ import { ArrowRightIcon } from "@/components/ui/icons";
 import { titleSize } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/tabs";
 import { Notice } from "@/components/ui/notice";
-import type { Answer, CompanyProfile, DeepResearch, EvaluateResponse, Research, ReviewResult } from "@/lib/api";
+import type {
+  Answer,
+  CompanyProfile,
+  DeepResearch,
+  EconomicData,
+  EvaluateResponse,
+  Research,
+  ReviewResult,
+} from "@/lib/api";
 import { citations } from "@/lib/brief";
 import { agentClass, agentFill, agentOf, agentsOf, specialistAgent } from "@/lib/agents";
 import { formatSeconds, specialistTitle, stepName } from "@/lib/team";
@@ -108,6 +116,9 @@ function Summary({ run }: { run: Run }) {
           <ul className="mt-2 space-y-1 text-sm text-ink-2">
             {run.brief?.research && <li>{count(run.brief.research.findings.length, "fact")} from the web for the brief</li>}
             {run.brief && run.brief.answers.length > 0 && <li>{count(run.brief.answers.length, "answer")} from you</li>}
+            {result.economic && result.economic.figures.length > 0 && (
+              <li>{count(result.economic.figures.length, "official figure")} from FRED</li>
+            )}
             {result.research && (
               <li>
                 Deep research on {count(Object.keys(result.research.areas).length, "area")} and{" "}
@@ -182,7 +193,9 @@ function count(number: number, word: string): string {
 
 // Whether the run has research to show: the brief's, the founder's answers, or deep research.
 function hasResearch(run: Run): boolean {
-  return Boolean(run.brief?.answers.length || run.brief?.research || run.result.research);
+  return Boolean(
+    run.brief?.answers.length || run.brief?.research || run.result.research || run.result.economic?.figures.length,
+  );
 }
 
 const PROFILE_FIELDS = [
@@ -192,6 +205,7 @@ const PROFILE_FIELDS = [
   ["recent_moves", "Recent moves"],
   ["strengths", "Strengths"],
   ["weaknesses", "Weaknesses"],
+  ["site", "Its own pricing page"],
 ] as const;
 
 function Competitor({ company }: { company: CompanyProfile }) {
@@ -216,10 +230,67 @@ function Competitor({ company }: { company: CompanyProfile }) {
   );
 }
 
-function ResearchTab({ brief, deep }: { brief?: Brief; deep?: DeepResearch | null }) {
+// A figure as the page shows it: 4.12, 323.42, 31,250.
+function figureValue(value: number): string {
+  return value.toLocaleString("en-US", { maximumFractionDigits: Math.abs(value) >= 1000 ? 0 : 2 });
+}
+
+// The official figures the team read, from FRED, each linked to its page there.
+function Figures({ economic }: { economic: EconomicData }) {
+  return (
+    <section aria-label="Official figures">
+      <h4 className="kicker">Official figures, from FRED</h4>
+      <p className="mt-1 text-sm text-ink-3">
+        The St. Louis Fed&apos;s data, looked up for this plan; the reports cite each as [FRED · its id].
+      </p>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-rule text-left text-xs text-ink-3">
+              <th className="py-2 pr-4 font-medium">Figure</th>
+              <th className="py-2 pr-4 font-medium">Latest</th>
+              <th className="py-2 font-medium">Over the year</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-rule">
+            {economic.figures.map((figure) => (
+              <tr key={figure.id} className="align-top">
+                <td className="py-2.5 pr-4">
+                  <span className="block text-ink">{figure.title}</span>
+                  <a href={figure.link} target="_blank" rel="noreferrer" className="font-mono text-xs text-link hover:underline">
+                    {figure.id}
+                  </a>
+                  {figure.why && <span className="mt-0.5 block text-xs text-ink-3">{figure.why}</span>}
+                </td>
+                <td className="py-2.5 pr-4 whitespace-nowrap">
+                  <span className="tabular text-ink">{figureValue(figure.value)}</span>{" "}
+                  <span className="text-xs text-ink-3">{figure.units}</span>
+                  <span className="block text-xs text-ink-3 tabular">{figure.date}</span>
+                </td>
+                <td className="py-2.5 text-ink-2 tabular">{figure.change || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {economic.note && <p className="mt-2 text-xs text-ink-3">{economic.note}</p>}
+    </section>
+  );
+}
+
+function ResearchTab({
+  brief,
+  deep,
+  economic,
+}: {
+  brief?: Brief;
+  deep?: DeepResearch | null;
+  economic?: EconomicData | null;
+}) {
   const sources = deep?.sources ?? brief?.research?.sources ?? [];
   return (
     <div className="max-w-3xl space-y-12">
+      {economic && economic.figures.length > 0 && <Figures economic={economic} />}
       {brief && brief.answers.length > 0 && (
         <section aria-label="Your answers">
           <h4 className="kicker">Your answers to the Chief of Staff</h4>
@@ -476,7 +547,12 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
           tabs={[
             { label: "Specialist reports", content: <Reports result={result} /> },
             ...(hasResearch(run)
-              ? [{ label: "Research", content: <ResearchTab brief={run.brief} deep={result.research} /> }]
+              ? [
+                  {
+                    label: "Research",
+                    content: <ResearchTab brief={run.brief} deep={result.research} economic={result.economic} />,
+                  },
+                ]
               : []),
             { label: "Plan", content: <Plan result={result} /> },
             { label: "Reviews", content: <Reviews result={result} /> },

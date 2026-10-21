@@ -5,7 +5,9 @@ When a request asks for it, a research step runs between the plan and the
 specialists: one research task per assigned specialist, written from its
 assignment, and a profile of each of the main competitors, whom the Chief of
 Staff names. The tasks run at the same time; with the "mini" model one takes
-20-90 s and costs 20-80 Tavily credits.
+20-90 s and costs 20-80 Tavily credits. On Tavily, each competitor's own
+pricing page is then found and read through Tavily's MCP server (lookups.py),
+cited like any other source: a few credits more.
 
 Each report numbers its own sources from 1, so every source gets one number for
 the whole session, after the brief's research (whose numbers stand), and the
@@ -26,6 +28,7 @@ from agents.chief_of_staff import structured_invoke
 from agents.roles import ROLES
 from guardrails import RULES, fence, log_flags, scan
 from llm import CHIEF, LLM_ERRORS
+from lookups import read_competitor_pages, tavily_configured
 from metrics import track
 from providers import NAMES, chosen, research_all
 from search import Report, SearchFailed
@@ -198,6 +201,18 @@ def research_node(state: WorkflowState) -> dict:
         flags += scan(profile.as_prompt(), f"the profile of {profile.name}", "web")
         credits += report.credits
         searches += report.searches
+    profiled = companies[len(deep.companies):]
+    if use == "tavily" and profiled and tavily_configured():
+        pages = read_competitor_pages([profile.name for profile in profiled])
+        for profile in profiled:
+            page = pages.found.get(profile.name)
+            if page:
+                cited = book.number(page.title, page.url)
+                profile.site = f"{page.text} [{cited}]"
+                profile.sources = sorted({*profile.sources, cited})
+                flags += scan(page.text, f"{profile.name}'s own pricing page", "web")
+        credits += pages.credits
+        searches += pages.searches
     return {
         "deep_research": DeepResearch(
             areas=found,

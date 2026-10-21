@@ -15,7 +15,7 @@ export const AGENTS: Record<AgentKey, Agent> = {
   finance: { key: "finance", name: "Financial Planning", short: "Finance", role: "Costs, revenue, runway, returns" },
   technical: { key: "technical", name: "Technical Feasibility", short: "Technical", role: "Architecture, build, team, timeline" },
   risk: { key: "risk", name: "Risk & Compliance", short: "Risk", role: "Regulation, data protection, risks" },
-  research: { key: "research", name: "Web research", short: "Web", role: "Searches the web for the team" },
+  research: { key: "research", name: "Web research", short: "Web", role: "Looks things up for the team: the web, and official figures" },
 };
 
 // The Chief of Staff, then the specialists in the order the app lists them.
@@ -37,6 +37,7 @@ export function agentClass(key: AgentKey): string {
 export function agentsOf(node: string): AgentKey[] {
   if (isAgent(node)) return [node];
   if (node === "critique") return SPECIALIST_AGENTS;
+  if (node === "lookup") return ["research"];
   return ["chief"];
 }
 
@@ -46,7 +47,7 @@ export function agentOf(node: string): AgentKey {
 
 // The steps and runs the agents do, as the Monitor names its sources.
 const AGENT_SOURCES = new Set([
-  "plan", "research", "marketing", "finance", "technical", "risk",
+  "plan", "lookup", "research", "marketing", "finance", "technical", "risk",
   "review", "critique", "resolve", "synthesis", "evaluate", "brief", "proposal",
 ]);
 
@@ -86,4 +87,5 @@ export const SECTION_AGENT: Record<string, AgentKey> = {
   technical: "technical",
   risk: "risk",
   research: "research",
+  economic: "research",
 };

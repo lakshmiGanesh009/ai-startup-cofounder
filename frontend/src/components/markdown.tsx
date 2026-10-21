@@ -2,7 +2,8 @@
 // figures they marked as assumptions are highlighted, and what the agents cite
 // in square brackets is set as tags: an agent ("[finance]") in its colour, a
 // passage of the founder's documents ("[D1 · page 3]") or a whole one ("[R1]")
-// naming it, several at once ("[D1 · page 3; finance]") side by side.
+// naming it, an official figure ("[FRED · DGS10]") linking to its page on
+// FRED, several at once ("[D1 · page 3; finance]") side by side.
 
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -15,6 +16,7 @@ const ASSUMPTION = /\((?:assumption|assumed|estimate|estimated)s?\)/gi;
 const CITED = /\[([^[\]\n]{1,240})\]/g;
 const AGENT_CITED = /^(marketing|finance|technical|risk|research|chief(?: of staff)?)$/i;
 const DOCUMENT_CITED = /^([DR]\d{1,2}(?:–[DR]?\d{1,2})?)(?: · (.{1,160}))?$/;
+const FRED_CITED = /^FRED · ([A-Za-z0-9_.]{1,40})$/;
 // Citations side by side: "D1 · page 3; R1", "D1–D3, R1" (a comma only before a document's mark,
 // as one may be inside a place: "sheet Revenue, rows 2–7").
 const SEPARATOR = /;\s*|,\s*(?=[DR]\d)/;
@@ -118,11 +120,34 @@ function documentTag(cited: string, names: DocumentRef[]): Node | null {
   };
 }
 
+// "[FRED · DGS10]", as a tag linking to the series on FRED.
+function fredTag(cited: string): Node | null {
+  const found = cited.match(FRED_CITED);
+  if (!found) return null;
+  return {
+    type: "fredMark",
+    data: {
+      hName: "a",
+      hProperties: {
+        className: "doc-cite",
+        href: `https://fred.stlouisfed.org/series/${found[1]}`,
+        target: "_blank",
+        rel: "noreferrer",
+        title: `${found[1]} on FRED, the St. Louis Fed's data`,
+      },
+    },
+    children: [
+      { type: "ref", data: { hName: "b" }, children: [{ type: "text", value: "FRED" }] },
+      { type: "text", value: found[1] },
+    ],
+  };
+}
+
 // What the agents cite, as tags; brackets holding nothing they cite stay as written.
 function remarkCitations({ names }: { names: DocumentRef[] }) {
   return remarkMatches(CITED, (match) => {
     const parts = match[1].split(SEPARATOR).map((part) => part.trim());
-    const tags = parts.map((part) => agentTag(part) ?? documentTag(part, names));
+    const tags = parts.map((part) => agentTag(part) ?? documentTag(part, names) ?? fredTag(part));
     if (!tags.some(Boolean)) return null;
     return {
       type: "citations",

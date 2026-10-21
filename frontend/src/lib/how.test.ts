@@ -75,7 +75,8 @@ describe("the diagrams in the team's colours", () => {
   test("the data flow puts each stretch of the work on a band in its colour", () => {
     const flow = flowDiagram(PIPELINE.rules, PALETTE);
     expect(flow).toContain("rect rgba(74, 58, 167, 0.1)\n    API->>C: Plan two to four searches");
-    expect(flow).toContain("rect rgba(107, 120, 137, 0.1)\n    opt Deep research is on");
+    expect(flow).toContain("rect rgba(107, 120, 137, 0.1)\n    par Look-ups and research, at once");
+    expect(flow).toContain("API->>D: The series to read, over MCP");
     expect(flow).toContain("rect rgba(124, 120, 109, 0.1)\n    par Each assigned specialist, at once");
   });
 
@@ -84,6 +85,8 @@ describe("the diagrams in the team's colours", () => {
     expect(decisions).toContain("subgraph work [The specialists write their reports, at once]");
     expect(decisions).toContain("  class plan,review,many,conflicts,decide,strategy chief");
     expect(decisions).toContain("  class back,critique,revise team");
+    expect(decisions).toContain("plan -->|FRED set up| lookup[Look up the official figures on FRED]");
+    expect(decisions).toContain("  class lookup,research research");
     // Their four colours are painted on once drawn; a class's colours would hide them.
     expect(decisions).toContain("  classDef team color:#1c1b18");
     expect(decisions).toContain("  class brief,out you");

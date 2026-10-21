@@ -35,8 +35,28 @@ export type CompanyProfile = {
   recent_moves: string;
   strengths: string;
   weaknesses: string;
+  // What its own pricing page says, read through Tavily's MCP server, citing it.
+  site?: string;
   sources: number[];
 };
+
+// One official figure from FRED (lookups.py): its latest value, and how it
+// moved over the year, worked out by the API.
+export type Figure = {
+  id: string;
+  title: string;
+  units: string;
+  frequency: string;
+  date: string;
+  value: number;
+  year_ago: number | null;
+  change: string;
+  why: string;
+  link: string;
+};
+
+// The official figures a session looked up on FRED, and why any are missing.
+export type EconomicData = { figures: Figure[]; searches: string[]; note: string | null };
 
 // Text that tried to instruct the agents (guardrails.py): the founder's or a web
 // page's. It was cut out of what the agents read, and the founder is told.
@@ -100,6 +120,7 @@ export type EvaluateResponse = {
   metrics: Record<string, NodeMetric>;
   final_strategy: string;
   research?: DeepResearch | null;
+  economic?: EconomicData | null;
   guardrails?: GuardrailFlag[];
 };
 
@@ -126,6 +147,8 @@ export type Health = {
   research: { providers: Record<ResearchProvider, boolean>; default: ResearchProvider | null };
   // Where sessions and reports are kept, and whether it answers ("degraded" status when not).
   storage: { kind: "memory" | "postgres"; ok: boolean };
+  // Look-ups through MCP servers: FRED's figures, and competitors' own pages (on Tavily).
+  lookups?: { fred: boolean; competitor_pages: boolean };
 };
 
 export type Scenario = {
@@ -275,6 +298,8 @@ export type Step = {
   searches?: number;
   provider?: string | null;
   not_researched?: string[];
+  // The look-up step: the FRED series read, and what the Chief of Staff searched for.
+  figures?: string[];
 };
 
 function parseEvent(block: string): { name: string; data: Record<string, unknown> } | null {

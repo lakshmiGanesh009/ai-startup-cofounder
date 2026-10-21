@@ -159,16 +159,70 @@ class CompanyProfile(BaseModel):
     recent_moves: str = ""
     strengths: str = ""
     weaknesses: str = ""
+    # What its own pricing page says, read through Tavily's MCP server (lookups.py), citing it.
+    site: str = ""
     sources: list[int] = Field(default_factory=list)
 
     def as_prompt(self) -> str:
         fields = [
             ("Pricing", self.pricing), ("Customers", self.customers), ("Funding", self.funding),
             ("Recent moves", self.recent_moves), ("Strengths", self.strengths), ("Weaknesses", self.weaknesses),
+            ("Its own pricing page says", self.site),
         ]
         details = "; ".join(f"{label}: {value}" for label, value in fields if value)
         cites = "".join(f"[{n}]" for n in self.sources)
         return f"- {self.name}: {self.summary} {details} {cites}".strip()
+
+
+def number(value: float) -> str:
+    """A figure as a person reads it: 4.12, 324.1, 31,250."""
+    if abs(value) >= 1000:
+        return f"{value:,.0f}"
+    return f"{value:,.2f}".rstrip("0").rstrip(".")
+
+
+class Figure(BaseModel):
+    """One series from FRED as the team reads it: its latest value, and how it
+    moved over the year, worked out in code (lookups.py)."""
+
+    id: str
+    title: str
+    units: str
+    frequency: str
+    date: str
+    value: float
+    year_ago: float | None = None
+    change: str = Field("", description='How it moved over the year: "up 0.14 points", "up 3.0%".')
+    why: str = Field("", description="What the team reads it for.")
+    link: str
+
+    @property
+    def mark(self) -> str:
+        return f"[FRED · {self.id}]"
+
+    def as_line(self) -> str:
+        line = f"{self.mark} {self.title}: {number(self.value)} ({self.units}) on {self.date}"
+        if self.change:
+            line += f", {self.change} over the year"
+        return line + (f". {self.why}" if self.why else "")
+
+
+class EconomicData(BaseModel):
+    """The official figures a session looked up on FRED: the ones every plan
+    needs and those the Chief of Staff searched for. Every specialist reads them."""
+
+    figures: list[Figure] = Field(default_factory=list)
+    searches: list[str] = Field(default_factory=list)
+    # Why some or all of it could not be read.
+    note: str | None = None
+
+    def as_prompt(self) -> str:
+        if not self.figures:
+            return ""
+        return (
+            "Official economic data from FRED, the St. Louis Fed's database. Cite a figure you use by its "
+            f"mark, such as {self.figures[0].mark}:\n" + "\n".join(f"- {figure.as_line()}" for figure in self.figures)
+        )
 
 
 class DeepResearch(BaseModel):
@@ -296,3 +350,5 @@ class WorkflowState(TypedDict, total=False):
     deep: bool
     research_provider: str
     deep_research: DeepResearch
+    # The session's official figures from FRED (lookups.py), which a follow-up reuses.
+    economic: EconomicData

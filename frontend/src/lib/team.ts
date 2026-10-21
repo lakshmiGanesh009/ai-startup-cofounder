@@ -18,6 +18,7 @@ export function specialistTitle(name: string): string {
 
 const STEP_NAMES: Record<string, string> = {
   plan: "Plan",
+  lookup: "Look-ups",
   research: "Research",
   review: "Review",
   critique: "Cross-check",
@@ -38,6 +39,7 @@ export function actor(node: string): string {
   if (node in SPECIALIST_TITLES) return SPECIALIST_TITLES[node as Specialist];
   if (node === "critique") return "Specialists";
   if (node === "research") return "Web research";
+  if (node === "lookup") return "FRED";
   return "Chief of Staff";
 }
 
@@ -57,9 +59,10 @@ export const STAGES: Stage[] = [
   {
     key: "research",
     title: "Research",
-    who: "On the web, for the specialists",
-    about: "With deep research on, researches each specialist's area and profiles the main competitors.",
-    nodes: ["research"],
+    who: "Official figures and the web",
+    about:
+      "Looks up the official figures the plan turns on (FRED) and, with deep research on, researches each specialist's area and profiles the main competitors.",
+    nodes: ["lookup", "research"],
   },
   {
     key: "reports",
@@ -122,6 +125,7 @@ function writing(names: string[], verb: string): string {
 
 const AT_WORK: Record<string, string> = {
   plan: "The Chief of Staff is reading the brief and planning the work.",
+  lookup: "Looking up the official figures on FRED.",
   research: "Researching each specialist's area and the main competitors on the web.",
   review: "The Chief of Staff is reviewing the reports.",
   critique: "The specialists are cross-checking each other's reports.",
@@ -156,7 +160,9 @@ export function stageState(stage: Stage, states: Record<string, NodeState>, team
   // With one specialist there is nothing to cross-check, so the graph skips it;
   // without deep research the specialists start straight after the plan.
   if (stage.key === "cross-check" && !states.critique && states.synthesis) return "skipped";
-  if (stage.key === "research" && !states.research && SPECIALISTS.some((name) => states[name])) return "skipped";
+  if (stage.key === "research" && !states.research && !states.lookup && SPECIALISTS.some((name) => states[name])) {
+    return "skipped";
+  }
   const ran = nodes.filter((node) => states[node]?.runs);
   if (ran.length && (stage.key !== "reports" || ran.length === nodes.length)) return "done";
   return "waiting";

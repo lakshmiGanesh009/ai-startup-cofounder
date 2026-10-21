@@ -431,8 +431,25 @@ export function ResearchSection({ pipeline }: { pipeline: Pipeline }) {
       id="research"
       kicker="The evidence"
       title="Where the facts come from"
-      intro="The team can work from the web as well as from what the model knows, in two places, and every fact keeps its source."
+      intro="The team can work from official figures and the web as well as from what the model knows, and every fact keeps its source."
     >
+      <div className="mb-3 rounded-lg border border-rule bg-surface p-5">
+        <p className="kicker">After the plan, through MCP</p>
+        <p className="mt-1 font-serif text-lg">Official figures, from FRED</p>
+        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-ink-2">
+          <li>The Chief of Staff names a few FRED searches for the figures the plan turns on: prices, wages, demand.</li>
+          <li>
+            The app&apos;s own MCP server for FRED, the St. Louis Fed&apos;s data, finds the most used current series
+            for each; the 10-year Treasury yield and inflation are always read.
+          </li>
+          <li>Code works out each one&apos;s latest value and its change over the year; no model does the sums.</li>
+          <li>Every specialist reads them, and cites each as [FRED · its id], a link to its page.</li>
+        </ol>
+        <p className="mt-3 text-xs text-ink-3">
+          It runs beside deep research, and needs a free FRED key. With deep research on Tavily, Tavily&apos;s own MCP
+          server also finds and reads each competitor&apos;s pricing page.
+        </p>
+      </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-lg border border-rule bg-surface p-5">
           <p className="kicker">Before the team starts</p>

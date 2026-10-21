@@ -10,6 +10,7 @@ import logging
 
 from agents.roles import ROLES
 from agents.specialist import GAP_PREFIX
+from state import number
 
 logger = logging.getLogger(__name__)
 
@@ -72,13 +73,31 @@ def _summary(node: str, update: dict, runs: int, given: dict) -> dict:
                 for name, review in reviews.items()
             },
         }
+    if node == "lookup":
+        economic = update["economic"]
+        figures = economic.figures
+        if not figures:
+            summary = f"Could not look up official figures: {economic.note or 'FRED had none'}"
+        else:
+            shown = ", ".join(f"{figure.title} {number(figure.value)}" + (f" ({figure.change} over the year)" if figure.change else "")
+                              for figure in figures[:2])
+            summary = f"Looked up {_plural(len(figures), 'official figure')} on FRED, among them {shown}"
+        return {
+            "summary": summary.rstrip(".") + ".",
+            "figures": [figure.id for figure in figures],
+            "searches": economic.searches,
+        }
     if node == "research":
         deep = update["deep_research"]
         found = [f"{_plural(len(deep.areas), 'area')}", f"{_plural(len(deep.companies), 'competitor')}"]
+        read = sum(1 for company in deep.companies if company.site)
+        if read:
+            found.append(f"{_plural(read, 'pricing page')} of their own")
         costs = ([f"{deep.credits} Tavily credits"] if deep.credits else []) + (
             [_plural(deep.searches, "web search").replace("searchs", "searches")] if deep.searches else []
         )
-        summary = f"Researched {' and '.join(found)} ({', '.join([_plural(len(deep.sources), 'source'), *costs])})"
+        listed = f"{', '.join(found[:-1])} and {found[-1]}"
+        summary = f"Researched {listed} ({', '.join([_plural(len(deep.sources), 'source'), *costs])})"
         if deep.failed:
             summary += f"; could not research {_names(deep.failed)}"
         return {

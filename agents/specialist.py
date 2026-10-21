@@ -38,6 +38,10 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     research = deep.for_specialist(role.name, role.name in COMPANY_READERS) if deep else ""
     if research:
         human += f"\n\n{fence(research, 'web research')}"
+    economic = state.get("economic")
+    figures = economic.as_prompt() if economic else ""
+    if figures:
+        human += f"\n\n{fence(figures, 'FRED economic data')}"
 
     feedback = state.get("revisions", {}).get(role.name) or state.get(
         "critique_revisions", {}

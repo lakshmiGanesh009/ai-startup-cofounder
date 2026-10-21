@@ -47,8 +47,8 @@ export const STATIONS: Station[] = [
   {
     key: "research",
     title: "Research",
-    who: "Azure OpenAI or Tavily",
-    makes: "area reports · competitors",
+    who: "FRED; Azure OpenAI or Tavily",
+    makes: "official figures · area reports · competitors",
     icon: "globe",
     optional: true,
     more: "research",
@@ -269,6 +269,7 @@ function styled(palette: Palette, members: Partial<Record<DiagramRole, string[]>
 const GRAPH_NODES: [string, DiagramRole][] = [
   ["__start__", "you"],
   ["plan", "chief"],
+  ["lookup", "research"],
   ["research", "research"],
   ["marketing", "marketing"],
   ["finance", "finance"],
@@ -336,6 +337,7 @@ export function flowDiagram(rules: Pipeline["rules"], palette: Palette): string 
   participant API as FastAPI
   participant C as Chief of Staff
   participant W as Web (Azure OpenAI or Tavily)
+  participant D as FRED (our MCP server)
   participant S as Specialists
   F->>UI: Brief, context, documents
   UI->>API: POST /brief/prepare
@@ -349,16 +351,20 @@ export function flowDiagram(rules: Pipeline["rules"], palette: Palette): string 
   UI->>API: POST /evaluate/stream
   ${band("chief")}
     API->>C: Plan the objective and the tasks
+    API->>C: Which official figures to look up
   end
   ${band("research")}
-    opt Deep research is on
+    par Look-ups and research, at once
+      API->>D: The series to read, over MCP
+      D-->>API: Each one's latest value and its change over the year
+    and Deep research is on
       API->>W: A task per area, a profile per competitor
-      W-->>API: Cited reports
+      W-->>API: Cited reports, and on Tavily each competitor's own pricing page (MCP)
     end
   end
   ${band("team")}
     par Each assigned specialist, at once
-      API->>S: Task, brief, answers, facts, research
+      API->>S: Task, brief, answers, facts, figures, research
       S-->>API: Report, citing [n]
     end
   end
@@ -382,15 +388,25 @@ export function flowDiagram(rules: Pipeline["rules"], palette: Palette): string 
 }
 
 // Whose each participant of the sequence is, for its box.
-export const FLOW_ROLES: Record<string, DiagramRole> = { F: "you", UI: "you", API: "you", C: "chief", W: "research", S: "team" };
+export const FLOW_ROLES: Record<string, DiagramRole> = {
+  F: "you",
+  UI: "you",
+  API: "you",
+  C: "chief",
+  W: "research",
+  D: "research",
+  S: "team",
+};
 
 // The routes the Chief of Staff's decisions take through the graph (graph.py),
 // each box in the colours of who does it.
 export function decisionsDiagram(rules: Pipeline["rules"], palette: Palette): string {
   return `flowchart TD
   brief([Your brief]) --> plan[Plan: the objective and a task per specialist]
+  plan -->|FRED set up| lookup[Look up the official figures on FRED]
   plan -->|deep research on| research[Research each area and the main competitors]
   plan -->|otherwise| work
+  lookup --> work
   research --> work
   subgraph work [The specialists write their reports, at once]
     direction LR
@@ -413,7 +429,7 @@ export function decisionsDiagram(rules: Pipeline["rules"], palette: Palette): st
 ${styled(palette, {
   you: ["brief", "out"],
   chief: ["plan", "review", "many", "conflicts", "decide", "strategy"],
-  research: ["research"],
+  research: ["lookup", "research"],
   marketing: ["marketing"],
   finance: ["finance"],
   technical: ["technical"],

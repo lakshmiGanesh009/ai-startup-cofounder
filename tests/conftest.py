@@ -32,6 +32,7 @@ from agents.proposal_writer import Rewritten
 from brief import BriefReview, Question, SearchPlan
 from deep_research import Competitor, Competitors
 from library import Answer
+from lookups import FredPick, FredPicks, FredSearches
 from state import (
     DelegationPlan,
     Finding,
@@ -53,6 +54,7 @@ PROVIDER_VARS = [
     "OPENAI_API_KEY",
     "MODEL_NAME",
     "TAVILY_API_KEY",
+    "FRED_API_KEY",
 ]
 
 SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
@@ -95,7 +97,9 @@ class FakeModel:
     question); `brief_prompts` keeps what each call was given. For deep
     research, the Chief of Staff names the `competitors` (by default one).
     A question about documents is answered with `answer`, and its prompt kept
-    in `answer_prompts`.
+    in `answer_prompts`. What to look up on FRED comes from `fred_searches`,
+    and which series to read from `fred_picks` (by default the first listed),
+    their prompts kept in `lookup_prompts` and `pick_prompts`.
 
     `synthesis_calls` and `specialist_calls` record how often each ran, `fail`
     names specialists whose call raises, and `delay` makes every call take that
@@ -136,6 +140,10 @@ class FakeModel:
         self.competitors = Competitors(companies=[Competitor(name="Klara", what="patient messaging for clinics")])
         self.answer = Answer(answer="Churn is 4% a month [D1 · page 2].", cited=["[D1 · page 2]"])
         self.answer_prompts: list[str] = []
+        self.fred_searches = FredSearches(searches=["average hourly earnings health care"])
+        self.lookup_prompts: list[str] = []
+        self.fred_picks: FredPicks | None = None
+        self.pick_prompts: list[str] = []
 
     def _plan_for(self, prompt: str) -> DelegationPlan:
         return self.plan
@@ -151,6 +159,19 @@ class FakeModel:
     def _competitors_for(self, prompt: str) -> Competitors:
         self.brief_prompts.append(("competitors", prompt))
         return self.competitors
+
+    def _fred_searches_for(self, prompt: str) -> FredSearches:
+        self.lookup_prompts.append(prompt)
+        return self.fred_searches
+
+    def _fred_picks_for(self, prompt: str) -> FredPicks:
+        import re
+
+        self.pick_prompts.append(prompt)
+        if self.fred_picks is not None:
+            return self.fred_picks
+        first = re.search(r"^- ([A-Za-z0-9_.]+): ", prompt.split("The series found:")[-1], re.MULTILINE)
+        return FredPicks(picks=[FredPick(id=first[1], why="It measures the venture's market.")] if first else [])
 
     def _answer_for(self, prompt: str) -> Answer:
         self.answer_prompts.append(prompt)
@@ -212,6 +233,8 @@ class FakeModel:
             Competitors: self._competitors_for,
             Rewritten: self._rewritten_for,
             Answer: self._answer_for,
+            FredSearches: self._fred_searches_for,
+            FredPicks: self._fred_picks_for,
             **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)
@@ -290,11 +313,22 @@ def fresh_monitor():
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Neither Tavily nor Azure OpenAI's web search is called for real: a test
-    that searches or researches answers through search._transport or
-    azure_web._client, or replaces the calls."""
+    """Neither Tavily nor Azure OpenAI's web search, nor an MCP server, is
+    called for real: a test that searches or researches answers through
+    search._transport or azure_web._client, and one that looks something up
+    through MCP puts a server of its own in lookups.SERVERS (tests/mcp_fakes.py)."""
     import azure_web
+    import lookups
     import search
+
+    def refuse_server(name):
+        def connect():
+            raise AssertionError(f"A test tried to reach the {name} MCP server")
+
+        return connect
+
+    monkeypatch.setitem(lookups.SERVERS, "fred", refuse_server("FRED"))
+    monkeypatch.setitem(lookups.SERVERS, "tavily", refuse_server("Tavily"))
 
     def refuse(request):
         raise AssertionError(f"A test tried to reach {request.url}")

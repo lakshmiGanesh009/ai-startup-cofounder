@@ -79,6 +79,7 @@ from reports import (
     VersionSummary,
     store,
 )
+import lookups
 import providers
 from security import (
     MAX_FIELD_CHARS,
@@ -90,7 +91,7 @@ from security import (
     check_context,
     check_sections,
 )
-from state import DeepResearch, Flag, NodeMetric, RequestContext, Resolution, ReviewResult
+from state import DeepResearch, EconomicData, Flag, NodeMetric, RequestContext, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
@@ -200,6 +201,9 @@ class EvaluateResponse(BaseModel):
     metrics: dict[str, NodeMetric]
     final_strategy: str
     research: DeepResearch | None = Field(None, description="The session's deep research, if any.")
+    economic: EconomicData | None = Field(
+        None, description="The official figures the session looked up on FRED, if FRED is set up."
+    )
     guardrails: list[Flag] = Field(
         default_factory=list,
         description="Text that tried to instruct the agents, in the request or in the session's research: "
@@ -211,7 +215,8 @@ class EvaluateResponse(BaseModel):
 async def health():
     """Health check, with the reasoning efforts a request can choose, the
     configured ones it gets by default, where web research can run (Azure
-    OpenAI, Tavily) and does by default, and where sessions and reports are kept.
+    OpenAI, Tavily) and does by default, which look-ups are set up (FRED's
+    figures, competitors' pages), and where sessions and reports are kept.
     The status is "degraded" while that database does not answer."""
     stored = await run_in_threadpool(storage.ping)
     return {
@@ -228,6 +233,8 @@ async def health():
             "providers": providers.available(),
             "default": providers.default(),
         },
+        # Look-ups through MCP servers: FRED's official figures, and competitors' own pages (on Tavily).
+        "lookups": {"fred": lookups.fred_configured(), "competitor_pages": lookups.tavily_configured()},
     }
 
 
@@ -405,6 +412,7 @@ async def _finish(session_id: str, result: dict, flags: list[Flag]) -> EvaluateR
         metrics=result.get("metrics", {}),
         final_strategy=result["final_strategy"],
         research=deep,
+        economic=result.get("economic"),
         guardrails=[*flags, *(deep.flags if deep else [])],
     )
 

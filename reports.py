@@ -24,11 +24,12 @@ from pydantic import BaseModel, Field, computed_field, field_validator
 from agents.roles import ROLES, SPECIALISTS
 from currency import CURRENCIES, DEFAULT
 from proposal import InvestmentMetrics, Proposal, figure_checks, investment_metrics
-from state import DeepResearch, Research, Resolution
+from state import DeepResearch, EconomicData, Research, Resolution, number
 
 STRATEGY = "strategy"
 DECISIONS = "decisions"
 RESEARCH = "research"
+ECONOMIC = "economic"
 DOCUMENTS = "documents"
 
 
@@ -81,6 +82,7 @@ class SessionResults(BaseModel):
     resolutions: list[Resolution]
     research: Research | None = None
     deep: DeepResearch | None = None
+    economic: EconomicData | None = None
     # The founder's documents the team worked from, a line each ("D1: plan.pdf (PDF, 12 pages)").
     documents: list[str] = []
     worked_from: WorkedFrom = Field(default_factory=WorkedFrom)
@@ -104,6 +106,7 @@ class SessionResults(BaseModel):
             analyses=state["analyses"],
             resolutions=state.get("resolutions", []),
             research=context.research if context else None,
+            economic=state.get("economic"),
             deep=state.get("deep_research"),
         )
 
@@ -254,7 +257,22 @@ def build_sections(results: SessionResults) -> list[ReportSection]:
         sections.append(
             ReportSection(key=RESEARCH, title="Web Research", body=research_markdown(results.research, deep))
         )
+    if results.economic and results.economic.figures:
+        sections.append(ReportSection(key=ECONOMIC, title="Economic Data", body=economic_markdown(results.economic)))
     return sections
+
+
+def economic_markdown(economic: EconomicData) -> str:
+    """The official figures the team worked from, each with its change over the
+    year and a link to its page on FRED."""
+    lines = [
+        f"- **{figure.title}**: {number(figure.value)} ({figure.units}) on {figure.date}"
+        + (f", {figure.change} over the year" if figure.change else "")
+        + f". [FRED · {figure.id}]({figure.link})"
+        for figure in economic.figures
+    ]
+    return ("Official figures from FRED, the St. Louis Fed's database, read for this plan and cited in the "
+            "team's reports as [FRED · DGS10]:\n\n" + "\n".join(lines))
 
 
 def _now() -> datetime:

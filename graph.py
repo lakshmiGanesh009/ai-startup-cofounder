@@ -1,7 +1,8 @@
 """LangGraph state machine that wires the agents together.
 
-The Chief of Staff plans, Tavily researches each assigned specialist's area
-when the request asks for deep research, the assigned specialists run in parallel, the Chief of
+The Chief of Staff plans; official figures are looked up on FRED (lookups.py)
+while, if the request asks for deep research, each assigned specialist's area
+is researched on the web; the assigned specialists run in parallel, the Chief of
 Staff reviews their reports and sends weak ones back once, the specialists
 cross-critique and the Chief of Staff resolves any conflicts, then the approved
 reports are synthesised into one strategy.
@@ -29,11 +30,14 @@ from agents.roles import SPECIALISTS
 from agents.specialist import specialist_node
 from config import DEBUG_MODE, MAX_CRITIQUE_ROUNDS
 from deep_research import research_node
+from lookups import fred_configured, lookup_node
 from state import (
     CompanyProfile,
     Conflict,
     DeepResearch,
     DelegationPlan,
+    EconomicData,
+    Figure,
     Flag,
     NodeMetric,
     RequestContext,
@@ -61,6 +65,8 @@ _CHECKPOINT_TYPES = [
         CompanyProfile,
         Source,
         Flag,
+        EconomicData,
+        Figure,
     )
 ]
 # How a session's state is written and read back, wherever it is kept.
@@ -72,13 +78,18 @@ def _route_to_assigned(state: WorkflowState) -> list[str]:
     return list(state["assignments"])
 
 
-def _route_after_plan(state: WorkflowState) -> list[str] | str:
-    """Research first when the request asked for deep research and an assigned
-    specialist's area has none yet; otherwise straight to the specialists."""
+def _route_after_plan(state: WorkflowState) -> list[str]:
+    """Look up the official figures once a session, with FRED set up, and
+    research when the request asked for deep research and an assigned
+    specialist's area has none yet, at the same time; when neither, straight to
+    the specialists, who start once both are done."""
     researched = state.get("deep_research")
+    steps = []
+    if fred_configured() and not state.get("economic"):
+        steps.append("lookup")
     if state.get("deep") and any(name not in (researched.areas if researched else {}) for name in state["assignments"]):
-        return "research"
-    return _route_to_assigned(state)
+        steps.append("research")
+    return steps or _route_to_assigned(state)
 
 
 def _route_after_review(state: WorkflowState) -> list[str] | str:
@@ -121,6 +132,7 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None):
     builder = StateGraph(WorkflowState)
     builder.add_node("plan", plan_node)
     builder.add_node("research", research_node)
+    builder.add_node("lookup", lookup_node)
     builder.add_node("review", review_node)
     builder.add_node("critique", critique_node)
     builder.add_node("resolve", resolve_node)
@@ -132,8 +144,9 @@ def build_graph(checkpointer: BaseCheckpointSaver | None = None):
         )
 
     builder.add_edge(START, "plan")
-    builder.add_conditional_edges("plan", _route_after_plan, ["research", *SPECIALIST_NAMES])
+    builder.add_conditional_edges("plan", _route_after_plan, ["lookup", "research", *SPECIALIST_NAMES])
     builder.add_conditional_edges("research", _route_to_assigned, SPECIALIST_NAMES)
+    builder.add_conditional_edges("lookup", _route_to_assigned, SPECIALIST_NAMES)
     builder.add_conditional_edges(
         "review", _route_after_review, [*SPECIALIST_NAMES, "critique", "synthesis"]
     )

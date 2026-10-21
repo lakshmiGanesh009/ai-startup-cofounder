@@ -32,6 +32,7 @@ export const SECTION_AGENTS: Record<string, string> = {
   risk: "Written by the Risk & Compliance Agent",
   research: "Found on the web",
   documents: "Your files and earlier reports",
+  economic: "Looked up on FRED",
 };
 
 // The currencies a document can be in, with the symbol each amount is shown

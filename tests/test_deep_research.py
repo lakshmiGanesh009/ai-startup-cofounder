@@ -201,7 +201,7 @@ def test_deep_research_covers_each_specialist_and_the_competitors(fake_llm, tavi
     assert research["companies"] == [{
         "name": "Klara Inc.", "summary": "Patient messaging for clinics.", "pricing": "$15 per user a month [3]",
         "customers": "219 practices [7]", "funding": "", "recent_moves": "", "strengths": "Integrations",
-        "weaknesses": "Fragmented pricing", "sources": [3, 7],
+        "weaknesses": "Fragmented pricing", "site": "", "sources": [3, 7],
     }]
     assert research["credits"] == 4 * 80 + 22
     assert research["failed"] == []

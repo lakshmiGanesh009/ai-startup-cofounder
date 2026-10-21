@@ -31,6 +31,12 @@ LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 SEARCH_TIMEOUT = float(os.getenv("SEARCH_TIMEOUT", "20"))
 RESEARCH_TIMEOUT = float(os.getenv("RESEARCH_TIMEOUT", "300"))
 
+# Look-ups through MCP servers (lookups.py): the seconds one tool call may
+# take, and Tavily's hosted MCP server. FRED_API_KEY (free, from
+# fredaccount.stlouisfed.org) turns on FRED's official figures.
+LOOKUP_TIMEOUT = float(os.getenv("LOOKUP_TIMEOUT", "30"))
+TAVILY_MCP_URL = os.getenv("TAVILY_MCP_URL", "https://mcp.tavily.com/mcp/").strip()
+
 # Browser origins allowed to call the API, comma-separated. The default is the
 # Next.js dev server.
 CORS_ORIGINS = [
