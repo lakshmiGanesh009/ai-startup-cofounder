@@ -57,7 +57,10 @@ The sidebar shows whether the browser can reach the backend, checking again ever
 - **Report** picks a session's report: the one in the address (`/reports?session=…`), else the Evaluate page's, else the newest.
 - Before the proposal, the page shows the team's report (the strategy, each specialist's report, the decisions on conflicts), each section labelled with the agent that wrote it. **Edit the team's report** turns it into markdown boxes, saved together.
 - **Write the investment proposal** has the agents write it (a minute or two at the default efforts). It then reads as chapters, numbered as in the PDF: executive summary, market and marketing, technical and operations, the financial plan, risk and compliance, success metrics, and the team's report as an appendix. Each has its text, tables and charts (market size, funnel, roadmap, costs, projections, cash position, risk matrix), the agent that wrote it, and "calculated" on the figures the API works out; figures that fail a check are flagged. **Edit** turns a chapter into a form, tables included.
-- **Open PDF** shows the document in a pop-up, in the browser's PDF viewer, with its download. There, **Ask the team to revise** sends an instruction for one part, or the whole proposal; the parts built on it follow, and the PDF is drawn again. **Revise with the team** opens the pop-up with the prompt ready.
+- Each paragraph and list item has **Revise** and **Remove** buttons (on hover, or faint on a phone): the agent that wrote it rewrites just that, or it is taken out (`components/reports/passages.tsx`).
+- **Open PDF** opens the document studio (`pdf-panel.tsx`): the PDF in the browser's viewer, with its download, beside four tools. **Revise** asks the team to revise one part or the whole proposal; an instruction that asks for a conversion points to Settings. **Settings** converts the currency at a rate you give, or only relabels it, converts measurements to metric or imperial, and sets who the document is from and which of the team's sections it leaves out. **Text** finds and replaces, or redacts. **History** lists every version, to look at and restore. **Revise with the team**, **Currency, units and text** and **History** open it on their tool.
+- **Every change is a draft** (`draft-review.tsx`): what it does, each changed field with the words it removes struck through and those it adds highlighted (`lib/diff.ts`), each amount before and after in its currency, and its PDF beside them, marked "not saved". **Accept and save** saves it as a new version; **Discard** leaves the report as it was.
+- Amounts are shown in the report's currency everywhere: the chapters, the charts and the edit forms' labels (`CurrencyContext` in `lib/proposal.ts`, with the same symbols as the PDF). **Write the investment proposal** can write it in another currency from the start.
 - **More actions** holds **Rewrite the proposal** and **Reset to the latest results**, which ask before they replace anything. A change refused because the report changed elsewhere reloads it and says so.
 
 ## The How it works page
@@ -105,7 +108,9 @@ src/components/reports/reports-app.tsx     The Reports page: cover, chapters, wr
 src/components/reports/proposal-view.tsx   The proposal's chapters on screen
 src/components/reports/charts.tsx          The proposal's charts, in HTML and CSS
 src/components/reports/edit-form.tsx       The forms that edit each part, tables included
-src/components/reports/pdf-panel.tsx       The PDF pop-up: the revise prompt, download and viewer
+src/components/reports/pdf-panel.tsx       The document studio: the PDF beside the revise, settings, text and history tools
+src/components/reports/draft-review.tsx    A change before it is saved: its diffs, accept or discard
+src/components/reports/passages.tsx        Revise or remove one paragraph of the report
 src/components/reports/team-report.tsx     The team's report, read or edited
 src/components/sidebar.tsx                 Pages, backend status and reasoning sliders (a menu on phones)
 src/components/reasoning-sliders.tsx       The two reasoning sliders

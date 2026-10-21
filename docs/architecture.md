@@ -363,8 +363,10 @@ quick local run do.
   (the calculated investment figures and checks are left out and recalculated).
   Every change reads the row with `FOR UPDATE`, applies the change and writes it
   back in one transaction, so a save made from an older version is refused even
-  with several workers. The report store (`reports.py`) is the same over memory
-  and PostgreSQL; the report endpoints run in FastAPI's thread pool, so a round
+  with several workers. The version a change replaces is written to
+  `report_versions` in the same transaction, and only the latest 30 a report
+  are kept. The report store (`reports.py`) is the same over memory and
+  PostgreSQL; the report endpoints run in FastAPI's thread pool, so a round
   trip to the database never holds up the event loop.
 - **The Monitor's history.** Its evaluations and events are written by a thread
   of their own, in batches, so neither a request nor a log line waits on the
@@ -557,11 +559,51 @@ workflow's state, so editing it never changes what the agents produced.
   cannot make the server fetch anything.
 - **Read on screen.** The Reports page shows the same content as text, tables
   and charts in the page (no boxes that scroll on their own), a tab per section,
-  each with an Edit button. The PDF opens in a pop-up, in the browser's PDF
-  viewer, beside the inline prompt that sends a revision.
+  each with an Edit button. The PDF opens in the document studio, in the
+  browser's PDF viewer, beside its tools (see Document control).
 
 Reports are kept with the sessions: in PostgreSQL, so a restart loses none of
 them, or in memory without a database (see Persistence).
+
+## Document control
+
+The founder controls the document precisely, and sees every change before it
+is saved. The founder found that asking the team to show the proposal in euros
+left figures in dollars: every amount was a `..._usd` field, and the PDF printed
+`$` itself, so no instruction could change the currency. Now:
+
+- **Settings belong to the document.** `Report.settings` holds the `currency`
+  of every amount, the `units` its measurements were last converted to, who it
+  is `prepared_by`, and the team's sections `hidden` from the document. Amounts
+  are plain numbers (the old `_usd` names still load), and `currency.py`
+  formats each one in the report's currency in the PDF, its charts, the checks
+  on the figures and what the agents read. The agents are told the currency and
+  never to convert it; the Revise tool points a conversion asked of the team to
+  Settings.
+- **Code makes exact changes** (`document.py`). A currency conversion
+  multiplies every figure by the rate the founder gives (`MONEY` lists them) and
+  rewrites every amount in the text in the new currency: symbols, codes and
+  names, scales ("$15k"), ranges ("$10–20k"), but not another currency ("CA$")
+  or a year. A relabel changes only the currency. `units.py` converts areas,
+  distances, weights, volumes, speeds and temperatures, but only units that
+  cannot be mistaken ("5m" might be five million). Find and replace, redaction
+  and removing a passage work on every text in the report: the title, the
+  objective, the team's sections and the proposal's prose, never its fixed
+  choices (a verdict, a level).
+- **Granular revision.** `POST /reports/{session_id}/revise` has the agent
+  who wrote a text rewrite only it, or only one passage of it, as the founder
+  asks; code splices the passage back, and every other field stays as it was.
+  The page offers it on every paragraph, with the paragraph's own markdown
+  found from where the parser placed it.
+- **Drafts, then acceptance.** Every change, the team's revisions included,
+  returns a `Draft`: the report as it would be, each changed field with its
+  value before and after, and a summary. Nothing is saved until the founder
+  accepts it (`POST .../accept`, from the version the draft was made from, else
+  409). The studio shows the words removed and added, each amount in its
+  currency, and the draft's PDF (`POST .../pdf` with its content).
+- **Versions.** Each save keeps the version it replaces (`report_versions` in
+  PostgreSQL, the last 30), with the change that made it. Any can be looked at
+  and restored, which saves it as the newest and keeps the current one too.
 
 ## A request, end to end
 
