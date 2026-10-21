@@ -185,7 +185,7 @@ business plan.
 
 ## Implementation
 
-A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine served by a FastAPI backend, with a Next.js frontend on top. [docs/architecture.md](docs/architecture.md) explains it in full, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
+A Chief of Staff agent plans and delegates, four specialists (Marketing, Finance, Technical, Risk & Compliance) analyse the request in parallel, the Chief of Staff reviews and reconciles their reports, and a synthesis step produces one launch strategy. The workflow is a LangGraph state machine served by a FastAPI backend, with a Next.js frontend on top. [docs/architecture.md](docs/architecture.md) explains it in full, [docs/demo.md](docs/demo.md) walks through a demonstration with a recorded run, and [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md) records how it was built step by step.
 
 ### Setup
 
@@ -323,6 +323,8 @@ Walk through a scenario end to end, printing each stage:
 uv run python demo.py scenarios/healthcare_scheduling.json
 ```
 
+[docs/demo.md](docs/demo.md) is a script for a live walkthrough in the web app, with a recorded run of an evaluation and its refinement.
+
 ### Test
 
 ```bash
@@ -384,6 +386,6 @@ Dockerfile                 The API's image
 docker-compose.yml         PostgreSQL, the API and the web app together
 .gitlab-ci.yml             The checks on every push, and the images on the default branch
 tests/                     Automated tests
-docs/                      Architecture and performance docs
+docs/                      Architecture, performance and demo docs
 DEVELOPMENT_PLAN.md        Build sequence and status
 ```
