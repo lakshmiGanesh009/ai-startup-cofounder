@@ -2,6 +2,7 @@
 // reviews beside it, and the team's work underneath: the specialists' reports,
 // the plan, the reviews, the conflicts and what the request cost.
 
+import { DocumentList, type DocumentRef } from "@/components/documents";
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
 import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Markdown } from "@/components/markdown";
@@ -21,7 +22,7 @@ import { formatSeconds, specialistTitle, stepName } from "@/lib/team";
 // Chief of Staff's questions, and the web research they kept.
 export type Brief = { answers: Answer[]; research: Research | null };
 
-export type Run = { prompt: string; result: EvaluateResponse; seconds?: number; brief?: Brief };
+export type Run = { prompt: string; result: EvaluateResponse; seconds?: number; brief?: Brief; documents?: DocumentRef[] };
 
 const UNAVAILABLE = "[unavailable]";
 
@@ -448,6 +449,12 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
         <p className="mt-3 text-sm leading-relaxed text-ink-3">
           <span className="text-ink-2">Your brief:</span> {run.prompt}
         </p>
+        {run.documents && run.documents.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+            <span className="text-sm text-ink-2">Worked from:</span>
+            <DocumentList documents={run.documents} />
+          </div>
+        )}
         <GuardrailNotice flags={result.guardrails} className="mt-5" />
       </header>
       <div className="mt-10 grid grid-cols-1 gap-12 xl:grid-cols-[minmax(0,1fr)_16rem]">

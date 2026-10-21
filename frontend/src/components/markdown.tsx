@@ -1,15 +1,23 @@
 // The agents' markdown, rendered safely: raw HTML in it is shown as text,
-// figures they marked as assumptions are highlighted, and the agents the Chief
-// of Staff cites ("[finance]") are set as tags in their colours.
+// figures they marked as assumptions are highlighted, and what the agents cite
+// in square brackets is set as tags: an agent ("[finance]") in its colour, a
+// passage of the founder's documents ("[D1 · page 3]") or a whole one ("[R1]")
+// naming it, several at once ("[D1 · page 3; finance]") side by side.
 
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import { type DocumentRef, useDocumentNames } from "@/components/documents";
 import { Passage, usePassages } from "@/components/reports/passages";
 import { AGENTS, type AgentKey } from "@/lib/agents";
 
 const ASSUMPTION = /\((?:assumption|assumed|estimate|estimated)s?\)/gi;
-const CITATION = /\[(marketing|finance|technical|risk|research|chief(?: of staff)?)\]/gi;
+const CITED = /\[([^[\]\n]{1,240})\]/g;
+const AGENT_CITED = /^(marketing|finance|technical|risk|research|chief(?: of staff)?)$/i;
+const DOCUMENT_CITED = /^([DR]\d{1,2}(?:–[DR]?\d{1,2})?)(?: · (.{1,160}))?$/;
+// Citations side by side: "D1 · page 3; R1", "D1–D3, R1" (a comma only before a document's mark,
+// as one may be inside a place: "sheet Revenue, rows 2–7").
+const SEPARATOR = /;\s*|,\s*(?=[DR]\d)/;
 
 type Node = { type: string; value?: string; depth?: number; children?: Node[]; data?: Record<string, unknown> };
 
@@ -50,8 +58,8 @@ function remarkLabels({ level }: { level: number }) {
 }
 
 // A remark plugin that sets each match of `pattern` in the text as the node
-// `wrap` makes of it.
-function remarkMatches(pattern: RegExp, wrap: (match: RegExpMatchArray) => Node) {
+// `wrap` makes of it, or leaves it as it is when `wrap` makes none.
+function remarkMatches(pattern: RegExp, wrap: (match: RegExpMatchArray) => Node | null) {
   function split(node: Node) {
     if (!node.children) return;
     node.children = node.children.flatMap((child): Node[] => {
@@ -64,7 +72,7 @@ function remarkMatches(pattern: RegExp, wrap: (match: RegExpMatchArray) => Node)
       for (const match of child.value.matchAll(pattern)) {
         const at = match.index ?? 0;
         if (at > last) parts.push({ type: "text", value: child.value.slice(last, at) });
-        parts.push(wrap(match));
+        parts.push(wrap(match) ?? { type: "text", value: match[0] });
         last = at + match[0].length;
       }
       if (!parts.length) return [child];
@@ -83,14 +91,46 @@ const remarkAssumptions = remarkMatches(ASSUMPTION, (match) => ({
 }));
 
 // "[finance]", as a tag in the agent's colour that names it.
-const remarkCitations = remarkMatches(CITATION, (match) => {
-  const key = (match[1].toLowerCase().startsWith("chief") ? "chief" : match[1].toLowerCase()) as AgentKey;
+function agentTag(cited: string): Node | null {
+  const found = cited.match(AGENT_CITED);
+  if (!found) return null;
+  const key = (found[1].toLowerCase().startsWith("chief") ? "chief" : found[1].toLowerCase()) as AgentKey;
   return {
     type: "citation",
     data: { hName: "span", hProperties: { className: `cite agent-${key}`, title: `From ${AGENTS[key].name}` } },
     children: [{ type: "text", value: AGENTS[key].short }],
   };
-});
+}
+
+// "[D1 · page 3]", as a tag: the document's mark, then where in it; its name on hover.
+function documentTag(cited: string, names: DocumentRef[]): Node | null {
+  const found = cited.match(DOCUMENT_CITED);
+  if (!found) return null;
+  const [, ref, where] = found;
+  const name = names.find((document) => document.ref === ref)?.name ?? `Document ${ref}`;
+  return {
+    type: "documentMark",
+    data: { hName: "span", hProperties: { className: "doc-cite", title: where ? `${name}, ${where}` : name } },
+    children: [
+      { type: "ref", data: { hName: "b" }, children: [{ type: "text", value: ref }] },
+      ...(where ? [{ type: "text", value: where }] : []),
+    ],
+  };
+}
+
+// What the agents cite, as tags; brackets holding nothing they cite stay as written.
+function remarkCitations({ names }: { names: DocumentRef[] }) {
+  return remarkMatches(CITED, (match) => {
+    const parts = match[1].split(SEPARATOR).map((part) => part.trim());
+    const tags = parts.map((part) => agentTag(part) ?? documentTag(part, names));
+    if (!tags.some(Boolean)) return null;
+    return {
+      type: "citations",
+      data: { hName: "span" },
+      children: tags.map((tag, index) => tag ?? { type: "text", value: ` ${parts[index]} ` }),
+    };
+  })();
+}
 
 type Positioned = { position?: { start: { offset?: number }; end: { offset?: number } } };
 
@@ -122,10 +162,12 @@ export function Markdown({
   path?: string;
 }) {
   const passages = usePassages();
+  const names = useDocumentNames();
   const level = labels === true ? 3 : labels;
+  const citations: [typeof remarkCitations, { names: DocumentRef[] }] = [remarkCitations, { names }];
   const plugins: Options["remarkPlugins"] = level
-    ? [remarkGfm, [remarkLabels, { level }], remarkAssumptions, remarkCitations]
-    : [remarkGfm, remarkAssumptions, remarkCitations];
+    ? [remarkGfm, [remarkLabels, { level }], remarkAssumptions, citations]
+    : [remarkGfm, remarkAssumptions, citations];
   const components: Components | undefined =
     path && passages
       ? {

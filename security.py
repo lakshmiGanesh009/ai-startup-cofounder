@@ -6,7 +6,8 @@ reaches a route, in this order:
   Next.js app's server adds it to the browser's calls it forwards, so the key
   never reaches a browser.
 - Size: a body over MAX_REQUEST_BYTES is refused (413), whether it says how
-  long it is or not.
+  long it is or not; an uploaded file (POST /uploads) may be up to the
+  upload limit instead.
 - Rate: each caller may send REQUESTS_PER_MINUTE requests a minute and start
   RUNS_PER_HOUR runs (evaluations, briefs and proposals) an hour (429, with
   Retry-After). A caller is its address or, behind the app's proxy, the browser
@@ -34,8 +35,10 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 OPEN_PATHS = frozenset({"/health"})
 # The requests that start a run: an evaluation, a brief, a proposal written or
-# revised, or one passage of a report revised.
-RUN_PATH = re.compile(r"/(evaluate(/stream)?|brief/prepare|reports/[^/]+/(proposal(/revise)?|revise))")
+# revised, one passage of a report revised, or a question about documents.
+RUN_PATH = re.compile(r"/(evaluate(/stream)?|brief/prepare|ask|reports/[^/]+/(proposal(/revise)?|revise))")
+# Where a file is uploaded: its body may be as large as the upload limit.
+UPLOAD_PATH = "/uploads"
 
 Reason = Literal["key", "size", "rate", "busy"]
 
@@ -153,9 +156,11 @@ class Guard:
     """The key and the limits the API enforces; the middleware reads them on
     every request."""
 
-    def __init__(self, api_key: str, max_bytes: int, requests_per_minute: int, runs_per_hour: int, max_runs: int):
+    def __init__(self, api_key: str, max_bytes: int, requests_per_minute: int, runs_per_hour: int, max_runs: int,
+                 upload_bytes: int = 0):
         self.api_key = api_key
         self.max_bytes = max_bytes
+        self.upload_bytes = max(upload_bytes, max_bytes)
         self.requests = RateLimiter(requests_per_minute, 60)
         self.runs_rate = RateLimiter(runs_per_hour, 3600)
         self.slots = RunSlots(max_runs)
@@ -183,10 +188,11 @@ class GuardMiddleware:
                           [(b"www-authenticate", b'Bearer realm="cofounder"')])
             return
 
+        most = guard.upload_bytes if method == "POST" and path == UPLOAD_PATH else guard.max_bytes
         length = _header(scope, b"content-length")
-        if length.isdigit() and int(length) > guard.max_bytes:
+        if length.isdigit() and int(length) > most:
             self.on_refuse("size")
-            await _refuse(send, 413, _too_large(guard.max_bytes))
+            await _refuse(send, 413, _too_large(most))
             return
 
         caller = _caller(scope, keyed)
@@ -210,13 +216,13 @@ class GuardMiddleware:
                           [(b"retry-after", str(max(1, round(wait))).encode())])
             return
         try:
-            await self._pass(scope, receive, send)
+            await self._pass(scope, receive, send, most)
         finally:
             if run:
                 guard.slots.give_back()
 
-    async def _pass(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """Hand the request on. A body that outgrows the limit as it is read
+    async def _pass(self, scope: Scope, receive: Receive, send: Send, most: int) -> None:
+        """Hand the request on. A body that outgrows `most` bytes as it is read
         (one that did not say its size) is answered 413 there and then, and the
         app is told the client has gone; its own answer is dropped."""
         read = 0
@@ -227,11 +233,11 @@ class GuardMiddleware:
             message = await receive()
             if message["type"] == "http.request" and not refused:
                 read += len(message.get("body", b""))
-                if read > self.guard.max_bytes:
+                if read > most:
                     refused = True
                     if not responded:
                         self.on_refuse("size")
-                        await _refuse(send, 413, _too_large(self.guard.max_bytes))
+                        await _refuse(send, 413, _too_large(most))
                     return {"type": "http.disconnect"}
             return message
 

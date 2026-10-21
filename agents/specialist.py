@@ -24,7 +24,8 @@ def _build_prompt(role: Role, state: WorkflowState) -> list:
     request = state["request"]
     venture = state.get("venture") or request
     task = state.get("assignments", {}).get(role.name)
-    context_text = context_for_prompt(state.get("context"))
+    # Of the founder's documents, the passages on this specialist's own work.
+    context_text = context_for_prompt(state.get("context"), f"{task or ''} {role.title} {request}")
 
     human = f"Startup request:\n{fence(venture, 'founder')}"
     if venture != request:

@@ -135,7 +135,7 @@ def _founder_brief(state: WorkflowState) -> str:
     brief = f"Founder request:\n{fence(venture, 'founder')}"
     if state["request"] != venture:
         brief += f"\n\nFollow-up request:\n{fence(state['request'], 'founder')}"
-    context_text = context_for_prompt(state.get("context"))
+    context_text = context_for_prompt(state.get("context"), f"{venture} {state['request']}")
     if context_text:
         brief += f"\n\nWhat the founder told us:\n{context_text}"
     return brief
@@ -143,7 +143,7 @@ def _founder_brief(state: WorkflowState) -> str:
 
 def _build_prompt(state: WorkflowState, prior: dict[str, str], venture: str) -> list:
     request = state["request"]
-    context_text = context_for_prompt(state.get("context"))
+    context_text = context_for_prompt(state.get("context"), f"{venture} {request}")
 
     if prior:
         human = f"Original request:\n{fence(venture, 'founder')}\n\nFollow-up request:\n{fence(request, 'founder')}"

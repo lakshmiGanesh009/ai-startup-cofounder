@@ -164,12 +164,17 @@ def log_flags(flags: list[Flag]) -> list[Flag]:
     return flags
 
 
-def context_for_prompt(context) -> str:
+def context_for_prompt(context, focus: str = "") -> str:
     """A request's context as a model reads it: the founder's details and
-    answers, and the facts kept from the web, each fenced as theirs."""
+    answers, and the facts kept from the web, each fenced as theirs; and the
+    passages of the founder's documents that bear on `focus` (the agent's own
+    work), fenced and marked to cite (library.py)."""
     if context is None:
         return ""
+    from library import for_prompt  # library reads the reports, which read the agents' modules
+
     founder = type(context)(**context.model_dump(exclude={"research"})).as_prompt()
     web = context.research.as_prompt() if context.research else ""
-    parts = [fence(founder, "founder") if founder else "", fence(web, "web research") if web else ""]
+    documents = for_prompt(context.uploads, context.reports, focus)
+    parts = [fence(founder, "founder") if founder else "", fence(web, "web research") if web else "", documents]
     return "\n\n".join(part for part in parts if part)

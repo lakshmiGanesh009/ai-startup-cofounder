@@ -271,6 +271,38 @@
   background: var(--agent);
 }
 
+/* A passage of the founder's documents an agent cites, "[D1 · page 3]": the
+   document's mark, then where in it. */
+.doc-cite {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4em;
+  max-width: 100%;
+  margin-inline: 0.08em;
+  padding: 0.12em 0.5em 0.12em 0.2em;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0.35em;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  font-size: 0.7em;
+  font-style: normal;
+  line-height: 1.3;
+  vertical-align: 0.12em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-cite b {
+  padding: 0 0.3em;
+  border-radius: 0.2em;
+  background: var(--sunken);
+  color: var(--ink-2);
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
 @theme inline {
   --color-paper: var(--paper);
   --color-surface: var(--surface);

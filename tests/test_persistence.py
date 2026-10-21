@@ -63,9 +63,10 @@ def test_the_tables_are_made_once_and_the_url_never_reaches_the_logs():
     lifetime(migrate_again)
 
     with psycopg.connect(URL) as conn:
-        assert conn.execute("SELECT version FROM cofounder_migrations ORDER BY version").fetchall() == [(0,), (1,)]
+        assert conn.execute("SELECT version FROM cofounder_migrations ORDER BY version").fetchall() == [
+            (0,), (1,), (2,)]
         tables = {row[0] for row in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
-    assert {"reports", "report_versions", "monitor_runs", "monitor_events", "checkpoints"} <= tables
+    assert {"reports", "report_versions", "uploads", "monitor_runs", "monitor_events", "checkpoints"} <= tables
     assert persistence.where("postgresql://me:secret@db.example:6543/cofounder") == "db.example:6543/cofounder"
 
 
@@ -137,6 +138,27 @@ def test_a_reports_earlier_versions_survive_a_restart_and_only_the_latest_are_ke
                         (4, "Edited the team's report", False), (3, "Edited the team's report", False)]
     assert fourth == "Edit 2."
     assert (restored.version, restored.change, restored.sections[0].body) == (7, "Restored version 4", "Edit 2.")
+
+
+def test_uploads_survive_a_restart_and_only_the_newest_are_kept(monkeypatch):
+    from extract import Extracted, Passage
+    from library import UploadStore
+
+    monkeypatch.setattr(persistence, "KEEP_UPLOADS", 2)
+    document = Extracted(kind="PDF", parts="2 pages", passages=[Passage(where="page 2", text="Churn is 4% a month.")])
+
+    async def add(storage):
+        kept = UploadStore(storage.uploads)
+        return [await asyncio.to_thread(kept.add, f"plan-{n}.pdf", 100, document) for n in range(3)]
+
+    added = lifetime(add)
+
+    async def read(storage):
+        return [storage.uploads.get(upload.id) for upload in added]
+
+    first, second, third = lifetime(read)
+    assert first is None  # the oldest was let go
+    assert (second.name, third.document.passages[0].where) == ("plan-1.pdf", "page 2")
 
 
 def test_the_monitors_history_is_kept_trimmed_and_read_back(monkeypatch):

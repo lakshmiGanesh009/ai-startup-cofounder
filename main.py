@@ -11,18 +11,20 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi import Path as InPath
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from langchain_core.messages import HumanMessage, SystemMessage
 from prometheus_client.exposition import choose_encoder
 from pydantic import BaseModel, Field, field_validator
 
 import brief as brief_module
 import deep_research
-from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS
+from agents.chief_of_staff import APPROVAL_SCORE, STRATEGY_WORDS, structured_invoke
 import document
+import library
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, revise_text, write_proposal
 from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
 from brief import PreparedBrief, Template, load_templates, prepare_brief
@@ -39,7 +41,10 @@ from config import (
     REQUESTS_PER_MINUTE,
     RUNS_PER_HOUR,
 )
+from extract import MAX_BYTES as MAX_UPLOAD_BYTES
+from extract import Unreadable, extract
 from graph import SERDE, build_graph
+from library import Answer, Answered, UploadNotFound, UploadSummary, summary_of, uploads
 from llm import (
     CHIEF,
     EFFORTS,
@@ -52,6 +57,7 @@ from llm import (
     reasoning,
     takes_reasoning_effort,
 )
+from metrics import track
 from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, Run, monitor
 from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session, configure_logging
 from persistence import open_storage
@@ -94,10 +100,11 @@ logger = logging.getLogger(__name__)
 # The monitor's log gets the app's warnings and errors, and the model client's retries.
 logging.getLogger().addHandler(MonitorHandler(monitor))
 
-# Sessions, reports and the Monitor's history: in PostgreSQL when DATABASE_URL
-# is set, so they survive a restart, else in memory.
+# Sessions, reports, uploads and the Monitor's history: in PostgreSQL when
+# DATABASE_URL is set, so they survive a restart, else in memory.
 storage = open_storage(DATABASE_URL, SERDE)
 store.use(storage.reports)
+uploads.use(storage.uploads)
 monitor.attach(storage.archive)
 # In memory until the storage opens: PostgreSQL's saver belongs to the event
 # loop that serves the requests, so the lifespan builds the graph on it.
@@ -128,7 +135,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 # The key, the size, the rates and the runs, checked before a route (security.py).
-guard = Guard(API_KEY, MAX_REQUEST_BYTES, REQUESTS_PER_MINUTE, RUNS_PER_HOUR, MAX_CONCURRENT_RUNS)
+guard = Guard(API_KEY, MAX_REQUEST_BYTES, REQUESTS_PER_MINUTE, RUNS_PER_HOUR, MAX_CONCURRENT_RUNS, MAX_UPLOAD_BYTES)
 app.add_middleware(GuardMiddleware, guard=guard, on_refuse=monitor.refused)
 # Each request gets an ID, an access log line and its place in the metrics,
 # refusals included.
@@ -328,6 +335,7 @@ async def prepare(request: PrepareRequest):
         template = next((each for each in load_templates() if each.name == request.template), None)
         if template is None:
             raise HTTPException(status_code=422, detail=f"There is no template called {request.template!r}.")
+    await run_in_threadpool(_documents_found, request.context)
     started = time.perf_counter()
     try:
         with reasoning(**_efforts(request.reasoning)):
@@ -353,6 +361,18 @@ async def prepare(request: PrepareRequest):
     return prepared
 
 
+def _documents_found(context: RequestContext | None, upload_ids: list[str] = (), report_ids: list[str] = ()) -> None:
+    """A 404 for a document a request names that is not there, before anything runs."""
+    upload_ids = [*upload_ids, *(context.uploads if context else [])]
+    report_ids = [*report_ids, *(context.reports if context else [])]
+    try:
+        library.sources(upload_ids, report_ids)
+    except UploadNotFound as error:
+        raise HTTPException(status_code=404, detail="One of the files is no longer kept; upload it again.") from error
+    except ReportNotFound as error:
+        raise HTTPException(status_code=404, detail="One of the earlier reports is not there.") from error
+
+
 def _start(request: EvaluateRequest) -> tuple[str, dict, dict, list[Flag]]:
     """The session, the graph's input and its config for one request, and what
     in the request tried to instruct the agents (guardrails.py)."""
@@ -372,7 +392,8 @@ def _start(request: EvaluateRequest) -> tuple[str, dict, dict, list[Flag]]:
 
 async def _finish(session_id: str, result: dict, flags: list[Flag]) -> EvaluateResponse:
     """Record the session's report and answer with its results."""
-    await run_in_threadpool(store.record, session_id, SessionResults.from_state(result))
+    # In a worker thread: the results name the founder's documents, read from the database.
+    await run_in_threadpool(lambda: store.record(session_id, SessionResults.from_state(result)))
     deep = result.get("deep_research")
     return EvaluateResponse(
         session_id=session_id,
@@ -423,8 +444,10 @@ async def evaluate(request: EvaluateRequest):
     """Run the founding team against a startup request and return the analyses.
 
     Missing credentials return 503. An LLM call that still fails after its
-    retries returns 502, so a provider problem never shows up as a 500.
+    retries returns 502, so a provider problem never shows up as a 500. A file
+    or earlier report in the context that is not there returns 404.
     """
+    await run_in_threadpool(_documents_found, request.context)
     session_id, state, config, flags = _start(request)
     started = time.perf_counter()
     monitor.begin()
@@ -465,6 +488,7 @@ async def evaluate_stream(request: EvaluateRequest):
     event (`status` 503 or 502, as /evaluate would answer, and `detail`), since
     the response has already begun.
     """
+    await run_in_threadpool(_documents_found, request.context)
     session_id, state, config, flags = _start(request)
 
     async def events():
@@ -906,6 +930,94 @@ async def preview_report(session_id: SessionId, content: ReportContent):
     pdf = await run_in_threadpool(render_pdf, report.model_copy(update=dict(content)))
     return Response(pdf, media_type="application/pdf",
                     headers={"Content-Disposition": 'inline; filename="preview.pdf"'})
+
+
+# ---- The founder's documents (library.py, extract.py) ----
+
+class UploadResult(BaseModel):
+    upload: UploadSummary
+    guardrails: list[Flag] = Field(
+        default_factory=list,
+        description="Text in the file that tried to instruct the agents: cut out of what they read.",
+    )
+
+
+@app.post("/uploads", response_model=UploadResult, status_code=201)
+async def upload_file(
+    request: Request,
+    name: Annotated[str, Query(min_length=1, max_length=255, description="The file's name, with its extension.")],
+):
+    """Upload a file for the team to work from: its bytes as the body, up to
+    10 MB. PDF, Word, PowerPoint, Excel, OpenDocument, CSV, RTF, HTML, Markdown
+    or text, told from the content. Only its text is kept, as passages with
+    where each is. Returns its id, to name in a request's `context.uploads` or
+    a question's `uploads`, and what was read. A file that cannot be read
+    returns 422 with why."""
+    data = await request.body()
+    try:
+        read = await run_in_threadpool(extract, name, data)
+    except Unreadable as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    upload = await run_in_threadpool(uploads.add, name, len(data), read)
+    text = "\n\n".join(passage.text for passage in read.passages)
+    flags = log_flags(scan(text, f"your file {upload.name}"))
+    monitor.event("document", "uploads", f"Read {upload.name}: {read.kind}, {read.parts}.")
+    return UploadResult(upload=summary_of(upload), guardrails=flags)
+
+
+@app.get("/uploads/{upload_id}", response_model=UploadSummary)
+def get_upload(upload_id: Annotated[str, InPath(pattern=library.UPLOAD_ID)]):
+    """What was read of an uploaded file."""
+    try:
+        return summary_of(uploads.get(upload_id))
+    except UploadNotFound as error:
+        raise HTTPException(status_code=404, detail="This file is no longer kept; upload it again.") from error
+
+
+class Question(BaseModel):
+    question: str = Field(min_length=1, max_length=MAX_FIELD_CHARS)
+    uploads: list[Annotated[str, Field(pattern=library.UPLOAD_ID)]] = Field(default_factory=list, max_length=5)
+    reports: list[Annotated[str, Field(pattern=SESSION_ID)]] = Field(default_factory=list, max_length=5)
+    reasoning: Reasoning | None = None
+
+
+class AskResult(Answered):
+    guardrails: list[Flag] = Field(default_factory=list)
+
+
+def _ask(system: str, human: str) -> Answer:
+    with track("ask", {}) as tracker:
+        return structured_invoke(Answer, [SystemMessage(system), HumanMessage(human)], tracker, CHIEF)
+
+
+@app.post("/ask", response_model=AskResult)
+async def ask(question: Question):
+    """Ask the Chief of Staff a question about uploaded files and reports from
+    this app. It answers from their passages alone, citing each one it uses
+    ([D1 · page 3], [R1 · Launch Strategy]), and says what they do not cover.
+    About 10-20 s at the default efforts."""
+    if not question.uploads and not question.reports:
+        raise HTTPException(status_code=422, detail="Name at least one file or report to ask about.")
+    await run_in_threadpool(_documents_found, None, question.uploads, question.reports)
+    flags = log_flags(scan(question.question, "your question"))
+    started = time.perf_counter()
+    with reasoning(**_efforts(question.reasoning)):
+        try:
+            answered = await run_in_threadpool(
+                library.answer, question.question.strip(), question.uploads, question.reports, _ask
+            )
+        except LLMNotConfigured as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
+        except LLM_ERRORS as error:
+            monitor.event("error", "ask", f"Answering a question failed: {error}")
+            raise HTTPException(status_code=502, detail=failure(error)) from error
+    count = len(question.uploads) + len(question.reports)
+    monitor.event(
+        "document", "ask",
+        f"Answered a question about {count} document{'s' if count != 1 else ''} in "
+        f"{time.perf_counter() - started:.0f} s, citing {len(answered.sources)} passages.",
+    )
+    return AskResult(**answered.model_dump(), guardrails=flags)
 
 
 if __name__ == "__main__":

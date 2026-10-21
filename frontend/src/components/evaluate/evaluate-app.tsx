@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { ActivityLog } from "@/components/evaluate/activity-log";
 import { BriefReview } from "@/components/evaluate/brief-review";
+import { DocumentNamesProvider, type DocumentRef } from "@/components/documents";
 import { Composer, type Submission } from "@/components/evaluate/composer";
 import { type Brief, ResultView, type Run } from "@/components/evaluate/result-view";
 import { TeamProgress } from "@/components/evaluate/team-progress";
@@ -126,7 +127,7 @@ function Session() {
   const index = shown === null ? runs.length - 1 : Math.min(shown, runs.length - 1);
   const wait = evaluationWait(reasoning);
 
-  async function send(prompt: string, context: RequestContext, brief?: Brief, deep = false) {
+  async function send(prompt: string, context: RequestContext, brief?: Brief, deep = false, documents: DocumentRef[] = []) {
     setError(null);
     setPending({ prompt, steps: [] });
     let seconds: number | undefined;
@@ -144,7 +145,10 @@ function Session() {
           setPending((current) => current && { ...current, steps: [...current.steps, step] });
         },
       );
-      setRuns((current) => [...current, { prompt, result, seconds, ...(brief ? { brief } : {}) }]);
+      setRuns((current) => [
+        ...current,
+        { prompt, result, seconds, ...(brief ? { brief } : {}), ...(documents.length ? { documents } : {}) },
+      ]);
       setShown(null);
       return true;
     } catch (reason) {
@@ -157,7 +161,7 @@ function Session() {
 
   async function begin(submission: Submission) {
     if (!submission.prepare) {
-      await send(submission.prompt, submission.context, undefined, submission.deep);
+      await send(submission.prompt, submission.context, undefined, submission.deep, submission.documents);
       return;
     }
     setError(null);
@@ -245,6 +249,7 @@ function Session() {
         <div className="mt-10">
           <BriefReview
             prompt={preparing.submission.prompt}
+            documents={preparing.submission.documents}
             prepared={preparing.prepared}
             wait={wait}
             onBack={() => setPreparing(null)}
@@ -256,7 +261,7 @@ function Session() {
                 ...(answers.length ? { answers } : {}),
                 ...(research ? { research } : {}),
               };
-              void send(submission.prompt, context, { answers, research }, submission.deep);
+              void send(submission.prompt, context, { answers, research }, submission.deep, submission.documents);
             }}
           />
         </div>
@@ -285,7 +290,10 @@ function Session() {
 
       {runs[index] && (
         <div className="mt-10">
-          <ResultView run={runs[index]} number={index + 1} />
+          {/* The session's documents: a follow-up works from the first request's. */}
+          <DocumentNamesProvider value={runs[index].documents ?? runs[0].documents ?? []}>
+            <ResultView run={runs[index]} number={index + 1} />
+          </DocumentNamesProvider>
         </div>
       )}
 

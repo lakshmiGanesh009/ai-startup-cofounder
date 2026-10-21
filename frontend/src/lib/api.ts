@@ -61,6 +61,10 @@ export type RequestContext = {
   target_market?: string | null;
   constraints?: string | null;
   competitive_landscape?: string | null;
+  // The founder's documents, by id: files uploaded (uploadFile) and earlier
+  // reports (their session ids). Each agent reads the passages on its work.
+  uploads?: string[];
+  reports?: string[];
   // Set once the brief is prepared: they reach every agent.
   answers?: Answer[];
   research?: Research | null;
@@ -175,6 +179,8 @@ export class ApiError extends Error {
     message: string,
     readonly status: number | null = null,
     readonly requestId: string | null = null,
+    // What the API said was wrong, on its own: "The file is empty."
+    readonly detail: string = message,
   ) {
     super(requestId ? `${message} (request ${requestId})` : message);
     this.name = "ApiError";
@@ -182,10 +188,12 @@ export class ApiError extends Error {
 }
 
 async function failure(response: Response): Promise<ApiError> {
+  const detail = await errorMessage(response);
   return new ApiError(
-    `The backend returned ${response.status}: ${await errorMessage(response)}`,
+    `The backend returned ${response.status}: ${detail}`,
     response.status,
     response.headers.get("X-Request-ID"),
+    detail,
   );
 }
 
@@ -346,7 +354,7 @@ export type Pipeline = {
 
 export type MonitorEvent = {
   at: string;
-  kind: "start" | "done" | "run" | "brief" | "proposal" | "warning" | "error" | "system";
+  kind: "start" | "done" | "run" | "brief" | "proposal" | "document" | "warning" | "error" | "system";
   source: string;
   message: string;
   session: string | null;
@@ -564,6 +572,8 @@ export type Report = {
   settings: DocumentSettings;
   // How this version came about, for the history.
   change: string | null;
+  // The founder's documents its run worked from, by id.
+  worked_from?: WorkedFrom;
   edited: boolean;
   outdated: boolean;
   updated_at: string;
@@ -571,6 +581,8 @@ export type Report = {
   // Where the proposal's figures disagree, worked out by the API.
   checks: string[];
 };
+
+export type WorkedFrom = { uploads: string[]; reports: string[] };
 
 export type ProposalResult = { report: Report; failed: string[]; guardrails?: GuardrailFlag[] };
 
@@ -724,4 +736,52 @@ export async function reportPdf(sessionId: string, content?: ReportContent): Pro
   }
   if (!response.ok) throw await failure(response);
   return response.blob();
+}
+
+// ---- The founder's documents (library.py, extract.py) ----
+
+// What was read of an uploaded file: only its text is kept, as passages.
+export type UploadSummary = {
+  id: string;
+  name: string;
+  kind: string;
+  parts: string;
+  size: number;
+  characters: number;
+  warnings: string[];
+  preview: string;
+};
+
+export type UploadResult = { upload: UploadSummary; guardrails?: GuardrailFlag[] };
+
+// The formats the API reads, told from the content; for the file picker.
+export const UPLOAD_TYPES =
+  ".pdf,.docx,.pptx,.xlsx,.odt,.ods,.odp,.csv,.tsv,.rtf,.html,.htm,.md,.markdown,.txt";
+export const MAX_UPLOAD_BYTES = 10_000_000;
+
+export function uploadFile(file: File): Promise<UploadResult> {
+  return request(`/uploads?name=${encodeURIComponent(file.name)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/octet-stream" },
+    body: file,
+  });
+}
+
+export function getUpload(id: string): Promise<UploadSummary> {
+  return request(`/uploads/${encodeURIComponent(id)}`);
+}
+
+// A passage an answer cites, by its mark: "[D1 · page 3]", "[R1 · Launch Strategy]".
+export type Cited = { mark: string; name: string; where: string; text: string };
+
+export type AskResult = { answer: string; sources: Cited[]; guardrails?: GuardrailFlag[] };
+
+// The Chief of Staff answers from the documents' passages alone: about 10-20 s.
+export function ask(
+  question: string,
+  uploads: string[],
+  reports: string[],
+  reasoning: Reasoning | null = null,
+): Promise<AskResult> {
+  return send("POST", "/ask", { question, uploads, reports, reasoning });
 }

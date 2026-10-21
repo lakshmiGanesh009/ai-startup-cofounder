@@ -42,7 +42,7 @@ MAX_SAMPLES = 200
 HEALTH_MINUTES = 15
 MAX_PROBLEMS = 1000
 
-EventKind = Literal["start", "done", "run", "brief", "proposal", "warning", "error", "system"]
+EventKind = Literal["start", "done", "run", "brief", "proposal", "document", "warning", "error", "system"]
 
 # Buckets for the time histograms, in seconds: requests run from milliseconds
 # to the ten minutes an evaluation can take at high reasoning.

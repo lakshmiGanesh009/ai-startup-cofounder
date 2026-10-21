@@ -29,6 +29,7 @@ from state import DeepResearch, Research, Resolution
 STRATEGY = "strategy"
 DECISIONS = "decisions"
 RESEARCH = "research"
+DOCUMENTS = "documents"
 
 
 class ReportSection(BaseModel):
@@ -62,6 +63,13 @@ class DocumentSettings(BaseModel):
         return code
 
 
+class WorkedFrom(BaseModel):
+    """The founder's documents a run worked from, by id."""
+
+    uploads: list[str] = Field(default_factory=list, description="Files the founder uploaded.")
+    reports: list[str] = Field(default_factory=list, description="Earlier reports, by session id.")
+
+
 class SessionResults(BaseModel):
     """What a session's latest evaluation produced; reports are built from it."""
 
@@ -73,11 +81,22 @@ class SessionResults(BaseModel):
     resolutions: list[Resolution]
     research: Research | None = None
     deep: DeepResearch | None = None
+    # The founder's documents the team worked from, a line each ("D1: plan.pdf (PDF, 12 pages)").
+    documents: list[str] = []
+    worked_from: WorkedFrom = Field(default_factory=WorkedFrom)
 
     @classmethod
     def from_state(cls, state: dict) -> "SessionResults":
+        from library import describe, sources  # library reads this module's store
+
         context = state.get("context")
+        try:
+            documents = describe(sources(context.uploads, context.reports)) if context else []
+        except KeyError:
+            documents = []
         return cls(
+            documents=documents,
+            worked_from=WorkedFrom(uploads=context.uploads, reports=context.reports) if documents else WorkedFrom(),
             venture=state.get("venture") or state["request"],
             objective=state["plan"].objective,
             context=context.as_prompt() if context else "",
@@ -103,6 +122,7 @@ class Report(BaseModel):
     settings: DocumentSettings = Field(default_factory=DocumentSettings)
     # How this version came about, for the report's history.
     change: str | None = None
+    worked_from: WorkedFrom = Field(default_factory=WorkedFrom)
     edited: bool = False
     # Newer results arrived after the report was edited or got its proposal, so
     # they were not applied; resetting the report applies them.
@@ -223,6 +243,12 @@ def build_sections(results: SessionResults) -> list[ReportSection]:
                 body=decisions_markdown(results.resolutions),
             )
         )
+    if results.documents:
+        sections.append(ReportSection(
+            key=DOCUMENTS, title="The Founder's Documents",
+            body="The team worked from these, citing them by their marks ([D1 · page 3]):\n\n"
+                 + "\n".join(f"- {line}" for line in results.documents),
+        ))
     deep = results.deep if results.deep and (results.deep.areas or results.deep.companies) else None
     if deep or (results.research and results.research.findings):
         sections.append(
@@ -315,6 +341,7 @@ def _from_results(session_id: str, results: SessionResults, previous: Report | N
         objective=results.objective,
         context=results.context,
         sections=build_sections(results),
+        worked_from=results.worked_from,
         version=previous.version + 1 if previous else 1,
         updated_at=_now(),
     )

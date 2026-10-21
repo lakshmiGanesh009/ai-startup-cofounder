@@ -167,6 +167,17 @@ def label(report: Report, path: str) -> str:
     return " · ".join(words)
 
 
+def texts(report: Report) -> list[tuple[str, str]]:
+    """Every text of a report, with where it is for a person: its title and
+    objective, the team's sections and the proposal's prose."""
+    return [
+        (label(report, path), value)
+        for path, value in _content(report).items()
+        if isinstance(value, str) and value.strip() and not path.startswith("settings.")
+        and (not path.startswith("proposal.") or len(value) > 40)
+    ]
+
+
 def changes(before: Report, after: Report) -> list[FieldChange]:
     """What differs between two versions of a report, field by field."""
     old, new = _content(before), _content(after)

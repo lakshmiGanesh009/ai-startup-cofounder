@@ -7,10 +7,12 @@
 // Each paragraph can be revised or removed on its own. "Open PDF" shows the
 // document in the studio, beside its tools: the team's revisions, the
 // settings (currency, units), find and replace, redaction and the history.
-// Every change is shown as a draft before it is saved.
+// Every change is shown as a draft before it is saved. "Ask about it" puts
+// questions to the report, the files its run worked from and any others.
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 
+import { AskPanel } from "@/components/reports/ask-panel";
 import { EditForm } from "@/components/reports/edit-form";
 import { type PassageAction, PassageContext } from "@/components/reports/passages";
 import { PdfPanel, type Tool } from "@/components/reports/pdf-panel";
@@ -29,7 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Label, Select } from "@/components/ui/field";
-import { ArrowRightIcon, DocumentIcon, PencilIcon, RefreshIcon, UndoIcon } from "@/components/ui/icons";
+import { ArrowRightIcon, DocumentIcon, PencilIcon, QuestionIcon, RefreshIcon, UndoIcon } from "@/components/ui/icons";
 import { Menu } from "@/components/ui/menu";
 import { Notice, type Tone } from "@/components/ui/notice";
 import { PageHeader, titleSize } from "@/components/ui/page-header";
@@ -257,6 +259,7 @@ function Reports() {
   const [writing, setWriting] = useState(false);
   const [confirm, setConfirm] = useState<"rewrite" | "reset" | null>(null);
   const [studio, setStudio] = useState<Studio | null>(null);
+  const [asking, setAsking] = useState(false);
   // A passage being revised by its writer, while the team works on it.
   const [revisingPassage, setRevisingPassage] = useState(false);
   const [currency, setCurrency] = useState<string | null>(null);
@@ -384,6 +387,7 @@ function Reports() {
           setSelected(event.target.value);
           setMessage(null);
           setStudio(null);
+          setAsking(false);
         }}
       >
         {summaries.map((summary) => (
@@ -443,6 +447,10 @@ function Reports() {
           )}
           <Button onClick={() => open("settings")} disabled={writing}>
             Currency, units and text
+          </Button>
+          <Button onClick={() => setAsking(true)}>
+            <QuestionIcon />
+            Ask about it
           </Button>
           <Button variant="quiet" onClick={() => open("history")} disabled={writing}>
             History
@@ -616,6 +624,15 @@ function Reports() {
               onChanged={(revised) => (revised ? setReport(revised) : load(report.session_id))}
             />
           )}
+        </Dialog>
+
+        <Dialog
+          open={asking}
+          title="Ask about this report"
+          description="The Chief of Staff answers from the documents alone, and cites each passage it uses."
+          onClose={() => setAsking(false)}
+        >
+          {asking && <AskPanel key={report.session_id} report={report} summaries={summaries} reasoning={reasoning} />}
         </Dialog>
 
         <Dialog

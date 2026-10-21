@@ -217,12 +217,19 @@ class Answer(BaseModel):
 
 class RequestContext(BaseModel):
     """Optional detail that sharpens a founder's request: the target market,
-    constraints and competition, and once the brief is prepared, the founder's
-    answers to the Chief of Staff's questions and the web research."""
+    constraints and competition; the founder's documents (uploads and earlier
+    reports, by id: library.py reads them); and once the brief is prepared, the
+    founder's answers to the Chief of Staff's questions and the web research."""
 
     target_market: str | None = Field(default=None)
     constraints: str | None = Field(default=None)
     competitive_landscape: str | None = Field(default=None)
+    uploads: list[Annotated[str, Field(pattern=r"^[0-9a-f]{32}$")]] = Field(
+        default_factory=list, max_length=5, description="Files the founder uploaded (POST /uploads), by id."
+    )
+    reports: list[Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")]] = Field(
+        default_factory=list, max_length=5, description="Earlier reports from this app to work from, by session id."
+    )
     answers: list[Answer] = Field(default_factory=list)
     research: Research | None = None
 

@@ -31,6 +31,7 @@ from agents.proposal_writer import SCHEMAS as PROPOSAL_SCHEMAS
 from agents.proposal_writer import Rewritten
 from brief import BriefReview, Question, SearchPlan
 from deep_research import Competitor, Competitors
+from library import Answer
 from state import (
     DelegationPlan,
     Finding,
@@ -93,6 +94,8 @@ class FakeModel:
     Staff's reading from `brief_review` (by default two cited facts and one
     question); `brief_prompts` keeps what each call was given. For deep
     research, the Chief of Staff names the `competitors` (by default one).
+    A question about documents is answered with `answer`, and its prompt kept
+    in `answer_prompts`.
 
     `synthesis_calls` and `specialist_calls` record how often each ran, `fail`
     names specialists whose call raises, and `delay` makes every call take that
@@ -131,6 +134,8 @@ class FakeModel:
         )
         self.brief_prompts: list[tuple[str, str]] = []
         self.competitors = Competitors(companies=[Competitor(name="Klara", what="patient messaging for clinics")])
+        self.answer = Answer(answer="Churn is 4% a month [D1 · page 2].", cited=["[D1 · page 2]"])
+        self.answer_prompts: list[str] = []
 
     def _plan_for(self, prompt: str) -> DelegationPlan:
         return self.plan
@@ -146,6 +151,10 @@ class FakeModel:
     def _competitors_for(self, prompt: str) -> Competitors:
         self.brief_prompts.append(("competitors", prompt))
         return self.competitors
+
+    def _answer_for(self, prompt: str) -> Answer:
+        self.answer_prompts.append(prompt)
+        return self.answer
 
     def _review_for(self, report: str) -> ReviewResult:
         # The verdict depends on the report text in the prompt, so a report can be
@@ -202,6 +211,7 @@ class FakeModel:
             BriefReview: self._brief_review_for,
             Competitors: self._competitors_for,
             Rewritten: self._rewritten_for,
+            Answer: self._answer_for,
             **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)

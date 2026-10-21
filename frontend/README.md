@@ -22,7 +22,7 @@ An option beside the local run. `Dockerfile` builds Next.js's standalone server 
 
 ## Security
 
-- **The proxy** (`src/app/api/[...path]/route.ts`) forwards only the API routes the pages use, caps a body at `MAX_REQUEST_BYTES` (1,000,000) before holding it, sends the browser's address on for the API's per-caller limits, and passes back only what a page needs (the type, the file name, the request ID, `Retry-After`), streaming an evaluation's events as they come. An API it cannot reach is a 502 that says so.
+- **The proxy** (`src/app/api/[...path]/route.ts`) forwards only the API routes the pages use, caps a body at `MAX_REQUEST_BYTES` (1,000,000), or an uploaded file at `MAX_UPLOAD_BYTES` (10,000,000), before holding it, sends the browser's address on for the API's per-caller limits, and passes back only what a page needs (the type, the file name, the request ID, `Retry-After`), streaming an evaluation's events as they come. An API it cannot reach is a 502 that says so.
 - **Guardrails.** When the API names text that tried to instruct the agents (`guardrails` in its answers; see the root README), a notice says so and where: on the brief's review for a web page, on the result for the brief or the answers, and in the PDF pop-up for a requested change. It was taken out of what the agents read, and the run went on.
 - **Every page** is served with a content security policy (everything from this app; inline scripts for Next and inline styles for the diagrams; eval only in development; the PDF from a blob in a frame; no framing by other sites), `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a strict referrer policy and no camera, microphone or location (`next.config.ts`).
 
@@ -42,6 +42,7 @@ The sidebar shows whether the browser can reach the backend, checking again ever
 ## The Evaluate page
 
 - **What do you need decided?** offers the decision templates the API serves (`GET /templates`): pick one and fill in its few fields, and the page shows the brief they make; or write **your own brief**. **Context** adds the target market, constraints and competition. **Or start from an example** fills both from the scenarios (`GET /scenarios`).
+- **Documents** adds the founder's files and earlier reports (`components/documents.tsx`). **Add files**, or drop them on the box: each is uploaded at once (`POST /uploads`) and shows what was read (its kind and length, any warning, and whether text in it tried to instruct the agents), or why it could not be; a file over 10 MB or a sixth is refused before it is sent. **Add an earlier report** picks one of the app's reports. Each wears the mark the agents cite it by, D1 for the first file and R1 for the first report; the brief waits until every file is read, and sends them in `context.uploads` and `context.reports`. The brief's review, and the result, name them, and each citation in the agents' text (`[D1 · page 3]`) is a tag that names its document on hover.
 - **Check the brief** (or ⌘/Ctrl+Enter) has the Chief of Staff prepare it (`POST /brief/prepare`, about half a minute): it searches the web, with the provider the sidebar's switch names, then shows what it found under **Before the team starts**: the facts, each citing its sources (leave out any that do not fit your case), the sources and searches, and up to three questions about facts only you know, with likely answers to pick or your own words. **Run the team** sends the brief with your answers and the facts you kept. With no research provider set up on the server, the brief is still checked, and the page says research is off. Untick **Research it and check the brief first** to run the team straight away.
 - **Deep research for each specialist** (off by default) researches every assigned specialist's area and profiles up to three competitors before the specialists start, with the sidebar's provider: on Azure OpenAI about half a minute and a few dozen Bing searches, on Tavily a minute or two and about 150–450 credits, as shown beside the switch. The live view shows it as the **Research** stage, and the result's **Research** tab holds each area's report, the competitor profiles, anything Tavily could not research, and every source, numbered as the agents cite them; the summary beside the memo gives the credits it cost.
 - While the team works (about two minutes at the default efforts), the page follows it through the streamed evaluation (`POST /evaluate/stream`): a log of what each agent finished, with the time, a line saying who is working now, and the five stages of the work, with each specialist writing, revising or done. A clock shows the time taken.
@@ -61,6 +62,7 @@ The sidebar shows whether the browser can reach the backend, checking again ever
 - **Open PDF** opens the document studio (`pdf-panel.tsx`): the PDF in the browser's viewer, with its download, beside four tools. **Revise** asks the team to revise one part or the whole proposal; an instruction that asks for a conversion points to Settings. **Settings** converts the currency at a rate you give, or only relabels it, converts measurements to metric or imperial, and sets who the document is from and which of the team's sections it leaves out. **Text** finds and replaces, or redacts. **History** lists every version, to look at and restore. **Revise with the team**, **Currency, units and text** and **History** open it on their tool.
 - **Every change is a draft** (`draft-review.tsx`): what it does, each changed field with the words it removes struck through and those it adds highlighted (`lib/diff.ts`), each amount before and after in its currency, and its PDF beside them, marked "not saved". **Accept and save** saves it as a new version; **Discard** leaves the report as it was.
 - Amounts are shown in the report's currency everywhere: the chapters, the charts and the edit forms' labels (`CurrencyContext` in `lib/proposal.ts`, with the same symbols as the PDF). **Write the investment proposal** can write it in another currency from the start.
+- **Ask about it** opens questions about the report (`components/reports/ask-panel.tsx`): the report, the files its run worked from and its earlier reports start in the list beside, and more files or reports can be added. The Chief of Staff answers from them alone (`POST /ask`), each citation a tag, and the passages it cites are listed under the answer to check.
 - **More actions** holds **Rewrite the proposal** and **Reset to the latest results**, which ask before they replace anything. A change refused because the report changed elsewhere reloads it and says so.
 
 ## The How it works page
@@ -112,6 +114,8 @@ src/components/reports/pdf-panel.tsx       The document studio: the PDF beside t
 src/components/reports/draft-review.tsx    A change before it is saved: its diffs, accept or discard
 src/components/reports/passages.tsx        Revise or remove one paragraph of the report
 src/components/reports/team-report.tsx     The team's report, read or edited
+src/components/reports/ask-panel.tsx       Questions about a report and its documents, answered with sources
+src/components/documents.tsx               The founder's documents: files uploaded, earlier reports, their marks
 src/components/sidebar.tsx                 Pages, backend status and reasoning sliders (a menu on phones)
 src/components/reasoning-sliders.tsx       The two reasoning sliders
 src/components/research-switch.tsx         Where web research runs: Azure OpenAI or Tavily
@@ -124,7 +128,7 @@ src/components/how/monitor-view.tsx        The live dashboard and log
 src/lib/how.ts                             The page's steps, state matrix, judgement points, stack and diagrams
 src/components/backend-status.tsx          Whether the browser can reach the API
 src/components/guardrail-notice.tsx        What tried to instruct the agents, named to the founder
-src/components/markdown.tsx                The agents' markdown: assumptions highlighted, labels as headings
+src/components/markdown.tsx                The agents' markdown: assumptions highlighted, labels as headings, citations as tags
 src/components/ui/                         Buttons, fields, notices, badges, menu, tabs, dialog, icons,
                                            the page header, the progress panel and the team's mark
 src/lib/api.ts                             Typed client for the backend, the stream reader included

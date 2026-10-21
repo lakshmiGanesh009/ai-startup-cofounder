@@ -4,7 +4,7 @@
 // refreshed every few seconds while it is open: whether anything went wrong
 // lately, the totals and error rates, how long an evaluation and each of its
 // steps take (the median and the 95th percentile), the latest evaluations, and
-// a log of each step, run, brief and proposal, with the warnings and errors.
+// a log of each step, run, brief, proposal, file and question, with the warnings and errors.
 // It asks one request at a time; when the API stops answering it keeps showing
 // what it last heard and waits longer between tries.
 
@@ -57,6 +57,7 @@ const KIND_TONE: Record<MonitorEvent["kind"], "neutral" | "primary" | "good" | "
   run: "primary",
   brief: "primary",
   proposal: "primary",
+  document: "primary",
   warning: "warn",
   error: "bad",
   system: "neutral",
@@ -65,7 +66,7 @@ const KIND_TONE: Record<MonitorEvent["kind"], "neutral" | "primary" | "good" | "
 const FILTERS = {
   all: { label: "All", kinds: null },
   steps: { label: "Steps", kinds: ["start", "done"] },
-  work: { label: "Runs, briefs, proposals", kinds: ["run", "brief", "proposal"] },
+  work: { label: "Runs, briefs, proposals, files", kinds: ["run", "brief", "proposal", "document"] },
   problems: { label: "Warnings and errors", kinds: ["warning", "error"] },
 } as const;
 type Filter = keyof typeof FILTERS;

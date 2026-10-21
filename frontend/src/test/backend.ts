@@ -305,7 +305,7 @@ export function liveStream() {
   };
 }
 
-type Answer = {
+export type Answer = {
   status?: number;
   body?: unknown;
   stream?: string | ReadableStream<Uint8Array>;
@@ -342,7 +342,8 @@ export function fakeBackend(overrides: Partial<Record<string, Answering>> = {}) 
   const fetch = vi.fn(async (url: string, init?: RequestInit) => {
     const path = new URL(url, "http://localhost").pathname.replace(/^\/api(?=\/)/, "");
     const key = `${init?.method ?? "GET"} ${path}`;
-    const request = init?.body ? JSON.parse(String(init.body)) : undefined;
+    // A JSON body is recorded parsed; a file (an upload) as it is.
+    const request = typeof init?.body === "string" ? JSON.parse(init.body) : (init?.body ?? undefined);
     if (init?.body) sent.push({ path, body: request });
     const answer = answers[key];
     if (!answer) throw new TypeError("Failed to fetch");

@@ -137,7 +137,7 @@ _REVIEW_PROMPT = (
 
 
 def _brief_text(prompt: str, context: RequestContext | None) -> str:
-    details = context_for_prompt(context)
+    details = context_for_prompt(context, prompt)
     return f"The founder's brief:\n{fence(prompt, 'founder')}" + (f"\n\nWhat the founder told us:\n{details}" if details else "")
 
 

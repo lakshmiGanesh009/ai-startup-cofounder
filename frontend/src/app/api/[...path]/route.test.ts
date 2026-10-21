@@ -3,6 +3,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 // The proxy reads where the API is and its body cap when it loads.
 process.env.BACKEND_URL = "http://api.test:8000/";
 process.env.MAX_REQUEST_BYTES = "100";
+process.env.MAX_UPLOAD_BYTES = "300";
 const { GET, POST } = await import("./route");
 
 type Handler = typeof GET;
@@ -117,6 +118,19 @@ describe("the API proxy", () => {
     expect([said.status, unsaid.status]).toEqual([413, 413]);
     expect((await said.json()).detail).toBe("The request is larger than the 100 bytes the API accepts.");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test("lets an uploaded file be larger than other requests, up to its own limit", async () => {
+    const fetch = backend(() => Response.json({}, { status: 201 }));
+
+    const upload = await call(POST, "http://app.test/api/uploads?name=plan.pdf", { method: "POST", body: "x".repeat(250) });
+    const tooLarge = await call(POST, "http://app.test/api/uploads?name=plan.pdf", { method: "POST", body: "x".repeat(301) });
+    const question = await call(POST, "http://app.test/api/ask", { method: "POST", body: "x".repeat(250) });
+
+    expect([upload.status, tooLarge.status, question.status]).toEqual([201, 413, 413]);
+    expect((await tooLarge.json()).detail).toBe("The request is larger than the 300 bytes the API accepts.");
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0][0]).toBe("http://api.test:8000/uploads?name=plan.pdf");
   });
 
   test("forwards only the API's routes the pages use", async () => {

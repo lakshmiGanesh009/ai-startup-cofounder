@@ -3,9 +3,11 @@
 // Before the team starts: the brief as it will be sent, the Chief of Staff's
 // questions with likely answers to pick from, and the facts the web research
 // found, each of which can be left out. A question left unanswered is skipped.
+// The founder's documents are named under the brief: the Chief of Staff read them.
 
 import { useId, useState } from "react";
 
+import { DocumentList, type DocumentRef } from "@/components/documents";
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
 import { GuardrailNotice } from "@/components/guardrail-notice";
 import { AgentAvatar } from "@/components/ui/agent";
@@ -73,12 +75,14 @@ function Ask({
 
 export function BriefReview({
   prompt,
+  documents = [],
   prepared,
   wait,
   onRun,
   onBack,
 }: {
   prompt: string;
+  documents?: DocumentRef[];
   prepared: PreparedBrief;
   wait: string;
   onRun: (answers: Answer[], research: Research | null) => void;
@@ -114,9 +118,15 @@ export function BriefReview({
       }}
     >
       <header className="flex flex-wrap items-start justify-between gap-x-8 gap-y-3 border-b border-rule pb-6">
-        <div className="max-w-3xl">
+        <div className="max-w-3xl min-w-0">
           <p className="kicker">Before the team starts</p>
           <p className="mt-2 font-serif text-xl leading-snug">{prompt}</p>
+          {documents.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+              <span className="text-sm text-ink-2">With your documents:</span>
+              <DocumentList documents={documents} />
+            </div>
+          )}
         </div>
         <Button size="sm" onClick={onBack}>
           Edit the brief

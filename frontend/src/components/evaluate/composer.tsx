@@ -1,11 +1,13 @@
 "use client";
 
 // The first request of a session: a brief written freely or filled into a
-// decision template, optional context, or a worked example to start from; and
-// whether the Chief of Staff researches it and checks it before the team runs.
+// decision template, optional context and documents (files and earlier
+// reports), or a worked example to start from; and whether the Chief of Staff
+// researches it and checks it before the team runs.
 
 import { useRef, useState } from "react";
 
+import { DocumentPicker, type DocumentRef, useDocuments } from "@/components/documents";
 import { Button, Kbd } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { CheckIcon } from "@/components/ui/icons";
@@ -29,6 +31,8 @@ export type Submission = {
   prompt: string;
   context: RequestContext;
   template: string | null;
+  // The files and earlier reports in `context`, by their marks, to show.
+  documents: DocumentRef[];
   // Check the brief with the Chief of Staff first; research each specialist's area on the web.
   prepare: boolean;
   deep: boolean;
@@ -77,6 +81,7 @@ export function Composer({
   const [prepare, setPrepare] = useState(true);
   const [deep, setDeep] = useState(false);
   const [problem, setProblem] = useState<{ field: string; text: string } | null>(null);
+  const documents = useDocuments();
   const form = useRef<HTMLFormElement>(null);
   const template = templates.find((each) => each.name === templateName) ?? null;
 
@@ -109,13 +114,26 @@ export function Composer({
       setProblem({ field: "brief", text: "Describe the idea, or the decision you want the team to make." });
       return;
     }
+    if (documents.reading) {
+      setProblem({ field: "documents", text: "Wait until the files have been read." });
+      return;
+    }
     setProblem(null);
-    const filled = Object.fromEntries(
+    const filled: RequestContext = Object.fromEntries(
       Object.entries(context)
         .map(([key, value]) => [key, value.trim()])
         .filter(([, value]) => value),
     );
-    onSubmit({ prompt: brief, context: filled, template: template?.name ?? null, prepare, deep: deep && research !== null });
+    if (documents.uploads.length) filled.uploads = documents.uploads;
+    if (documents.reportIds.length) filled.reports = documents.reportIds;
+    onSubmit({
+      prompt: brief,
+      context: filled,
+      template: template?.name ?? null,
+      documents: documents.refs,
+      prepare,
+      deep: deep && research !== null,
+    });
   }
 
   const sendOnShortcut = (event: React.KeyboardEvent) => {
@@ -222,6 +240,17 @@ export function Composer({
             </div>
           ))}
         </div>
+      </fieldset>
+
+      <fieldset className="mt-7" aria-describedby="documents-hint">
+        <legend className="kicker">
+          Documents <span className="tracking-normal normal-case">· optional</span>
+        </legend>
+        <p id="documents-hint" className="mt-1.5 mb-3 text-sm text-ink-3">
+          A plan, a deck, figures, or an earlier report: each agent reads the passages on its own work, and cites them.
+        </p>
+        <DocumentPicker documents={documents} id="brief-documents" />
+        {message("documents")}
       </fieldset>
 
       <label className="mt-7 flex cursor-pointer items-start gap-3">

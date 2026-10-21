@@ -3,11 +3,24 @@
 // key (API_KEY), so the key stays on this server and never reaches a browser.
 // The answer streams back as it comes: an evaluation's events, a PDF, JSON.
 // Only the API's routes the pages use are forwarded, and a body is capped
-// before it is held in memory.
+// before it is held in memory: an uploaded file at the upload limit, anything
+// else at the request limit.
 
 const BACKEND = (process.env.BACKEND_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 const MAX_BYTES = Number(process.env.MAX_REQUEST_BYTES ?? 1_000_000);
-const ROUTES = new Set(["health", "scenarios", "templates", "pipeline", "monitoring", "brief", "evaluate", "reports"]);
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_UPLOAD_BYTES ?? 10_000_000);
+const ROUTES = new Set([
+  "health",
+  "scenarios",
+  "templates",
+  "pipeline",
+  "monitoring",
+  "brief",
+  "evaluate",
+  "reports",
+  "uploads",
+  "ask",
+]);
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 // What goes on to the API, and what comes back from it.
 const FORWARDED = ["content-type", "accept", "x-request-id"];
@@ -17,8 +30,8 @@ function problem(status: number, detail: string): Response {
   return Response.json({ detail }, { status, headers: { "cache-control": "no-store" } });
 }
 
-// The body, or null when it is larger than MAX_BYTES; read only that far.
-async function cappedBody(request: Request): Promise<Uint8Array<ArrayBuffer> | null> {
+// The body, or null when it is larger than `most` bytes; read only that far.
+async function cappedBody(request: Request, most: number): Promise<Uint8Array<ArrayBuffer> | null> {
   const reader = request.body?.getReader();
   if (!reader) return new Uint8Array(0);
   const chunks: Uint8Array[] = [];
@@ -27,7 +40,7 @@ async function cappedBody(request: Request): Promise<Uint8Array<ArrayBuffer> | n
     const { done, value } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > MAX_BYTES) {
+    if (size > most) {
       await reader.cancel();
       return null;
     }
@@ -60,9 +73,10 @@ async function forward(request: Request, { params }: { params: Promise<{ path: s
 
   let body: Uint8Array<ArrayBuffer> | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
+    const most = request.method === "POST" && path.length === 1 && path[0] === "uploads" ? MAX_UPLOAD_BYTES : MAX_BYTES;
     const length = Number(request.headers.get("content-length") ?? 0);
-    const read = length > MAX_BYTES ? null : await cappedBody(request);
-    if (!read) return problem(413, `The request is larger than the ${MAX_BYTES.toLocaleString("en")} bytes the API accepts.`);
+    const read = length > most ? null : await cappedBody(request, most);
+    if (!read) return problem(413, `The request is larger than the ${most.toLocaleString("en")} bytes the API accepts.`);
     body = read;
   }
 

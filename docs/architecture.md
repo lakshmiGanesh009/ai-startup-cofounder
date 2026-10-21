@@ -368,6 +368,8 @@ quick local run do.
   are kept. The report store (`reports.py`) is the same over memory and
   PostgreSQL; the report endpoints run in FastAPI's thread pool, so a round
   trip to the database never holds up the event loop.
+- **Uploads.** One row a file (`uploads`): its name, size and the passages
+  read from it as JSON, never the file itself; the newest 500 are kept.
 - **The Monitor's history.** Its evaluations and events are written by a thread
   of their own, in batches, so neither a request nor a log line waits on the
   database; the latest 1,000 evaluations and 10,000 events are kept. When the
@@ -604,6 +606,45 @@ left figures in dollars: every amount was a `..._usd` field, and the PDF printed
 - **Versions.** Each save keeps the version it replaces (`report_versions` in
   PostgreSQL, the last 30), with the change that made it. Any can be looked at
   and restored, which saves it as the newest and keeps the current one too.
+
+## The founder's documents
+
+The team can work from the founder's own material, and the founder can
+question any report (`extract.py`, `library.py`).
+
+- **Reading a file.** `POST /uploads` takes a file's bytes. Its type is told
+  from the content (PDF by its header, Office and OpenDocument by the parts in
+  the archive, text by having no binary bytes), never the name, and an older
+  Office file, an image or a password-protected PDF is refused with why. It is
+  read within limits: 10 MB, an archive's unpacked size and ratio (against zip
+  bombs), XML parsed with `defusedxml`, 400 pages, 5,000 rows a sheet, 400,000
+  characters. What is kept is its text, as passages of about 1,500 characters
+  that each say where they are: "page 3", "slide 2", "sheet Revenue, rows
+  2–41", a section's heading. A scanned PDF has no text, and says so.
+- **Naming them.** A brief's or an evaluation's `context` names uploads and
+  earlier reports by id (up to five each, 404 for one not there). An earlier
+  report is read as its texts, each with where it is in the report. The
+  sources are numbered D1, D2... and R1, R2..., and each passage's mark is its
+  source and place: `[D1 · page 3]`, `[R1 · Launch Strategy]`.
+- **What each agent reads.** `guardrails.context_for_prompt` adds the
+  documents to the context every agent reads, but not all of them: the
+  passages are ranked by BM25 against that agent's own work (a specialist's
+  task and role, the Chief of Staff's venture and request) and taken within
+  9,000 characters: each document first gets an equal share, at least its best
+  passage, so a long report cannot crowd out a short file, which is read
+  whole if it fits; what is left goes to the best passages of any. They keep
+  their own order. They are fenced as the founder's material, so a sentence in them
+  that tries to instruct the agents is cut out, and the agents are told to
+  cite each passage they use by its mark (a whole document by its number,
+  `[R1]`). The page sets every citation as a tag, however the model groups
+  them (`[D1 · page 3; R1]`, `[D1–D3, finance]`). The report gains a section naming
+  the documents and records their ids (`worked_from`); a follow-up keeps them,
+  as it keeps the rest of the context.
+- **Questions.** `POST /ask` puts a question to uploads and reports: the
+  passages that bear on it (14,000 characters) go to the Chief of Staff, which
+  answers from them alone and cites each; the marks in its answer are matched
+  back to their passages, so the response lists the sources it really cites
+  and drops any it made up. A question counts as a run for the limits.
 
 ## A request, end to end
 

@@ -28,6 +28,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool, PoolTimeout
 
+from library import KEEP_UPLOADS, MemoryUploads, Upload
 from monitor import Event, Run
 from reports import (
     KEEP_VERSIONS,
@@ -69,6 +70,15 @@ MIGRATIONS: list[list[str]] = [
             report jsonb NOT NULL,
             PRIMARY KEY (session_id, version)
         )""",
+    ],
+    [
+        # The founder's uploads, as their passages (library.py, extract.py); never the files.
+        """CREATE TABLE uploads (
+            id text PRIMARY KEY,
+            created_at timestamptz NOT NULL,
+            upload jsonb NOT NULL
+        )""",
+        "CREATE INDEX uploads_by_age ON uploads (created_at DESC)",
     ],
 ]
 
@@ -150,6 +160,29 @@ class PostgresReports:
                    FROM reports ORDER BY updated_at DESC"""
             ).fetchall()
         return [ReportSummary(**row["summary"], has_proposal=bool(row["has_proposal"])) for row in rows]
+
+
+class PostgresUploads:
+    """The founder's uploads in PostgreSQL; the newest KEEP_UPLOADS are kept."""
+
+    def __init__(self, pool: ConnectionPool):
+        self.pool = pool
+
+    def add(self, upload: Upload) -> None:
+        with self.pool.connection() as conn, conn.transaction():
+            conn.execute(
+                "INSERT INTO uploads (id, created_at, upload) VALUES (%s, %s, %s)",
+                (upload.id, upload.created_at, Jsonb(upload.model_dump(mode="json"))),
+            )
+            conn.execute(
+                "DELETE FROM uploads WHERE id NOT IN (SELECT id FROM uploads ORDER BY created_at DESC LIMIT %s)",
+                (KEEP_UPLOADS,),
+            )
+
+    def get(self, upload_id: str) -> Upload | None:
+        with self.pool.connection() as conn:
+            row = conn.execute("SELECT upload FROM uploads WHERE id = %s", (upload_id,)).fetchone()
+        return Upload.model_validate(row["upload"]) if row else None
 
 
 class MonitorArchive:
@@ -247,6 +280,7 @@ class MemoryStorage:
     def __init__(self):
         self.checkpointer = None  # the graph's own MemorySaver
         self.reports = MemoryReports()
+        self.uploads = MemoryUploads()
         self.archive: MonitorArchive | None = None
 
     async def open(self) -> None:
@@ -276,6 +310,7 @@ class PostgresStorage:
             kwargs={"autocommit": True, "row_factory": dict_row},
         )
         self.reports = PostgresReports(self.pool)
+        self.uploads = PostgresUploads(self.pool)
         self.archive: MonitorArchive | None = MonitorArchive(self.pool)
         self.async_pool: AsyncConnectionPool | None = None
         self.checkpointer: AsyncPostgresSaver | None = None

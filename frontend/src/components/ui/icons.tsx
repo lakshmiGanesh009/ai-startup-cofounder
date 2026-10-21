@@ -39,6 +39,25 @@ export function DocumentIcon(props: IconProps) {
   );
 }
 
+// A file attached to the brief.
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="m13.25 7.6-5.1 5.1a3.25 3.25 0 0 1-4.6-4.6l5.3-5.3a2.1 2.1 0 0 1 3 3l-5.25 5.25a1 1 0 0 1-1.4-1.4L10 4.85" />
+    </Icon>
+  );
+}
+
+// A question put to the documents.
+export function QuestionIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.75 12.9V4.25a1.5 1.5 0 0 1 1.5-1.5h7.5a1.5 1.5 0 0 1 1.5 1.5v5.5a1.5 1.5 0 0 1-1.5 1.5H5.4z" />
+      <path d="M6.6 5.9a1.45 1.45 0 1 1 1.9 1.4c-.3.1-.5.4-.5.7v.2M8 9.6v.05" />
+    </Icon>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>

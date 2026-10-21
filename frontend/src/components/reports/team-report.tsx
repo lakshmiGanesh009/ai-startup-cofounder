@@ -9,7 +9,7 @@ import { Markdown } from "@/components/markdown";
 import { AgentAvatar } from "@/components/ui/agent";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
-import { PencilIcon } from "@/components/ui/icons";
+import { DocumentIcon, PencilIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
 import type { ReportSection } from "@/lib/api";
 import { SECTION_AGENT } from "@/lib/agents";
@@ -43,6 +43,14 @@ export function TeamReport({
             <section key={section.key} aria-label={section.title} className={hidden.includes(section.key) ? "opacity-55" : undefined}>
               <div className="mb-5 flex items-center gap-3 border-b border-rule pb-3">
                 {SECTION_AGENT[section.key] && <AgentAvatar agent={SECTION_AGENT[section.key]} size="md" />}
+                {section.key === "documents" && (
+                  <span
+                    aria-hidden
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-sunken text-ink-2 shadow-[inset_0_0_0_1px_var(--rule-strong)]"
+                  >
+                    <DocumentIcon />
+                  </span>
+                )}
                 <div>
                   <h3 className="font-serif text-[1.5rem] leading-snug font-medium">{section.title}</h3>
                   <p className="mt-0.5 text-xs text-ink-3">
