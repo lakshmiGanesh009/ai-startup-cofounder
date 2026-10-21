@@ -5,16 +5,86 @@ LangGraph. A Chief of Staff plans and delegates, four specialists analyse the
 request in their own areas, the Chief of Staff reviews and reconciles their
 reports, and a synthesis step turns them into one launch strategy.
 
+## System architecture
+
+How the parts fit together, from the founder's browser to the models and the
+data the team works from. The browser only ever talks to the Next.js app; its
+server forwards each call to the API with the API's key, so the key never
+reaches a browser. Every request passes the API's guard before a route.
+
+```mermaid
+flowchart LR
+    founder(["Founder, in a browser"])
+
+    subgraph web["Next.js app (frontend/)"]
+        pages["Pages: Evaluate, Reports, How it works"]
+        proxy["/api proxy: adds the API key, caps bodies"]
+    end
+
+    subgraph api["FastAPI app (main.py)"]
+        guard["Guard: key, size, rates, runs at once (security.py)"]
+        routes["Routes: brief, evaluate and stream, reports, uploads, ask, monitoring"]
+        team["LangGraph team (graph.py): Chief of Staff and four specialists"]
+        brief["Brief preparation (brief.py)"]
+        docs["Founder's documents (extract.py, library.py)"]
+        reports["Reports, drafts, versions, PDF (reports.py, document.py, report_pdf.py)"]
+        guardrails["Prompt guardrails (guardrails.py)"]
+        monitor["Monitor and metrics (monitor.py)"]
+    end
+
+    fredserver["FRED MCP server (fred_server.py), a subprocess over stdio"]
+    azure["Azure OpenAI gpt-5-mini, and its Bing web search"]
+    tavily["Tavily: search and research APIs, hosted MCP server"]
+    fred["FRED API, the St. Louis Fed"]
+    pg[("PostgreSQL: sessions, reports, versions, uploads, Monitor history")]
+    prometheus["Prometheus, optional: scrapes /metrics"]
+
+    founder --> pages --> proxy --> guard --> routes
+    routes --> brief
+    routes --> team
+    routes --> docs
+    routes --> reports
+    brief --> azure
+    brief --> tavily
+    team --> azure
+    team -- "deep research" --> tavily
+    team -- "competitors' pages, MCP over HTTPS" --> tavily
+    team -- "look-ups, MCP over stdio" --> fredserver --> fred
+    team -.-> guardrails
+    brief -.-> guardrails
+    docs -.-> guardrails
+    team -- "checkpoints" --> pg
+    reports --> pg
+    docs --> pg
+    monitor --> pg
+    prometheus --> monitor
+```
+
+Solid arrows are calls; dotted ones mark what every prompt passes through: the
+founder's text, the web's and the documents' are fenced and scanned before a
+model reads them. Without `DATABASE_URL` everything PostgreSQL keeps lives in
+memory instead; without `FRED_API_KEY` or `TAVILY_API_KEY` the look-ups and
+research they power are skipped.
+
 ## State machine
 
 Generated from the compiled graph (`build_graph().get_graph().draw_mermaid()`).
-Dotted edges are conditional; solid edges are fixed.
+Dotted edges are conditional; solid edges are fixed. After the plan, `lookup`
+(the official figures, through MCP) and `research` (deep research) run at
+once, when each is due, and both lead on to the specialists; the How it works
+page draws the same graph in the agents' colours, laid out top to bottom.
 
 ```mermaid
+---
+config:
+  flowchart:
+    curve: linear
+---
 graph TD;
 	__start__([start]):::first
 	plan(plan)
 	research(research)
+	lookup(lookup)
 	review(review)
 	critique(critique)
 	resolve(resolve)
@@ -29,10 +99,15 @@ graph TD;
 	finance -.-> critique;
 	finance -.-> review;
 	finance -.-> synthesis;
+	lookup -.-> finance;
+	lookup -.-> marketing;
+	lookup -.-> risk;
+	lookup -.-> technical;
 	marketing -.-> critique;
 	marketing -.-> review;
 	marketing -.-> synthesis;
 	plan -.-> finance;
+	plan -.-> lookup;
 	plan -.-> marketing;
 	plan -.-> research;
 	plan -.-> risk;
@@ -59,6 +134,7 @@ graph TD;
 	technical -.-> review;
 	technical -.-> synthesis;
 	synthesis --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc
 ```
