@@ -80,6 +80,22 @@ def test_a_fred_failure_says_why_and_never_shows_the_key(monkeypatch, caplog):
     assert "api_key=[hidden]" in logged and "fred-test-key" not in logged
 
 
+def test_fred_down_for_maintenance_is_said_plainly(monkeypatch):
+    import httpx
+
+    use_fred(monkeypatch)
+    page = "<!doctype html><title>Site Maintenance | St. Louis Fed</title>"
+    monkeypatch.setattr(fred_server, "_transport", httpx.MockTransport(lambda request: httpx.Response(200, text=page)))
+
+    async def work():
+        async with Client(fred_server.server) as mcp:
+            return await mcp.call_tool("series_data", {"series_id": "DGS10"})
+
+    failed = asyncio.run(work())
+    assert failed.is_error
+    assert failed.content[0].text.endswith("FRED answered with a web page instead of data; it may be down for maintenance.")
+
+
 def test_without_a_key_the_server_says_so(monkeypatch):
     use_fred(monkeypatch)
     monkeypatch.delenv("FRED_API_KEY")

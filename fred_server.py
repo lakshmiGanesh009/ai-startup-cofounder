@@ -86,7 +86,11 @@ def _get(path: str, **params) -> dict:
             said = ""
         said = " ".join(said.split()).rstrip(".")
         raise FredError(f"FRED answered {response.status_code}{': ' + said if said else ''}.")
-    return response.json()
+    try:
+        return response.json()
+    except ValueError:
+        # While FRED is down for maintenance it answers 200 with a web page.
+        raise FredError("FRED answered with a web page instead of data; it may be down for maintenance.") from None
 
 
 def _series(raw: dict) -> Series:
