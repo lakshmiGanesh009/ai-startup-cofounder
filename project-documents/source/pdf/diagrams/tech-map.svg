@@ -1,0 +1,231 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 770" role="img" aria-label="Technology map. The browser's pages call the Next.js server, which adds the API key and forwards to FastAPI. FastAPI guards and validates each request, then starts a LangGraph run. LangGraph's agents call Azure OpenAI through LangChain with strict JSON schemas, Tavily for research, and FRED through the app's own MCP server. Events stream back to the browser. PostgreSQL keeps reports and checkpoints, Langfuse traces every call, Prometheus scrapes the metrics, and Docker Compose and GitLab CI run and test it.">
+  <defs>
+    <marker id="tm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#7c786d"/>
+    </marker>
+  </defs>
+
+  <text class="t-label" x="14" y="24">BROWSER</text>
+  <text class="t-label" x="304" y="24">WEB SERVER</text>
+  <text class="t-label" x="594" y="24">API</text>
+  <text class="t-label" x="884" y="24">AGENTS</text>
+  <text class="t-label" x="1174" y="24">MODELS AND DATA</text>
+
+  <!-- Browser -->
+  <g class="n">
+    <rect class="box" x="10" y="40" width="220" height="520" rx="14"/>
+    <circle cx="46" cy="78" r="22" fill="#e4ebf5"/>
+    <icon name="window" x="34" y="66" s="24" c="#163c6b"/>
+    <text class="t-title" x="78" y="74">Browser</text>
+    <text class="t-small" x="78" y="94">the founder's pages</text>
+    <text class="t-label" x="26" y="140">PAGES</text>
+    <text class="t-body" x="26" y="166">Evaluate · live graph</text>
+    <text class="t-body" x="26" y="192">Reports · studio</text>
+    <text class="t-body" x="26" y="218">How it works · Monitor</text>
+    <text class="t-label" x="26" y="262">BUILT WITH</text>
+    <text class="t-body" x="26" y="288">React 19 · TypeScript</text>
+    <text class="t-body" x="26" y="314">Tailwind CSS 4</text>
+    <text class="t-body" x="26" y="340">Mermaid 12</text>
+    <text class="t-body" x="26" y="366">react-markdown</text>
+    <text class="t-label" x="26" y="410">HOLDS</text>
+    <text class="t-body" x="26" y="436">No key, no secret</text>
+    <text class="t-small" x="26" y="530">Reads each step as an event</text>
+    <text class="t-small" x="26" y="548">and lights up the graph</text>
+  </g>
+
+  <!-- Next.js server -->
+  <g class="n">
+    <rect class="box" x="300" y="40" width="220" height="520" rx="14"/>
+    <circle cx="336" cy="78" r="22" fill="#e4ebf5"/>
+    <icon name="server" x="324" y="66" s="24" c="#163c6b"/>
+    <text class="t-title" x="368" y="74">Next.js 16</text>
+    <text class="t-small" x="368" y="94">its server side</text>
+    <text class="t-label" x="316" y="140">FOR EVERY CALL</text>
+    <text class="t-body" x="316" y="166">Forwards /api/* only</text>
+    <text class="t-body" x="316" y="192">Adds the API key</text>
+    <text class="t-body" x="316" y="218">Caps request bodies</text>
+    <text class="t-body" x="316" y="244">Passes events through</text>
+    <text class="t-label" x="316" y="288">FOR EVERY PAGE</text>
+    <text class="t-body" x="316" y="314">Content security policy</text>
+    <text class="t-body" x="316" y="340">No framing by others</text>
+    <text class="t-small" x="316" y="530">The key lives here,</text>
+    <text class="t-small" x="316" y="548">never in the browser</text>
+  </g>
+
+  <!-- FastAPI -->
+  <rect class="zone" x="590" y="40" width="220" height="520" rx="16"/>
+  <g class="n">
+    <rect class="box" x="600" y="52" width="200" height="112" rx="10"/>
+    <circle cx="630" cy="84" r="18" fill="#fbe5ee"/>
+    <icon name="shield" x="619" y="73" s="22" c="#b03c6f"/>
+    <text class="t-title" x="656" y="90">Guard</text>
+    <text class="t-small" x="614" y="124">key · 1 MB · 300 a minute</text>
+    <text class="t-small" x="614" y="144">30 runs an hour, 4 at once</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="600" y="176" width="200" height="112" rx="10"/>
+    <circle cx="630" cy="208" r="18" fill="#d9f1e7"/>
+    <icon name="check" x="619" y="197" s="22" c="#0d7651"/>
+    <text class="t-title" x="656" y="214">Pydantic</text>
+    <text class="t-small" x="614" y="248">every request typed;</text>
+    <text class="t-small" x="614" y="268">else 422, no model call</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="600" y="300" width="200" height="112" rx="10"/>
+    <circle cx="630" cy="332" r="18" fill="#e4ebf5"/>
+    <icon name="flow" x="619" y="321" s="22" c="#163c6b"/>
+    <text class="t-title" x="656" y="338">29 routes</text>
+    <text class="t-small" x="614" y="372">brief · evaluate · ask</text>
+    <text class="t-small" x="614" y="392">reports · uploads · PDF</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="600" y="424" width="200" height="124" rx="10"/>
+    <circle cx="630" cy="456" r="18" fill="#fbe3d8"/>
+    <icon name="pulse" x="619" y="445" s="22" c="#b4461b"/>
+    <text class="t-title" x="656" y="462">Live events</text>
+    <text class="t-small" x="614" y="496">each step as it starts</text>
+    <text class="t-small" x="614" y="516">and finishes (SSE)</text>
+  </g>
+
+  <!-- Agents -->
+  <rect class="zone" x="880" y="40" width="220" height="520" rx="16"/>
+  <g class="n">
+    <rect class="box" x="890" y="52" width="200" height="112" rx="10"/>
+    <circle cx="920" cy="84" r="18" fill="#dce9f8"/>
+    <icon name="chip" x="909" y="73" s="22" c="#1c5cab"/>
+    <text class="t-title" x="946" y="90">LangChain</text>
+    <text class="t-small" x="904" y="124">messages, model client</text>
+    <text class="t-mono" x="904" y="144">with_structured_output</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="890" y="176" width="200" height="112" rx="10"/>
+    <circle cx="920" cy="208" r="18" fill="#d9f1e7"/>
+    <icon name="check" x="909" y="197" s="22" c="#0d7651"/>
+    <text class="t-title" x="946" y="214">Typed replies</text>
+    <text class="t-small" x="904" y="248">17 of 22 prompts, each</text>
+    <text class="t-small" x="904" y="268">a validated Pydantic model</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="890" y="300" width="200" height="112" rx="10"/>
+    <circle cx="920" cy="332" r="18" fill="#e6e3f4"/>
+    <icon name="flow" x="909" y="321" s="22" c="#3b2e8a"/>
+    <text class="t-title" x="946" y="338">LangGraph</text>
+    <text class="t-small" x="904" y="372">11 nodes, 40 edges</text>
+    <text class="t-small" x="904" y="392">a checkpoint every step</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="890" y="424" width="200" height="124" rx="10"/>
+    <circle cx="920" cy="456" r="18" fill="#fbe5ee"/>
+    <icon name="shield" x="909" y="445" s="22" c="#b03c6f"/>
+    <text class="t-title" x="946" y="462">Guardrails</text>
+    <text class="t-small" x="904" y="496">clean · scan · cut · fence</text>
+    <text class="t-small" x="904" y="516">every text a model reads</text>
+  </g>
+
+  <!-- Models and data -->
+  <g class="n">
+    <rect class="box" x="1170" y="40" width="220" height="160" rx="14"/>
+    <circle cx="1206" cy="78" r="22" fill="#dce9f8"/>
+    <icon name="spark" x="1194" y="66" s="24" c="#1c5cab"/>
+    <text class="t-title" x="1238" y="74">Azure OpenAI</text>
+    <text class="t-small" x="1238" y="94">gpt-5-mini</text>
+    <text class="t-body" x="1186" y="134">Every agent's call</text>
+    <text class="t-body" x="1186" y="160">Strict JSON schemas</text>
+    <text class="t-body" x="1186" y="186">Bing web search</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="1170" y="220" width="220" height="160" rx="14"/>
+    <circle cx="1206" cy="258" r="22" fill="#e5e8ec"/>
+    <icon name="search" x="1194" y="246" s="24" c="#48525f"/>
+    <text class="t-title" x="1238" y="254">Tavily</text>
+    <text class="t-small" x="1238" y="274">a choice in the sidebar</text>
+    <text class="t-body" x="1186" y="314">Search for a brief</text>
+    <text class="t-body" x="1186" y="340">Research per area</text>
+    <text class="t-body" x="1186" y="366">MCP: pricing pages</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="1170" y="400" width="220" height="160" rx="14"/>
+    <circle cx="1206" cy="438" r="22" fill="#d9f1e7"/>
+    <icon name="chart" x="1194" y="426" s="24" c="#0d7651"/>
+    <text class="t-title" x="1238" y="434">FRED</text>
+    <text class="t-small" x="1238" y="454">official US figures</text>
+    <text class="t-body" x="1186" y="494">Our own MCP server</text>
+    <text class="t-body" x="1186" y="520">Read over stdio</text>
+    <text class="t-body" x="1186" y="546">Sums done in code</text>
+  </g>
+
+  <!-- The request, and the events coming back -->
+  <path class="wire" d="M230 112 H298" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="265" y="103" text-anchor="middle">request</text>
+  <path class="wire" d="M520 112 H598" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="555" y="103" text-anchor="middle">+ key</text>
+  <path class="wire" d="M810 356 H888" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="845" y="347" text-anchor="middle">a run</text>
+  <path class="wire dash" d="M880 486 H812" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="845" y="477" text-anchor="middle">steps</text>
+  <path class="wire dash" d="M590 486 H522" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="555" y="477" text-anchor="middle">events</text>
+  <path class="wire dash" d="M300 486 H232" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="265" y="477" text-anchor="middle">events</text>
+  <path class="wire" d="M1100 112 H1168" marker-end="url(#tm-arrow)" marker-start="url(#tm-arrow)"/>
+  <text class="t-edge" x="1135" y="103" text-anchor="middle">calls</text>
+  <path class="wire" d="M1100 300 H1168" marker-end="url(#tm-arrow)" marker-start="url(#tm-arrow)"/>
+  <text class="t-edge" x="1135" y="291" text-anchor="middle">search</text>
+  <path class="wire" d="M1100 480 H1168" marker-end="url(#tm-arrow)" marker-start="url(#tm-arrow)"/>
+  <text class="t-edge" x="1135" y="471" text-anchor="middle">MCP</text>
+
+  <!-- Running it, keeping it, watching it -->
+  <text class="t-label" x="14" y="592">RUNNING IT, KEEPING IT, WATCHING IT</text>
+  <path class="wire" d="M700 560 V602" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="708" y="586">reports</text>
+  <path class="wire" d="M900 560 V580 H770 V602" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="836" y="575" text-anchor="middle">checkpoints</text>
+  <path class="wire" d="M1010 560 V602" marker-end="url(#tm-arrow)"/>
+  <text class="t-edge" x="1018" y="586">traces</text>
+
+  <g class="n">
+    <rect class="box" x="10" y="604" width="260" height="150" rx="14"/>
+    <circle cx="46" cy="642" r="22" fill="#e4ebf5"/>
+    <icon name="server" x="34" y="630" s="24" c="#163c6b"/>
+    <text class="t-title" x="78" y="638">Docker Compose</text>
+    <text class="t-small" x="78" y="658">or start.sh, locally</text>
+    <text class="t-body" x="26" y="702">API, web app, PostgreSQL</text>
+    <text class="t-body" x="26" y="728">as unprivileged users</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="290" y="604" width="260" height="150" rx="14"/>
+    <circle cx="326" cy="642" r="22" fill="#d9f1e7"/>
+    <icon name="check" x="314" y="630" s="24" c="#0d7651"/>
+    <text class="t-title" x="358" y="638">GitLab CI</text>
+    <text class="t-small" x="358" y="658">on every push</text>
+    <text class="t-body" x="306" y="702">Tests, lint, types, build</text>
+    <text class="t-body" x="306" y="728">Images on main</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="570" y="604" width="260" height="150" rx="14"/>
+    <circle cx="606" cy="642" r="22" fill="#dce9f8"/>
+    <icon name="state" x="594" y="630" s="24" c="#1c5cab"/>
+    <text class="t-title" x="638" y="638">PostgreSQL 16</text>
+    <text class="t-small" x="638" y="658">or memory, without one</text>
+    <text class="t-body" x="586" y="702">Sessions, checkpoints</text>
+    <text class="t-body" x="586" y="728">Reports, versions, uploads</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="850" y="604" width="260" height="150" rx="14"/>
+    <circle cx="886" cy="642" r="22" fill="#e6e3f4"/>
+    <icon name="pulse" x="874" y="630" s="24" c="#3b2e8a"/>
+    <text class="t-title" x="918" y="638">Langfuse 5</text>
+    <text class="t-small" x="918" y="658">Cloud, EU · optional</text>
+    <text class="t-body" x="866" y="702">Every call traced, masked</text>
+    <text class="t-body" x="866" y="728">Prompt versions, scores</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="1130" y="604" width="260" height="150" rx="14"/>
+    <circle cx="1166" cy="642" r="22" fill="#fbe3d8"/>
+    <icon name="monitor" x="1154" y="630" s="24" c="#b4461b"/>
+    <text class="t-title" x="1198" y="638">Prometheus</text>
+    <text class="t-small" x="1198" y="658">optional</text>
+    <text class="t-body" x="1146" y="702">Scrapes /metrics</text>
+    <text class="t-body" x="1146" y="728">The Monitor's numbers too</text>
+  </g>
+</svg>

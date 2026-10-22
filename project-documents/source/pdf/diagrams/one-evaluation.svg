@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 712" role="img" aria-label="One evaluation through the stack, as numbered steps across lanes for the browser, the Next.js server, FastAPI, LangGraph, Azure OpenAI, FRED and Tavily, PostgreSQL, and Langfuse with the metrics. The legend below explains each step.">
+  <defs>
+    <marker id="oe-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#7c786d"/>
+    </marker>
+  </defs>
+
+  <text class="t-label" x="200" y="26">ONE EVALUATION, LEFT TO RIGHT</text>
+  <path class="wire soft" d="M470 21 H1386" marker-end="url(#oe-arrow)"/>
+
+  <!-- Lanes -->
+  <rect x="0" y="40" width="1400" height="52" style="fill:#efece5"/>
+  <rect x="0" y="144" width="1400" height="52" style="fill:#efece5"/>
+  <rect x="0" y="248" width="1400" height="52" style="fill:#efece5"/>
+  <rect x="0" y="352" width="1400" height="52" style="fill:#efece5"/>
+
+  <circle cx="22" cy="66" r="15" fill="#e4ebf5"/><icon name="window" x="13" y="57" s="18" c="#163c6b"/>
+  <text class="t-strong" x="46" y="71">Browser</text>
+  <circle cx="22" cy="118" r="15" fill="#e4ebf5"/><icon name="server" x="13" y="109" s="18" c="#163c6b"/>
+  <text class="t-strong" x="46" y="123">Next.js server</text>
+  <circle cx="22" cy="170" r="15" fill="#e4ebf5"/><icon name="flow" x="13" y="161" s="18" c="#163c6b"/>
+  <text class="t-strong" x="46" y="175">FastAPI</text>
+  <circle cx="22" cy="222" r="15" fill="#e6e3f4"/><icon name="team" x="13" y="213" s="18" c="#3b2e8a"/>
+  <text class="t-strong" x="46" y="227">LangGraph</text>
+  <circle cx="22" cy="274" r="15" fill="#dce9f8"/><icon name="spark" x="13" y="265" s="18" c="#1c5cab"/>
+  <text class="t-strong" x="46" y="279">Azure OpenAI</text>
+  <circle cx="22" cy="326" r="15" fill="#e5e8ec"/><icon name="search" x="13" y="317" s="18" c="#48525f"/>
+  <text class="t-strong" x="46" y="331">FRED · Tavily</text>
+  <circle cx="22" cy="378" r="15" fill="#dce9f8"/><icon name="state" x="13" y="369" s="18" c="#1c5cab"/>
+  <text class="t-strong" x="46" y="383">PostgreSQL</text>
+  <circle cx="22" cy="430" r="15" fill="#fbe5ee"/><icon name="pulse" x="13" y="421" s="18" c="#b03c6f"/>
+  <text class="t-strong" x="46" y="435">Langfuse · metrics</text>
+
+  <!-- Throughout the run: events reach the browser, checkpoints, traces -->
+  <path class="wire soft dash" d="M579 66 H1222"/>
+  <path class="wire soft dash" d="M579 378 H1114"/>
+  <path class="wire soft dash" d="M687 430 H1330"/>
+  <g style="fill:#fdfcf9;stroke:#163c6b;stroke-width:1.6">
+    <circle cx="579" cy="66" r="4.5"/><circle cx="687" cy="66" r="4.5"/><circle cx="795" cy="66" r="4.5"/><circle cx="903" cy="66" r="4.5"/><circle cx="1012" cy="66" r="4.5"/><circle cx="1120" cy="66" r="4.5"/>
+  </g>
+  <g style="fill:#fdfcf9;stroke:#1c5cab;stroke-width:1.6">
+    <circle cx="579" cy="378" r="4.5"/><circle cx="687" cy="378" r="4.5"/><circle cx="795" cy="378" r="4.5"/><circle cx="903" cy="378" r="4.5"/><circle cx="1012" cy="378" r="4.5"/>
+  </g>
+  <g style="fill:#fdfcf9;stroke:#b03c6f;stroke-width:1.6">
+    <circle cx="687" cy="430" r="4.5"/><circle cx="903" cy="430" r="4.5"/><circle cx="1012" cy="430" r="4.5"/>
+  </g>
+
+  <!-- Connectors -->
+  <path class="wire" d="M254 79 V110" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M362 131 V162" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M579 183 V214" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M687 237 V266" marker-start="url(#oe-arrow)" marker-end="url(#oe-arrow)"/>
+  <path class="wire dash" d="M795 237 V318" marker-start="url(#oe-arrow)" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M897 235 L885 266" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M903 235 V266" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M909 235 L921 266" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M1012 237 V266" marker-start="url(#oe-arrow)" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M1120 235 V370" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M1228 157 V74" marker-end="url(#oe-arrow)"/>
+  <path class="wire" d="M1336 235 V422" marker-end="url(#oe-arrow)"/>
+
+  <!-- Arrival points -->
+  <circle cx="254" cy="118" r="5" style="fill:#163c6b"/>
+  <circle cx="362" cy="170" r="5" style="fill:#163c6b"/>
+  <circle cx="579" cy="222" r="5" style="fill:#4a3aa7"/>
+  <circle cx="687" cy="274" r="5" style="fill:#2a78d6"/>
+  <circle cx="795" cy="326" r="5" style="fill:#6b7889"/>
+  <circle cx="885" cy="274" r="5" style="fill:#2a78d6"/>
+  <circle cx="903" cy="274" r="5" style="fill:#2a78d6"/>
+  <circle cx="921" cy="274" r="5" style="fill:#2a78d6"/>
+  <text class="t-small" x="903" y="294" text-anchor="middle">in parallel</text>
+  <circle cx="1012" cy="274" r="5" style="fill:#2a78d6"/>
+  <circle cx="1120" cy="378" r="5" style="fill:#1c5cab"/>
+  <circle cx="1228" cy="66" r="5" style="fill:#163c6b"/>
+  <circle cx="1336" cy="430" r="5" style="fill:#b03c6f"/>
+  <text class="t-small" x="489" y="175">checked</text>
+
+  <!-- Step badges -->
+  <g style="font-size:13px;font-weight:700" text-anchor="middle">
+    <circle cx="254" cy="66" r="13" style="fill:#163c6b"/><text x="254" y="70.5" style="fill:#fff">1</text>
+    <circle cx="362" cy="118" r="13" style="fill:#163c6b"/><text x="362" y="122.5" style="fill:#fff">2</text>
+    <circle cx="471" cy="170" r="13" style="fill:#163c6b"/><text x="471" y="174.5" style="fill:#fff">3</text>
+    <circle cx="579" cy="170" r="13" style="fill:#163c6b"/><text x="579" y="174.5" style="fill:#fff">4</text>
+    <circle cx="687" cy="222" r="13" style="fill:#4a3aa7"/><text x="687" y="226.5" style="fill:#fff">5</text>
+    <circle cx="795" cy="222" r="13" style="fill:#4a3aa7"/><text x="795" y="226.5" style="fill:#fff">6</text>
+    <circle cx="903" cy="222" r="13" style="fill:#4a3aa7"/><text x="903" y="226.5" style="fill:#fff">7</text>
+    <circle cx="1012" cy="222" r="13" style="fill:#4a3aa7"/><text x="1012" y="226.5" style="fill:#fff">8</text>
+    <circle cx="1120" cy="222" r="13" style="fill:#4a3aa7"/><text x="1120" y="226.5" style="fill:#fff">9</text>
+    <circle cx="1228" cy="170" r="13" style="fill:#163c6b"/><text x="1228" y="174.5" style="fill:#fff">10</text>
+    <circle cx="1336" cy="222" r="13" style="fill:#4a3aa7"/><text x="1336" y="226.5" style="fill:#fff">11</text>
+  </g>
+
+  <!-- Legend -->
+  <g style="font-size:12px;font-weight:700" text-anchor="middle">
+    <circle cx="32" cy="495" r="12" style="fill:#163c6b"/><text x="32" y="499" style="fill:#fff">1</text>
+    <circle cx="32" cy="531" r="12" style="fill:#163c6b"/><text x="32" y="535" style="fill:#fff">2</text>
+    <circle cx="32" cy="567" r="12" style="fill:#163c6b"/><text x="32" y="571" style="fill:#fff">3</text>
+    <circle cx="32" cy="603" r="12" style="fill:#163c6b"/><text x="32" y="607" style="fill:#fff">4</text>
+    <circle cx="32" cy="639" r="12" style="fill:#4a3aa7"/><text x="32" y="643" style="fill:#fff">5</text>
+    <circle cx="32" cy="675" r="12" style="fill:#4a3aa7"/><text x="32" y="679" style="fill:#fff">6</text>
+    <circle cx="722" cy="495" r="12" style="fill:#4a3aa7"/><text x="722" y="499" style="fill:#fff">7</text>
+    <circle cx="722" cy="531" r="12" style="fill:#4a3aa7"/><text x="722" y="535" style="fill:#fff">8</text>
+    <circle cx="722" cy="567" r="12" style="fill:#4a3aa7"/><text x="722" y="571" style="fill:#fff">9</text>
+    <circle cx="722" cy="603" r="12" style="fill:#163c6b"/><text x="722" y="607" style="fill:#fff">10</text>
+    <circle cx="722" cy="639" r="12" style="fill:#4a3aa7"/><text x="722" y="643" style="fill:#fff">11</text>
+  </g>
+  <text class="t-body" x="54" y="500">The founder sends the brief; the browser holds no key.</text>
+  <text class="t-body" x="54" y="536">Next.js's server adds the API key and forwards the request.</text>
+  <text class="t-body" x="54" y="572">FastAPI's guard checks key, size and rates; Pydantic validates the body.</text>
+  <text class="t-body" x="54" y="608">LangGraph starts the run; the guardrails fence the founder's text.</text>
+  <text class="t-body" x="54" y="644">The Chief of Staff plans: a strict JSON schema, a typed DelegationPlan.</text>
+  <text class="t-body" x="54" y="680">Look-ups and research at once: FRED over MCP, and Tavily or Bing.</text>
+  <text class="t-body" x="744" y="500">Four reports in parallel, then typed reviews, conflicts and decisions.</text>
+  <text class="t-body" x="744" y="536">The Chief of Staff writes the strategy from the reviewed reports.</text>
+  <text class="t-body" x="744" y="572">A checkpoint after every step; the report is saved in PostgreSQL.</text>
+  <text class="t-body" x="744" y="608">Every step streams back as an event; Mermaid lights the live graph.</text>
+  <text class="t-body" x="744" y="644">Every model call is traced in Langfuse; the API counts every step.</text>
+  <text class="t-small" x="744" y="680">Open dots: what happens throughout the run (events, checkpoints, traces).</text>
+</svg>

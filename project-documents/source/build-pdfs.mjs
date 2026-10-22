@@ -1,6 +1,7 @@
 // Builds the two PDFs in project-documents/ from the HTML in pdf/:
 //   02-Project-Brief-Architecture-and-User-Flow.pdf  (pdf/brief-architecture.html)
 //   03-Deep-Dive.pdf                                  (pdf/deep-dive.html)
+//   04-Presenter-Readiness.pdf                        (pdf/presenter-pack.html)
 //
 // The HTML is assembled first: diagrams are inlined from pdf/diagrams, the
 // app's icons from assets/icons, and the project brief is rendered from the
@@ -40,6 +41,13 @@ const DOCUMENTS = {
     title: "The AI Startup Co-Founder Team: Deep Dive",
     subject: "How the whole project works: the agents, the workflow, the technologies, type safety, guardrails and production readiness.",
     showOutline: true,
+  },
+  "presenter-pack": {
+    html: "presenter-pack.html",
+    pdf: "04-Presenter-Readiness.pdf",
+    title: "The AI Startup Co-Founder Team: Presenter Readiness",
+    subject: "Likely questions and answers, how the project was built and verified, the sign-off checklist for Steps 31 to 35, what is verified before it reaches the LLM, how the technologies work together, and the numbers to remember.",
+    showOutline: false,
   },
 };
 

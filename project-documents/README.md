@@ -1,12 +1,13 @@
 # Project documents
 
-Three documents about the AI Startup Co-Founder Team, for the capstone review and for anyone new to the project.
+Four documents about the AI Startup Co-Founder Team, for the capstone review and for anyone new to the project.
 
 | File | What it is |
 | --- | --- |
 | [01-Project-Highlights.pptx](01-Project-Highlights.pptx) | Ten slides on the project's highlights, with speaker notes. In Slide Show, the contents slide's cards are links, every slide has numbered links along the bottom, the workflow slide builds up click by click, and the last slide opens the two PDFs. |
 | [02-Project-Brief-Architecture-and-User-Flow.pdf](02-Project-Brief-Architecture-and-User-Flow.pdf) | 7 A4 pages: the capstone brief, word for word from the top of the repository's README.md, then the system architecture, the agent workflow and the founder's journey through the app. |
 | [03-Deep-Dive.pdf](03-Deep-Dive.pdf) | 44 pages, presentation style: how the whole project works, the technologies the brief named and those added beyond it, the Pydantic audit of every model call (part 6), production readiness, and the design trade-offs. Its contents page and bookmarks link to every section. |
+| [04-Presenter-Readiness.pdf](04-Presenter-Readiness.pdf) | 8 pages for the presenters: likely questions with short answers, how the project was built and verified, a sign-off checklist for Steps 31 to 35, what is verified before it reaches the LLM, then, in pictures, how the technologies work together, one evaluation traced through the stack, every technology on a card, and the numbers to remember. |
 
 The figures in them come from the main branch on 22 October 2026: the code, both test suites (run that day) and a recorded run of the app on Azure OpenAI gpt-5-mini. The screenshots are from that run.
 
@@ -21,7 +22,7 @@ Needs Node.js 20 or later and Google Chrome. Chrome is expected at the usual mac
 ```bash
 cd project-documents/source
 npm install
-npm run build        # both PDFs, then the deck
+npm run build        # the PDFs, then the deck
 npm run pdfs         # only the PDFs
 npm run deck         # only the deck
 ```

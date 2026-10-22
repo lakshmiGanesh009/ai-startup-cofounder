@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The AI Startup Co-Founder Team: Presenter Readiness</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  .pack h2.sec { font-family: var(--serif); font-weight: 500; font-size: 14pt; margin: 5mm 0 2mm; }
+  .pack .lede { font-size: 9.6pt; margin: 0 0 3mm; }
+  .pack table { font-size: 8.4pt; }
+  .pack td { padding-top: 1.3mm; padding-bottom: 1.3mm; vertical-align: top; }
+  .pack td.q { font-weight: 600; width: 27%; padding-right: 3mm; }
+  .pack td.show { width: 21%; color: var(--ink-3); font-size: 7.8pt; padding-left: 3mm; }
+  .pack td.n { width: 8mm; font-weight: 600; color: var(--primary); }
+  .pack td.tick { width: 7mm; text-align: right; }
+  .tickbox { display: inline-block; width: 3.2mm; height: 3.2mm; border: 0.3mm solid var(--ink-3); border-radius: 0.6mm; vertical-align: -0.5mm; }
+  .pack ul.list { margin: 1mm 0 0; padding-left: 4.5mm; font-size: 9pt; line-height: 1.45; }
+  .pack ul.list li { margin-bottom: 1.2mm; }
+  .pack ul.checks { list-style: none; padding: 0; margin: 1mm 0 0; font-size: 9pt; line-height: 1.45; }
+  .pack ul.checks li { margin-bottom: 1.6mm; padding-left: 6mm; text-indent: -6mm; }
+  .pack ul.checks .tickbox { margin-right: 2.4mm; }
+  .pack .quote { background: var(--sunken); border-radius: 2mm; padding: 3mm 4mm; font-family: var(--serif); font-size: 10.5pt; line-height: 1.45; margin: 3mm 0; }
+  .pack .contents { display: flex; flex-wrap: wrap; gap: 1mm 6mm; font-size: 8.8pt; margin: 0 0 1mm; }
+  .pack .contents a { color: var(--primary); text-decoration: none; }
+  .pack .contents .n { font-weight: 600; margin-right: 1.5mm; }
+  .pack .split { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+  .pack .note { font-size: 8.8pt; }
+  .c-primary.agent-dot { background: var(--primary-soft); color: var(--primary); }
+  .pack figure.diagram { margin: 2mm 0 0; }
+  .tcards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; margin-top: 2mm; }
+  .tcard { background: var(--surface); border: 1px solid var(--rule); border-radius: 2.5mm; padding: 2.4mm 3mm; display: flex; flex-direction: column; gap: 1.1mm; }
+  .tcard .th { display: flex; align-items: center; gap: 2.2mm; }
+  .tcard .th b { display: block; font-size: 9pt; line-height: 1.15; }
+  .tcard .ver { display: block; font-size: 7pt; color: var(--ink-3); }
+  .tcard p { margin: 0; font-size: 7.8pt; line-height: 1.35; color: var(--ink-2); }
+  .tcard .links { display: flex; flex-wrap: wrap; gap: 1mm; margin-top: auto; }
+  .tcard .links span { font-size: 6.8pt; background: var(--sunken); color: var(--ink-2); border-radius: 1mm; padding: 0.3mm 1.3mm; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3.4mm; margin-top: 3mm; }
+  .stile { background: var(--surface); border: 1px solid var(--rule); border-radius: 2.5mm; padding: 3.4mm; display: flex; gap: 3mm; align-items: flex-start; }
+  .stile .big { font-family: var(--serif); font-size: 22pt; line-height: 1; color: var(--ink); }
+  .stile .lbl { font-size: 8.2pt; color: var(--ink-2); margin-top: 1.6mm; line-height: 1.3; }
+</style>
+</head>
+<body class="pack">
+
+<section class="page a4p" id="qa">
+  <div class="body">
+    <p class="kicker">Presenter readiness · 22 October 2026</p>
+    <h1 class="title">Ready to present: answers, evidence and sign-off</h1>
+    <p class="lede">Eight things to have in hand before the capstone presentation. Every figure comes from the code, the test suites or the recorded run of 22 October 2026, and each answer names where to check it.</p>
+    <nav class="contents" data-outline>
+      <a href="#qa"><span class="n">1</span><span class="t">Likely questions</span></a>
+      <a href="#built"><span class="n">2</span><span class="t">How we built and verified it</span></a>
+      <a href="#signoff"><span class="n">3</span><span class="t">Sign-off: Steps 31 to 35</span></a>
+      <a href="#llm-input"><span class="n">4</span><span class="t">What reaches the LLM is verified</span></a>
+      <a href="#tech-map"><span class="n">5</span><span class="t">How the technologies work together</span></a>
+      <a href="#one-run"><span class="n">6</span><span class="t">One evaluation, through the stack</span></a>
+      <a href="#tech-cards"><span class="n">7</span><span class="t">Every technology at a glance</span></a>
+      <a href="#numbers"><span class="n">8</span><span class="t">Numbers to remember</span></a>
+    </nav>
+    <h2 class="sec">1 · Likely questions, short answers</h2>
+    <table class="tight">
+      <thead><tr><th>Question</th><th>Answer</th><th>Show</th></tr></thead>
+      <tbody>
+        <tr><td class="q">What did the AI do, and what did you?</td><td>Claude Code wrote most of the code; the git history credits it on 62 of 69 commits. We set the direction, made the decisions, reviewed each step and checked it against the real model (section 2).</td><td class="show">DEVELOPMENT_PLAN.md</td></tr>
+        <tr><td class="q">Why LangGraph?</td><td>The workflow is a state machine: routes chosen from the state, bounded loops, specialists in parallel, and a checkpointer so a follow-up starts from the session.</td><td class="show">graph.py; How it works</td></tr>
+        <tr><td class="q">How do you stop runaway agents?</td><td>One rewrite per report, one critique round, 120 s per model call with 2 retries, 4 runs at once, 30 runs an hour per caller.</td><td class="show">config.py; deep dive 6.5</td></tr>
+        <tr><td class="q">Is what goes to the LLM validated?</td><td>Yes. Every request is a Pydantic model with limits (otherwise 422); fetched text is limited, cleaned and fenced (section 4).</td><td class="show">main.py; guardrails.py</td></tr>
+        <tr><td class="q">What if the model returns bad output?</td><td>17 of 22 prompts must answer in a strict JSON schema, validated by Pydantic; an unusable reply is retried once; a failed specialist becomes a named gap; a failed plan or strategy answers 502.</td><td class="show">structured_invoke, agents/chief_of_staff.py</td></tr>
+        <tr><td class="q">Prompt injection?</td><td>The brief, web pages and files are cleaned, scanned, cut and fenced as material, never orders. The recorded run caught a web page hiding words in invisible characters.</td><td class="show">guardrails.py; deep dive 6.4</td></tr>
+        <tr><td class="q">Can the numbers be trusted?</td><td>The money is worked out in code from Finance's drivers (revenue, costs, NPV, IRR, payback, break-even) and checked; a failing check sends Finance back once.</td><td class="show">proposal.py</td></tr>
+        <tr><td class="q">Do the agents really disagree?</td><td>Yes. In the recorded run the cross-check raised 8 conflicts, settled in one call; Finance, Marketing and Technical revised.</td><td class="show">Conflicts tab; deck slide 4</td></tr>
+        <tr><td class="q">Cost and speed?</td><td>A full evaluation: 2 min 30 s, 24 model calls, about 101k tokens. Its follow-up: 91.6 s, 11 calls. Optimisation cut a follow-up's calls by 58 to 64%.</td><td class="show">Run tab; docs/performance.md</td></tr>
+        <tr><td class="q">Why are the reports prose?</td><td>They are written for people; the prompt shapes them and the review scores each one. Every decision the agents make is structured.</td><td class="show">deep dive 6.3</td></tr>
+        <tr><td class="q">Why not ReAct, with tools for each agent?</td><td>Decision D1: Plan–Act–Check across the team. Look-ups are planned by the Chief of Staff, so time and cost stay predictable.</td><td class="show">DEVELOPMENT_PLAN.md, D1</td></tr>
+        <tr><td class="q">How do you know it works?</td><td>578 automated tests with fake models (backend coverage 96.8%, frontend 96.2% of lines), CI on every push, and 34 live checks against the real model.</td><td class="show">deep dive 8.6</td></tr>
+        <tr><td class="q">Are the citations real?</td><td>A fact must cite a real search result or code drops it; an answer's marks are matched to real passages and made-up marks are dropped.</td><td class="show">brief.py; library.py</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4p" id="built">
+  <div class="body">
+    <p class="kicker"><span class="num">2</span>How we built and verified it</p>
+    <h2 class="title">AI-assisted, human-directed, human-verified</h2>
+    <p class="lede">Do not hide the AI's part: the git history shows it. Show the evidence that the direction and the checking were yours.</p>
+    <table class="tight">
+      <thead><tr><th>Claim</th><th>Evidence</th><th>Show</th></tr></thead>
+      <tbody>
+        <tr><td class="q">The direction was ours</td><td>The brief became a 36-step plan, built one step at a time. Decisions D1 to D4 record the options and the choice; trade-offs were picked from measurements, such as the Chief of Staff's reasoning effort.</td><td class="show">DEVELOPMENT_PLAN.md, Decisions; docs/performance.md</td></tr>
+        <tr><td class="q">Every step was reviewed</td><td>Work on its own branch (live-graph, guardrails, langfuse and others), a teammate's merge request, and CI running the tests on every push.</td><td class="show">GitLab branches and merge requests</td></tr>
+        <tr><td class="q">It was checked against the real model</td><td>34 live checks; many passed only after a fix (below).</td><td class="show">The plan's live-check ledger</td></tr>
+        <tr><td class="q">AI output was audited, not trusted</td><td>Asked to prove Pydantic coverage, the audit found two gaps, documented with their fixes.</td><td class="show">Deep dive 6.3</td></tr>
+      </tbody>
+    </table>
+    <h2 class="sec">What the live checks caught in AI-written code</h2>
+    <table class="tight">
+      <thead><tr><th>Step</th><th>Found</th><th>Now</th></tr></thead>
+      <tbody>
+        <tr><td class="q">4 · Delegation</td><td>The planner assigned a single specialist in 3 of 6 first requests</td><td>The right specialists, and no call for the others</td></tr>
+        <tr><td class="q">7 · Critique</td><td>No conflict flagged in 10 runs</td><td>Real clashes are raised, settled and revised</td></tr>
+        <tr><td class="q">8 · Follow-ups</td><td>A follow-up could cost more than the first request</td><td>Only the affected specialists rerun: 13 calls against 21</td></tr>
+        <tr><td class="q">26 · Guardrails</td><td>Azure's filter refused a fenced injection and ended the run</td><td>The attempt is cut out first and the run finishes</td></tr>
+      </tbody>
+    </table>
+    <h2 class="sec">The 30-second answer</h2>
+    <div class="quote">"We built it with an AI coding assistant, and the git history credits it. Our job was direction and verification: we set out a 36-step plan and made its design decisions, reviewed each step on its own branch, and checked each one against the real model before it counted as done. Those checks caught real bugs in AI-written code, and each fix got a test. When we weren't sure about type safety, we had it audited; it found two gaps, which we document rather than hide."</div>
+    <div class="note warn"><i class="icon" data-icon="alert"></i><div>Claim only what you did. Many checks ran in Claude sessions at your request; say "we directed and reviewed" only where you reviewed the results.</div></div>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4p" id="signoff">
+  <div class="body">
+    <p class="kicker"><span class="num">3</span>Sign-off: Steps 31 to 35</p>
+    <h2 class="title">Check these yourselves, then mark them Done</h2>
+    <p class="lede">Steps 31 to 35 are marked Built, not Done, in DEVELOPMENT_PLAN.md. Start the app with <code>./start.sh</code>, check each step, tick it, then change its status to Done.</p>
+    <table class="tight">
+      <thead><tr><th></th><th>Step</th><th>Do this</th><th>You should see</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="n">31</td><td class="q">Look-ups through MCP</td><td>With FRED_API_KEY set, run an evaluation.</td><td>"Look-ups · FRED" in the progress; official figures in the Research tab, each with its latest value and change over the year; reports cite [FRED · DGS10]. Competitors' pricing pages need deep research on Tavily, about 200 credits a run.</td><td class="tick"><span class="tickbox"></span></td></tr>
+        <tr><td class="n">32</td><td class="q">The live graph</td><td>During a run, press Live graph in the progress card.</td><td>Nodes and edges light up as each step runs, with what each step did beside the graph; at the end every step is done.</td><td class="tick"><span class="tickbox"></span></td></tr>
+        <tr><td class="n">33</td><td class="q">The document page</td><td>In Reports, press Open PDF.</td><td>The PDF on a page of its own beside Revise, Settings, Text and History; the sidebar and the tools fold away and back.</td><td class="tick"><span class="tickbox"></span></td></tr>
+        <tr><td class="n">34</td><td class="q">Today's exchange rate</td><td>In the document's Settings, change the currency.</td><td>Today's European Central Bank rate filled in, with its source; the draft shows amounts in both currencies; accepting saves a new version.</td><td class="tick"><span class="tickbox"></span></td></tr>
+        <tr><td class="n">35</td><td class="q">Langfuse</td><td>With the Langfuse keys set, run an evaluation and open its trace from the Run tab.</td><td>One trace; each model call linked to its prompt's version; the team's scores and your verdict on it; emails masked.</td><td class="tick"><span class="tickbox"></span></td></tr>
+      </tbody>
+    </table>
+    <h2 class="sec">Before the day</h2>
+    <ul class="checks">
+      <li><span class="tickbox"></span>Run both test suites yourselves: <code>uv run pytest --cov</code>, and <code>npm run test:coverage</code> in <code>frontend/</code>. Never while the app is using the database named in TEST_DATABASE_URL: the PostgreSQL tests empty it.</li>
+      <li><span class="tickbox"></span>Rehearse the live demo end to end. If Azure is slow on the day, fall back to the recorded run (deck slide 6).</li>
+      <li><span class="tickbox"></span>Spot-check three figures yourselves: the 11 nodes in graph.py, the 22 prompts in prompt_library.py, the test counts.</li>
+      <li><span class="tickbox"></span>Mark Steps 31 to 35 Done once checked, and push.</li>
+    </ul>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4p" id="llm-input">
+  <div class="body">
+    <p class="kicker"><span class="num">4</span>What reaches the LLM is verified</p>
+    <h2 class="title">Validated going in, typed coming back</h2>
+    <p class="lede">Everything the founder sends is validated by Pydantic before any model call. Everything else is built by code from typed data or passes through the guardrails, and all of it is fenced.</p>
+    <table class="tight">
+      <thead><tr><th>What goes to the model</th><th>How it is checked</th></tr></thead>
+      <tbody>
+        <tr><td class="q">The founder's brief, answers, follow-ups, questions and instructions</td><td>A Pydantic request model with limits (a brief of up to 8,000 characters, at most 10 answers and 50 sources), then the guardrails. Anything else: 422, and no model call.</td></tr>
+        <tr><td class="q">Uploaded files</td><td>Not Pydantic, since the body is the file's bytes. The extractor checks the size (10 MB), the real file type, and page, row and character limits; only the text is kept, then the guardrails.</td></tr>
+        <tr><td class="q">Web results (Bing, Tavily)</td><td>Typed records, snippets cut to length, then the guardrails. Free text: Pydantic cannot judge it.</td></tr>
+        <tr><td class="q">FRED figures</td><td>Built into Pydantic <code>Figure</code> models; the values worked out in code.</td></tr>
+        <tr><td class="q">Decisions passed between agents</td><td>Plans, reviews and conflicts are Pydantic-validated before they are used.</td></tr>
+        <tr><td class="q">Reports read by other agents</td><td>Prose, fenced as another agent's report.</td></tr>
+        <tr><td class="q">Competitor profiles</td><td>The one loose spot: each field becomes text before its model, so a malformed field passes as text. Still fenced.</td></tr>
+      </tbody>
+    </table>
+    <div class="note"><i class="icon c-primary" data-icon="shield"></i><div>Pydantic checks shape and size, not safety. The guardrails check content: invisible characters removed, attempts to instruct the agents cut out, the rest fenced, and every system prompt says fenced text is material, not orders.</div></div>
+    <h2 class="sec">On the way back: the model's replies</h2>
+    <div class="split">
+      <ul class="list">
+        <li><strong>17 of 22 prompts</strong> answer in a strict JSON schema made from a Pydantic model, and the reply is validated again.</li>
+        <li><strong>5 are prose by design:</strong> the four reports and the strategy.</li>
+      </ul>
+      <ul class="list">
+        <li><strong>Gap 1:</strong> ranges live in field descriptions, so a review scored 9 would pass. Fix: validators, with a test each.</li>
+        <li><strong>Gap 2:</strong> a reply that breaks the schema is not retried (a 500; rare under strict mode). Fix: catch it in <code>structured_invoke</code>, retry once, then treat it as unusable.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4l" id="tech-map">
+  <div class="body">
+    <p class="kicker"><span class="num">5</span>How the technologies work together</p>
+    <h2 class="title">One stack, from the founder's browser to the models and back</h2>
+    <figure class="diagram"><!-- include: diagrams/tech-map.svg --></figure>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4l" id="one-run">
+  <div class="body">
+    <p class="kicker"><span class="num">6</span>One evaluation, through the stack</p>
+    <h2 class="title">What happens, and where, when the founder runs the team</h2>
+    <figure class="diagram"><!-- include: diagrams/one-evaluation.svg --></figure>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4l" id="tech-cards">
+  <div class="body">
+    <p class="kicker"><span class="num">7</span>Every technology at a glance</p>
+    <h2 class="title">Sixteen parts: what each does here, and what it works with</h2>
+    <div class="tcards">
+      <div class="tcard"><div class="th"><span class="agent-dot c-primary"><i class="icon" data-icon="chip"></i></span><div><b>Python · uv</b><span class="ver">3.12 · uv.lock</span></div></div><p>The API, the agents, the tools and the MCP server; one command installs the locked dependencies.</p><div class="links"><span>FastAPI</span><span>LangGraph</span><span>MCP</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-primary"><i class="icon" data-icon="server"></i></span><div><b>FastAPI · uvicorn</b><span class="ver">0.143 · 0.54</span></div></div><p>29 typed routes behind the guard; each step of a run streamed as a server-sent event.</p><div class="links"><span>Next.js</span><span>Pydantic</span><span>LangGraph</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-finance"><i class="icon" data-icon="check"></i></span><div><b>Pydantic</b><span class="ver">2.14</span></div></div><p>Every request with its limits, 17 of 22 model replies, the state, the report and the proposal.</p><div class="links"><span>FastAPI</span><span>LangChain</span><span>LangGraph</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-chief"><i class="icon" data-icon="flow"></i></span><div><b>LangGraph</b><span class="ver">1.2 · checkpoint-postgres 3.2</span></div></div><p>The state machine: 11 nodes, specialists in parallel, bounded loops, a checkpoint per step.</p><div class="links"><span>LangChain</span><span>PostgreSQL</span><span>FastAPI</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-technical"><i class="icon" data-icon="swap"></i></span><div><b>LangChain</b><span class="ver">core 1.6 · langchain-openai 1.7</span></div></div><p>The model client and messages; with_structured_output for typed replies; callbacks for tracing.</p><div class="links"><span>Azure OpenAI</span><span>Pydantic</span><span>Langfuse</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-technical"><i class="icon" data-icon="spark"></i></span><div><b>Azure OpenAI</b><span class="ver">gpt-5-mini · openai 3.29</span></div></div><p>Every agent's call, with reasoning set per role, and Bing web search through the Responses API.</p><div class="links"><span>LangChain</span><span>Deep research</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-research"><i class="icon" data-icon="globe"></i></span><div><b>MCP</b><span class="ver">2.3</span></div></div><p>Our FRED server over stdio and Tavily's hosted server over HTTP: planned look-ups, not tool loops.</p><div class="links"><span>FRED</span><span>Tavily</span><span>LangGraph</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-research"><i class="icon" data-icon="search"></i></span><div><b>FRED · Tavily · ECB</b><span class="ver">data from outside</span></div></div><p>Official US figures; web search, research and pricing pages; today's exchange rates, kept 6 hours.</p><div class="links"><span>MCP</span><span>Brief</span><span>Proposal</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-technical"><i class="icon" data-icon="state"></i></span><div><b>PostgreSQL</b><span class="ver">16 · psycopg 3.3</span></div></div><p>Sessions, checkpoints, reports and their last 30 versions, uploads and the Monitor's history.</p><div class="links"><span>FastAPI</span><span>LangGraph</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-primary"><i class="icon" data-icon="window"></i></span><div><b>Next.js · React</b><span class="ver">16 · 19 · TypeScript 5.9</span></div></div><p>Evaluate, Reports and How it works, and a server-side proxy that adds the API key.</p><div class="links"><span>FastAPI</span><span>Browser</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-marketing"><i class="icon" data-icon="sliders"></i></span><div><b>Tailwind · Mermaid · react-markdown</b><span class="ver">4 · 12 · 10</span></div></div><p>The design tokens, the live graph drawn from the real graph, and reports with citation tags.</p><div class="links"><span>Next.js</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-chief"><i class="icon" data-icon="pulse"></i></span><div><b>Langfuse</b><span class="ver">5 · Cloud, EU</span></div></div><p>Every model call traced and masked, the 22 prompts versioned, scores and experiments.</p><div class="links"><span>LangChain</span><span>Judge</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-marketing"><i class="icon" data-icon="monitor"></i></span><div><b>Prometheus client</b><span class="ver">0.26</span></div></div><p>Counters and histograms at /metrics, and the numbers behind the Monitor.</p><div class="links"><span>FastAPI</span><span>Monitor</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-finance"><i class="icon" data-icon="document"></i></span><div><b>fpdf2 · markdown-it-py</b><span class="ver">2.8 · 4.2</span></div></div><p>The investment proposal's PDF: charts drawn from the figures, each part labelled by its agent.</p><div class="links"><span>Reports</span><span>Proposal</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-marketing"><i class="icon" data-icon="paperclip"></i></span><div><b>Document readers</b><span class="ver">pypdf · python-docx · openpyxl · python-pptx</span></div></div><p>Uploads read into cited passages: PDF, Word, PowerPoint, Excel and more; BM25 picks each agent's share.</p><div class="links"><span>FastAPI</span><span>Agents</span></div></div>
+      <div class="tcard"><div class="th"><span class="agent-dot c-primary"><i class="icon" data-icon="refresh"></i></span><div><b>Docker Compose · GitLab CI</b><span class="ver">python 3.12-slim · node 22 · postgres 16</span></div></div><p>One command runs the whole stack; every push is tested, linted, type-checked and built.</p><div class="links"><span>Everything</span></div></div>
+    </div>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4l" id="numbers">
+  <div class="body">
+    <p class="kicker"><span class="num">8</span>Numbers to remember</p>
+    <h2 class="title">The figures worth knowing by heart</h2>
+    <div class="stats">
+      <div class="stile"><span class="agent-dot c-chief"><i class="icon" data-icon="team"></i></span><div><div class="big">5</div><div class="lbl">agents: a Chief of Staff and four specialists</div></div></div>
+      <div class="stile"><span class="agent-dot c-chief"><i class="icon" data-icon="flow"></i></span><div><div class="big">11 · 40</div><div class="lbl">nodes and edges in the state machine</div></div></div>
+      <div class="stile"><span class="agent-dot c-marketing"><i class="icon" data-icon="clock"></i></span><div><div class="big">2:30</div><div class="lbl">a full evaluation, from plan to strategy</div></div></div>
+      <div class="stile"><span class="agent-dot c-technical"><i class="icon" data-icon="spark"></i></span><div><div class="big">24</div><div class="lbl">model calls in that run, about 101k tokens</div></div></div>
+      <div class="stile"><span class="agent-dot c-marketing"><i class="icon" data-icon="refresh"></i></span><div><div class="big">91.6 s</div><div class="lbl">its follow-up: 11 calls, two specialists rerun</div></div></div>
+      <div class="stile"><span class="agent-dot c-chief"><i class="icon" data-icon="gavel"></i></span><div><div class="big">8</div><div class="lbl">conflicts raised, all settled in one call</div></div></div>
+      <div class="stile"><span class="agent-dot c-finance"><i class="icon" data-icon="check"></i></span><div><div class="big">17 of 22</div><div class="lbl">prompts answer as validated Pydantic models</div></div></div>
+      <div class="stile"><span class="agent-dot c-chief"><i class="icon" data-icon="document"></i></span><div><div class="big">22</div><div class="lbl">prompts, each versioned in Langfuse</div></div></div>
+      <div class="stile"><span class="agent-dot c-finance"><i class="icon" data-icon="thumb-up"></i></span><div><div class="big">578</div><div class="lbl">automated tests, with no model calls</div></div></div>
+      <div class="stile"><span class="agent-dot c-finance"><i class="icon" data-icon="chart"></i></span><div><div class="big">96.8%</div><div class="lbl">backend coverage; frontend 96.2% of lines</div></div></div>
+      <div class="stile"><span class="agent-dot c-risk"><i class="icon" data-icon="pulse"></i></span><div><div class="big">34</div><div class="lbl">live checks against the real model</div></div></div>
+      <div class="stile"><span class="agent-dot c-primary"><i class="icon" data-icon="server"></i></span><div><div class="big">29</div><div class="lbl">API routes, each typed and guarded</div></div></div>
+      <div class="stile"><span class="agent-dot c-marketing"><i class="icon" data-icon="sliders"></i></span><div><div class="big">58–64%</div><div class="lbl">fewer model calls on a follow-up, after optimisation</div></div></div>
+      <div class="stile"><span class="agent-dot c-chief"><i class="icon" data-icon="undo"></i></span><div><div class="big">1 + 1</div><div class="lbl">one rewrite per report, one critique round</div></div></div>
+      <div class="stile"><span class="agent-dot c-finance"><i class="icon" data-icon="swap"></i></span><div><div class="big">22</div><div class="lbl">currencies, at today's ECB rate</div></div></div>
+      <div class="stile"><span class="agent-dot c-primary"><i class="icon" data-icon="compass"></i></span><div><div class="big">36</div><div class="lbl">steps in the plan, each reviewable on its own</div></div></div>
+    </div>
+  </div>
+  <div class="foot"><span>Presenter readiness</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+</body>
+</html>
