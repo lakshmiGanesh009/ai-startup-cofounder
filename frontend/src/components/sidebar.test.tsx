@@ -4,6 +4,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { Sidebar } from "@/components/sidebar";
 import { BackendProvider, useBackend } from "@/lib/backend";
+import { SIDEBAR_SCRIPT } from "@/lib/sidebar";
 import { fakeBackend, HEALTH } from "@/test/backend";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
@@ -163,5 +164,35 @@ describe("the web research switch", () => {
     fakeBackend({ "GET /health": () => new Promise(() => {}) });
     renderSidebar();
     expect(screen.getByText("Shown once the backend answers.")).toBeTruthy();
+  });
+});
+
+describe("folding the sidebar", () => {
+  test("folds it into a rail of the pages' icons and back, and this browser remembers it", async () => {
+    fakeBackend();
+    renderSidebar();
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
+    expect(document.documentElement.dataset.sidebar).toBe("rail");
+    expect(window.localStorage.getItem("cofounder-sidebar")).toBe("rail");
+    // Folded, each page keeps its name, for screen readers and as a tooltip.
+    const evaluate = within(screen.getByRole("navigation", { name: "Pages" })).getByRole("link", { name: "Evaluate" });
+    expect(evaluate.getAttribute("title")).toBe("Evaluate");
+
+    await user.click(screen.getByRole("button", { name: "Expand the sidebar" }));
+    expect(document.documentElement.dataset.sidebar).toBeUndefined();
+    expect(window.localStorage.getItem("cofounder-sidebar")).toBeNull();
+  });
+
+  test("a remembered fold is on <html> before the page first paints", () => {
+    window.localStorage.setItem("cofounder-sidebar", "rail");
+    new Function(SIDEBAR_SCRIPT)();
+    expect(document.documentElement.dataset.sidebar).toBe("rail");
+
+    fakeBackend();
+    renderSidebar();
+    expect(screen.getByRole("button", { name: "Expand the sidebar" })).toBeTruthy();
+    delete document.documentElement.dataset.sidebar;
   });
 });

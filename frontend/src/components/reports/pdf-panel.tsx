@@ -1,11 +1,13 @@
 "use client";
 
-// The document studio, in the PDF pop-up. On the right, the document in the
+// The document studio, on a page of its own. On the right, the document in the
 // browser's own PDF viewer: as saved, as a change would leave it, or as an
 // earlier version was. On the left, the tools: ask the team to revise the
 // proposal; the document's settings (the currency and the units, converted by
 // code; who it is from; the sections left out); find and replace, or redact;
 // and the history. Every change comes back as a draft to accept or discard.
+// The tools fold into a strip of their icons, which this browser remembers,
+// leaving the PDF the page; a draft or an earlier version always shows them.
 
 import { useEffect, useRef, useState } from "react";
 
@@ -14,7 +16,7 @@ import { DraftReview } from "@/components/reports/draft-review";
 import { AgentAvatar, AgentStack } from "@/components/ui/agent";
 import { Button, buttonClass } from "@/components/ui/button";
 import { inputClass, Label, Select } from "@/components/ui/field";
-import { DownloadIcon } from "@/components/ui/icons";
+import { ClockIcon, DownloadIcon, PencilIcon, SearchIcon, SidebarIcon, SlidersIcon } from "@/components/ui/icons";
 import { Notice, type Tone } from "@/components/ui/notice";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -48,13 +50,24 @@ type Shown =
 type Pdf = { key: string; url: string } | { key: string; error: string };
 
 const PARTS = Object.keys(PART_TITLES) as PartKey[];
-const TOOLS: [Tool, string][] = [
-  ["revise", "Revise"],
-  ["settings", "Settings"],
-  ["text", "Text"],
-  ["history", "History"],
+const TOOLS: [Tool, string, (props: { className?: string }) => React.ReactNode][] = [
+  ["revise", "Revise", PencilIcon],
+  ["settings", "Settings", SlidersIcon],
+  ["text", "Text", SearchIcon],
+  ["history", "History", ClockIcon],
 ];
 const STALE = "The report changed elsewhere, so it has been reloaded. Make the change again.";
+
+// Whether the tools are folded away, remembered in this browser.
+const FOLDED_KEY = "cofounder-studio-tools";
+
+function storedFolded(): boolean {
+  try {
+    return window.localStorage.getItem(FOLDED_KEY) === "folded";
+  } catch {
+    return false;
+  }
+}
 
 // An instruction that asks for a conversion, which code does exactly.
 const CONVERSION = /\b(currenc|euros?\b|eur\b|pounds?\b|gbp|rupees?|inr\b|yen\b|dollars?\b|usd\b|metric|imperial|kilomet|miles?\b|kilograms?)|[€£₹¥$]/i;
@@ -102,7 +115,20 @@ export function PdfPanel({
   const [pdf, setPdf] = useState<Pdf | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [foldTools, setFoldTools] = useState(storedFolded);
   const key = pdfKey(shown, report);
+  // A draft to accept, or a version to restore, always shows the tools.
+  const folded = foldTools && shown.kind === "saved";
+
+  function fold(next: boolean) {
+    setFoldTools(next);
+    try {
+      if (next) window.localStorage.setItem(FOLDED_KEY, "folded");
+      else window.localStorage.removeItem(FOLDED_KEY);
+    } catch {
+      // A browser that keeps nothing still folds them, for this page.
+    }
+  }
 
   useEffect(() => {
     let url: string | null = null;
@@ -150,131 +176,175 @@ export function PdfPanel({
 
   const current = pdf?.key === key ? pdf : null;
   const kind = report.proposal ? "investment-proposal" : "launch-report";
+  const fileName = `${kind}-${report.session_id.slice(0, 8)}.pdf`;
+  const iconButton = "flex rounded-md p-2 text-ink-3 transition-colors hover:bg-sunken hover:text-ink";
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-cols-[25rem_minmax(0,1fr)] lg:grid-rows-1">
-      <div className="flex min-h-0 flex-col gap-5 overflow-y-auto border-b border-rule p-5 lg:border-r lg:border-b-0">
-        {shown.kind === "draft" ? (
-          <DraftReview
-            sessionId={report.session_id}
-            draft={shown.draft}
-            before={report}
-            notes={
-              <>
-                {shown.failed && shown.failed.length > 0 && (
-                  <Notice tone="warn">Could not revise {shown.failed.join(", ")}; they keep their text.</Notice>
-                )}
-                <GuardrailNotice flags={shown.flags ?? []} />
-              </>
-            }
-            onAccepted={(saved) => {
-              setShown({ kind: "saved" });
-              setMessage({ tone: "good", text: `Saved as version ${saved.version}.` });
-              onChanged(saved);
-            }}
-            onDiscard={() => {
-              setShown({ kind: "saved" });
-              setMessage({ tone: "info", text: "Discarded; nothing was changed." });
-            }}
-            onStale={() => {
-              setShown({ kind: "saved" });
-              setMessage({ tone: "warn", text: STALE });
-              onChanged(null);
-            }}
-          />
-        ) : shown.kind === "version" ? (
-          <section aria-label="An earlier version" className="space-y-4">
-            <Notice tone="info">
-              Showing version {shown.report.version} as it was{shown.report.change ? `: ${shown.report.change}.` : "."}
-            </Notice>
-            <div className="flex gap-2">
-              <Button
-                variant="primary"
-                className="flex-1"
-                disabled={Boolean(busy)}
-                onClick={async () => {
-                  setBusy("restore");
-                  try {
-                    const saved = await restoreVersion(report.session_id, report.version, shown.report.version);
-                    setShown({ kind: "saved" });
-                    setMessage({ tone: "good", text: `Restored version ${shown.report.version} as version ${saved.version}; the one it replaced is kept.` });
-                    onChanged(saved);
-                  } catch (error) {
-                    setShown({ kind: "saved" });
-                    failed(error);
-                  } finally {
-                    setBusy(null);
-                  }
-                }}
-              >
-                Restore this version
-              </Button>
-              <Button onClick={() => setShown({ kind: "saved" })}>Back</Button>
-            </div>
-          </section>
-        ) : (
-          <>
-            <div role="tablist" aria-label="Tools" className="grid grid-cols-4 gap-0.5 rounded-md border border-rule-strong bg-sunken p-0.5">
-              {TOOLS.map(([name, label]) => (
-                <button
-                  key={name}
-                  type="button"
-                  role="tab"
-                  aria-selected={tool === name}
-                  onClick={() => {
-                    setTool(name);
-                    setMessage(null);
+    <div
+      className={`grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] lg:grid-rows-1 ${
+        folded ? "lg:grid-cols-[3.5rem_minmax(0,1fr)]" : "lg:grid-cols-[25rem_minmax(0,1fr)]"
+      }`}
+    >
+      {folded ? (
+        // The tools folded: a strip of their icons, each opening the tools on it.
+        <section
+          aria-label="The tools, folded"
+          className="flex items-center gap-1 border-b border-rule px-3 py-1.5 lg:flex-col lg:border-r lg:border-b-0 lg:px-0 lg:py-3"
+        >
+          <button type="button" onClick={() => fold(false)} title="Show the tools" className={iconButton}>
+            <SidebarIcon />
+            <span className="sr-only">Show the tools</span>
+          </button>
+          <span aria-hidden className="mx-1 h-5 w-px bg-rule lg:mx-0 lg:my-1 lg:h-px lg:w-5" />
+          {TOOLS.map(([name, label, Icon]) => (
+            <button
+              key={name}
+              type="button"
+              title={label}
+              onClick={() => {
+                setTool(name);
+                setMessage(null);
+                fold(false);
+              }}
+              className={iconButton}
+            >
+              <Icon />
+              <span className="sr-only">Open the {label} tool</span>
+            </button>
+          ))}
+          {current && "url" in current && (
+            <a href={current.url} download={fileName} title="Download PDF" className={`${iconButton} ml-auto lg:mt-auto lg:ml-0`}>
+              <DownloadIcon />
+              <span className="sr-only">Download PDF</span>
+            </a>
+          )}
+        </section>
+      ) : (
+        <div className="flex min-h-0 flex-col gap-5 overflow-y-auto border-b border-rule p-5 lg:border-r lg:border-b-0">
+          {shown.kind === "draft" ? (
+            <DraftReview
+              sessionId={report.session_id}
+              draft={shown.draft}
+              before={report}
+              notes={
+                <>
+                  {shown.failed && shown.failed.length > 0 && (
+                    <Notice tone="warn">Could not revise {shown.failed.join(", ")}; they keep their text.</Notice>
+                  )}
+                  <GuardrailNotice flags={shown.flags ?? []} />
+                </>
+              }
+              onAccepted={(saved) => {
+                setShown({ kind: "saved" });
+                setMessage({ tone: "good", text: `Saved as version ${saved.version}.` });
+                onChanged(saved);
+              }}
+              onDiscard={() => {
+                setShown({ kind: "saved" });
+                setMessage({ tone: "info", text: "Discarded; nothing was changed." });
+              }}
+              onStale={() => {
+                setShown({ kind: "saved" });
+                setMessage({ tone: "warn", text: STALE });
+                onChanged(null);
+              }}
+            />
+          ) : shown.kind === "version" ? (
+            <section aria-label="An earlier version" className="space-y-4">
+              <Notice tone="info">
+                Showing version {shown.report.version} as it was{shown.report.change ? `: ${shown.report.change}.` : "."}
+              </Notice>
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  className="flex-1"
+                  disabled={Boolean(busy)}
+                  onClick={async () => {
+                    setBusy("restore");
+                    try {
+                      const saved = await restoreVersion(report.session_id, report.version, shown.report.version);
+                      setShown({ kind: "saved" });
+                      setMessage({ tone: "good", text: `Restored version ${shown.report.version} as version ${saved.version}; the one it replaced is kept.` });
+                      onChanged(saved);
+                    } catch (error) {
+                      setShown({ kind: "saved" });
+                      failed(error);
+                    } finally {
+                      setBusy(null);
+                    }
                   }}
-                  className={`rounded-[5px] px-1.5 py-1.5 text-[12.5px] transition-colors ${
-                    tool === name ? "bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-ink-2 hover:text-ink"
-                  }`}
                 >
-                  {label}
+                  Restore this version
+                </Button>
+                <Button onClick={() => setShown({ kind: "saved" })}>Back</Button>
+              </div>
+            </section>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <div role="tablist" aria-label="Tools" className="grid flex-1 grid-cols-4 gap-0.5 rounded-md border border-rule-strong bg-sunken p-0.5">
+                  {TOOLS.map(([name, label]) => (
+                    <button
+                      key={name}
+                      type="button"
+                      role="tab"
+                      aria-selected={tool === name}
+                      onClick={() => {
+                        setTool(name);
+                        setMessage(null);
+                      }}
+                      className={`rounded-[5px] px-1.5 py-1.5 text-[12.5px] transition-colors ${
+                        tool === name ? "bg-surface font-medium text-ink shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-ink-2 hover:text-ink"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => fold(true)} title="Hide the tools" className={`${iconButton} -mr-1.5 shrink-0`}>
+                  <SidebarIcon />
+                  <span className="sr-only">Hide the tools</span>
                 </button>
-              ))}
-            </div>
-            {tool === "revise" && (
-              <ReviseTool
-                report={report}
-                reasoning={reasoning}
-                focus={focusPrompt}
-                busy={busy}
-                setBusy={setBusy}
-                onDraft={(result) => setShown({ kind: "draft", ...result })}
-                onFailed={failed}
-                onSettings={() => setTool("settings")}
-                setMessage={setMessage}
-              />
-            )}
-            {tool === "settings" && <SettingsTool report={report} busy={busy} onDraft={draft} />}
-            {tool === "text" && <TextTool busy={busy} onDraft={draft} />}
-            {tool === "history" && (
-              <HistoryTool
-                report={report}
-                onLook={async (version) => {
-                  try {
-                    setShown({ kind: "version", report: await getVersion(report.session_id, version) });
-                  } catch (error) {
-                    failed(error);
-                  }
-                }}
-              />
-            )}
-          </>
-        )}
-        {busy && busy !== "revise" && busy !== "restore" && <p className="text-sm text-ink-3">{busy}…</p>}
-        {message && <Notice tone={message.tone}>{message.text}</Notice>}
-        {shown.kind === "saved" && current && "url" in current && (
-          <a
-            href={current.url}
-            download={`${kind}-${report.session_id.slice(0, 8)}.pdf`}
-            className={buttonClass("secondary", "md", "mt-auto")}
-          >
-            <DownloadIcon />
-            Download PDF
-          </a>
-        )}
-      </div>
+              </div>
+              {tool === "revise" && (
+                <ReviseTool
+                  report={report}
+                  reasoning={reasoning}
+                  focus={focusPrompt}
+                  busy={busy}
+                  setBusy={setBusy}
+                  onDraft={(result) => setShown({ kind: "draft", ...result })}
+                  onFailed={failed}
+                  onSettings={() => setTool("settings")}
+                  setMessage={setMessage}
+                />
+              )}
+              {tool === "settings" && <SettingsTool report={report} busy={busy} onDraft={draft} />}
+              {tool === "text" && <TextTool busy={busy} onDraft={draft} />}
+              {tool === "history" && (
+                <HistoryTool
+                  report={report}
+                  onLook={async (version) => {
+                    try {
+                      setShown({ kind: "version", report: await getVersion(report.session_id, version) });
+                    } catch (error) {
+                      failed(error);
+                    }
+                  }}
+                />
+              )}
+            </>
+          )}
+          {busy && busy !== "revise" && busy !== "restore" && <p className="text-sm text-ink-3">{busy}…</p>}
+          {message && <Notice tone={message.tone}>{message.text}</Notice>}
+          {shown.kind === "saved" && current && "url" in current && (
+            <a href={current.url} download={fileName} className={buttonClass("secondary", "md", "mt-auto")}>
+              <DownloadIcon />
+              Download PDF
+            </a>
+          )}
+        </div>
+      )}
       <div className="flex min-h-[60dvh] flex-col bg-sunken lg:min-h-0">
         {shown.kind !== "saved" && (
           <p className={`px-4 py-2 text-xs font-medium ${shown.kind === "draft" ? "bg-warn-soft text-warn" : "bg-primary-soft text-ink"}`}>

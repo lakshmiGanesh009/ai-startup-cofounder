@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 
 import { Sidebar } from "@/components/sidebar";
 import { BackendProvider } from "@/lib/backend";
+import { SIDEBAR_SCRIPT } from "@/lib/sidebar";
 import { THEME_SCRIPT } from "@/lib/theme";
 
 import "./globals.css";
@@ -32,14 +33,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    // The theme script sets data-theme on <html> before React hydrates it.
+    // The scripts set data-theme and data-sidebar on <html> before React hydrates it.
     <html
       lang="en"
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} h-full antialiased`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT + SIDEBAR_SCRIPT }} />
       </head>
       <body className="min-h-full">
         <BackendProvider>

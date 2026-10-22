@@ -5,14 +5,15 @@
 // team's report; after, a chapter per section of the proposal, numbered as the
 // PDF is, each with its charts, the agent that wrote it and an Edit button.
 // Each paragraph can be revised or removed on its own. "Open PDF" shows the
-// document in the studio, beside its tools: the team's revisions, the
-// settings (currency, units), find and replace, redaction and the history.
-// Every change is shown as a draft before it is saved. "Ask about it" puts
-// questions to the report, the files its run worked from and any others.
+// document in the studio, a page of its own, beside its tools: the team's
+// revisions, the settings (currency, units), find and replace, redaction and
+// the history. Every change is shown as a draft before it is saved. "Ask about
+// it" puts questions to the report, the files its run worked from and any others.
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { AskPanel } from "@/components/reports/ask-panel";
+import { DocumentPage } from "@/components/reports/document-page";
 import { EditForm } from "@/components/reports/edit-form";
 import { type PassageAction, PassageContext } from "@/components/reports/passages";
 import { PdfPanel, type Tool } from "@/components/reports/pdf-panel";
@@ -61,9 +62,29 @@ import { CURRENCIES, CurrencyContext, PART_AGENTS, PART_TITLES } from "@/lib/pro
 import { proposalWait } from "@/lib/team";
 
 type Message = { tone: Tone; text: string };
-// The studio pop-up: the tool it opens on, a draft to review, and whether the
+// The studio's page: the tool it opens on, a draft to review, and whether the
 // revise prompt takes the focus.
 type Studio = { tool: Tool; draft: Draft | null; flags: GuardrailFlag[]; focus: boolean; opened: number };
+
+// The studio's page in the address (?session=…&view=document), so the
+// browser's Back button returns to the report and a reload opens it again.
+const DOCUMENT_VIEW = "document";
+
+function inAddress(): boolean {
+  return new URLSearchParams(window.location.search).get("view") === DOCUMENT_VIEW;
+}
+
+function address(sessionId: string, document: boolean): string {
+  const params = new URLSearchParams(window.location.search);
+  params.set("session", sessionId);
+  if (document) params.set("view", DOCUMENT_VIEW);
+  else params.delete("view");
+  return `${window.location.pathname}?${params}`;
+}
+
+function studioOn(tool: Tool, draft: Draft | null = null, flags: GuardrailFlag[] = [], focus = false): Studio {
+  return { tool, draft, flags, focus, opened: Date.now() };
+}
 
 const DESCRIPTION =
   "Each session's report. Read it, edit it, have the agents write it up as an investment proposal, and share the PDF.";
@@ -258,15 +279,43 @@ function Reports() {
   const [message, setMessage] = useState<Message | null>(null);
   const [writing, setWriting] = useState(false);
   const [confirm, setConfirm] = useState<"rewrite" | "reset" | null>(null);
-  const [studio, setStudio] = useState<Studio | null>(null);
+  // A reload of the studio's page opens it again, once its report is in.
+  const [studio, setStudio] = useState<Studio | null>(() => (inAddress() ? studioOn("revise") : null));
   const [asking, setAsking] = useState(false);
   // A passage being revised by its writer, while the team works on it.
   const [revisingPassage, setRevisingPassage] = useState(false);
   const [currency, setCurrency] = useState<string | null>(null);
+  // Where the report was scrolled to when the studio opened, to come back to.
+  const scrolled = useRef<number | null>(null);
 
   function open(tool: Tool, draft: Draft | null = null, flags: GuardrailFlag[] = [], focus = false) {
-    setStudio({ tool, draft, flags, focus, opened: Date.now() });
+    if (!studio && report) {
+      scrolled.current = window.scrollY;
+      window.history.pushState({ document: true }, "", address(report.session_id, true));
+    }
+    setStudio(studioOn(tool, draft, flags, focus));
   }
+
+  // Back to the report: through the browser's history when the studio added
+  // to it, so Back and Forward still make sense.
+  function close() {
+    setStudio(null);
+    if (window.history.state?.document) window.history.back();
+    else if (report) window.history.replaceState(null, "", address(report.session_id, false));
+  }
+
+  // The browser's Back (or Forward) to or from the studio's page.
+  useEffect(() => {
+    const moved = () => setStudio((current) => (inAddress() ? (current ?? studioOn("revise")) : null));
+    window.addEventListener("popstate", moved);
+    return () => window.removeEventListener("popstate", moved);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (studio || scrolled.current === null) return;
+    window.scrollTo({ top: scrolled.current });
+    scrolled.current = null;
+  }, [studio]);
 
   useEffect(() => {
     listReports()
@@ -607,26 +656,6 @@ function Reports() {
         </CurrencyContext.Provider>
 
         <Dialog
-          open={studio !== null}
-          title="The document"
-          description={view ? view.proposal.executive.project_name : report.objective}
-          onClose={() => setStudio(null)}
-        >
-          {studio && (
-            <PdfPanel
-              key={studio.opened}
-              report={report}
-              reasoning={reasoning}
-              focusPrompt={studio.focus}
-              initialTool={studio.tool}
-              initialDraft={studio.draft}
-              initialFlags={studio.flags}
-              onChanged={(revised) => (revised ? setReport(revised) : load(report.session_id))}
-            />
-          )}
-        </Dialog>
-
-        <Dialog
           open={asking}
           title="Ask about this report"
           description="The Chief of Staff answers from the documents alone, and cites each passage it uses."
@@ -658,9 +687,31 @@ function Reports() {
   }
 
   return (
-    <div>
-      <PageHeader title="Reports" description={DESCRIPTION} aside={picker} />
-      {body}
-    </div>
+    <>
+      {/* Hidden, not gone, while the studio shows: back from it, the report is as it was left. */}
+      <div hidden={Boolean(report && studio)}>
+        <PageHeader title="Reports" description={DESCRIPTION} aside={picker} />
+        {body}
+      </div>
+      {report && studio && (
+        <DocumentPage
+          kind={report.proposal ? "Investment proposal" : "Team report"}
+          version={report.version}
+          title={report.proposal ? report.proposal.executive.project_name : report.objective}
+          onBack={close}
+        >
+          <PdfPanel
+            key={studio.opened}
+            report={report}
+            reasoning={reasoning}
+            focusPrompt={studio.focus}
+            initialTool={studio.tool}
+            initialDraft={studio.draft}
+            initialFlags={studio.flags}
+            onChanged={(revised) => (revised ? setReport(revised) : load(report.session_id))}
+          />
+        </DocumentPage>
+      )}
+    </>
   );
 }

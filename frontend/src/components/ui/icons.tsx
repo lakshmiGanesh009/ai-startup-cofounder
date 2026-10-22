@@ -82,6 +82,46 @@ export function ArrowRightIcon(props: IconProps) {
   );
 }
 
+export function ArrowLeftIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M13 8H3M7 4 3 8l4 4" />
+    </Icon>
+  );
+}
+
+// Three sliders: settings.
+export function SlidersIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+      <circle cx="5.5" cy="4.5" r="1.4" fill="var(--surface)" />
+      <circle cx="10.5" cy="8" r="1.4" fill="var(--surface)" />
+      <circle cx="7" cy="11.5" r="1.4" fill="var(--surface)" />
+    </Icon>
+  );
+}
+
+// A clock: the history.
+export function ClockIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 4.75V8l2.25 1.5" />
+    </Icon>
+  );
+}
+
+// A window with a panel down its left side: the sidebar, folded or not.
+export function SidebarIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="2" y="2.75" width="12" height="10.5" rx="1.75" />
+      <path d="M6 2.75v10.5" />
+    </Icon>
+  );
+}
+
 export function PencilIcon(props: IconProps) {
   return (
     <Icon {...props}>

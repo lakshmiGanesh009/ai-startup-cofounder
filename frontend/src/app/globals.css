@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The sidebar folded into a rail of icons (lib/sidebar.ts): `lg:rail:hidden`. */
+@custom-variant rail (&:where([data-sidebar="rail"] *));
+
 /*
   The app's look: warm paper and ink, one navy accent (the PDF's), hairline
   rules instead of boxes, Newsreader for the documents the agents write and
@@ -670,6 +673,16 @@ mark.assumption {
   * {
     scroll-behavior: auto !important;
   }
+}
+
+/* The sidebar's width on a large screen, folded into a rail or not
+   (lib/sidebar.ts); the document page fills the window beside it. */
+:root {
+  --sidebar-width: 15rem;
+}
+
+:root[data-sidebar="rail"] {
+  --sidebar-width: 3.5rem;
 }
 
 /* The modal dialog's backdrop. */
