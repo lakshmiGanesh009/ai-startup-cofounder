@@ -106,6 +106,10 @@ graph TD
 | 29 | Document control: settings, conversions in code, direct edits, one-passage revisions, previews, versions, redaction | Human oversight of the deliverable: precise, complete changes the founder sees before accepting | Done |
 | 30 | Documents in, questions out: uploads as context, earlier reports as context, questions about a report | Context-aware analysis grounded in the founder's own documents | Done |
 | 31 | Look-ups through MCP: official figures from FRED (the app's own MCP server), competitors' pricing pages through Tavily's | Tool use by the agents, grounded in official data; figures exact and cited | Built |
+| 32 | The live graph: the team at work, lit up on the graph LangGraph runs, with what it is doing beside it | Workflow clarity and state modelling: the internals seen working, step by step | Built |
+| 33 | The document on a page of its own, and a sidebar that folds into a rail | Room for the deliverable: the PDF and its tools across the window | Built |
+| 34 | Today's exchange rate filled in from the European Central Bank | Exact conversions without the founder looking the rate up | Built |
+| 35 | Langfuse: every model call traced, the prompts versioned, the team's and the founder's scores, experiments with an LLM judge | LLM observability and evaluation: what each agent was asked and answered, at what cost, and how good it was | Built |
 
 ## Live verification
 
@@ -143,6 +147,10 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 29 | A real evaluation and proposal in US dollars on Azure OpenAI (a brief with a $15k budget and a 1,200 sq ft office 10 miles out), then in headless Chrome: the studio's currency conversion to euros at 0.92, previewed and accepted, the saved report and its PDF read back for any dollar; units to metric; a redaction; a conversion asked of the team; one paragraph revised by its writer; a part revised by the team; an earlier version looked at and restored; dark and phone | Pass after a fix. The conversion converted 28 figures and 268 amounts in the text (an earlier run: 25 and 324), shown as a draft with each amount struck through beside its euro value and the draft's PDF; once accepted, no text in the report held a dollar amount, the PDF showed 332 euro signs and no dollar, and the NPV followed the figures (25,289 → 23,266). Units turned "1,200 sq ft" into "111 m²" and "10 miles" into "16.1 km"; the first run showed a rate, "€0.69/sqft", left per square foot, and units.py now converts a figure per unit the other way (€7.43/m²). A redaction and the hint that sends a conversion asked of the team to Settings worked. A paragraph of the personas revised by the Marketing agent came back in 7 s with only that field changed, and was saved alone; a risk revision by the team came back as a draft in 51 s. The history named each version's change, and restoring the first proposal brought back its dollars exactly, the current version kept. The studio fitted a phone and the console stayed free of errors. |
 | 30 | An earlier report made on Azure OpenAI (text-message reminders for dental practices), then in headless Chrome: a brief with three files made for the check (a business plan as a 4-page PDF, pilot interviews in Word, the pilot's revenue in Excel) and that report, checked by the Chief of Staff with Azure's web search and run by the team; the result's citations; the report's documents section; a question about the report and its files; light, dark and phone | Pass after fixes, five runs. The files were read with their marks (PDF · 4 pages, Word · 5 paragraphs and 1 table, Excel · 1 sheet) and the brief was checked in about a minute; the Chief of Staff's questions cited the files ([D1 · page 3], [R1 · Launch Strategy]). The first run asked what the pilot charged, which the plan states: the long report had taken most of the reading budget, so each document now gets an equal share first, and later runs did not ask it. The team ran in 2.5–3 minutes and used facts only the files hold (4.2% churn, Columbus, $310 CAC, athenahealth, $149), with 19–62 citations set as tags naming their documents. The agents also grouped marks ("[D1 · page 3; D3]", "[R1; finance]", "[D1–D3, R1]"), which the page now splits into tags. Asked about churn, the Chief of Staff answered in 8–15 s from the plan, the revenue sheet and both reports, and in one run found the gap that the team's plan assumed 3% against the pilot's 4.2%. The brief's review and the result scrolled sideways on a phone (a long report title that could not shrink) and the ask panel squeezed its answers there; both fixed. No console errors. |
 | 31 | The look-up step with the real Chief of Staff and FRED, on an Ohio dental-reminder brief; then from the Evaluate page, a real evaluation (no web research): the live view, the figures the agents cite, the Research tab and the report; light, dark and phone | Pass after fixes. FRED's search ranked a work-from-home rate first for "average hourly earnings health care", and France's dental prices for a US venture; the Chief of Staff now picks among the series found, and chose US dental spending ($198 billion a year, up 6.7%), US ambulatory health care jobs, and Ohio's health care jobs and wages (28.74 dollars an hour, up 2.6%), beside the 10-year Treasury at 5.15% (up 1.13 points) and inflation at 3.7%. Yearly series had no change over the year until two years were read. The look-up took about 20 s and 2 model calls; the live view said it was looking up figures 15 s in; the run took 162 s. The agents cited five of the six figures (Finance priced support at Ohio's health care wage), each a tag opening its series on FRED; the Research tab listed all six with why each was read; the report had its Economic Data section. No console errors, nothing wider than a phone. |
+| 32 | From the Evaluate page, four real evaluations on Azure OpenAI of the premium brand-studio example (no web research), each watched on the live graph from the progress card's button to the end; light, dark, phone and reduced motion | Pass after fixes. Each run (124-162 s) lit up 11 or 12 phases in turn: the plan, the look-up, the four specialists together, the review (once sending Finance back), the cross-check, the settling, the revisions and the strategy, with the arrows into each step at work running; at the end every step ran was ticked, those that ran again counted (Finance ×3 when both the review and the settling sent it back), research faint as not due, and the pop-up stayed open on the finished run. Fixes: the graph, tall and narrow, was drawn small; it now has larger type and closer rows, filling its column (the plan's box 35 px high). The marks were too small, and Mermaid's stroke on a box's children blurred their text; they are larger, without the stroke. One run's strategy had a 64-character word ("Typeform/HelloSign/Notion/…") that widened a phone's page by 187 px; the agents' text now breaks such a word. FRED was down for maintenance, answering with a web page, and our FRED server failed with a stack trace; it now says FRED may be down, and the runs went on without the figures. No console errors; nothing wider than a phone; still with reduced motion. |
+| 33 | The Reports page against the API's saved reports, in headless Chrome: Open PDF, the sidebar folded and opened, Back by the page's button and the browser's, a reload of the document's page and of a folded sidebar, the Evaluate page folded; light, dark, phone | Pass. Open PDF took the page beside the sidebar (1200 by 1000 at 1440 wide), not a pop-up, with the PDF in it and `view=document` in the address; folded, the sidebar was a 56 px rail and the page 1384 wide; a reload kept the sidebar folded from the first paint and opened the document again; both Backs returned to the report and took the view out of the address; on a phone the document filled the screen (390 by 860), nothing wider. No console errors. Then on the founder's own dev server, running since before the change: the page sat on the right with a gap and the sidebar too wide, because its hot-reloaded stylesheet had lost the two lines defining the sidebar's width (a fresh server served them). Both rules now fall back to 15rem; after a rebuild the same page measured 240 and 1200 px, and 56 and 1384 folded. The tools folded: the PDF grew from 800 to 1144 px wide, and to 1328 of 1440 with the sidebar folded too; a reload kept both folded; a tool's icon opened the tools on it; on a phone the tools were a row of icons above a PDF the screen's width. |
+| 34 | The studio's Settings against the API and the real ECB, in headless Chrome | Pass after a fix. The proxy did not forward `/rates`, so the page said the rate could not be fetched (a 404 from the app's own server); with `/rates` forwarded, US dollars to euros filled in 0.890155 (the ECB's 1.1234 dollars a euro on 21 Oct 2026), with its source and day and no grey example; Indian rupees 94.469; the Saudi riyal 3.75, saying it is at its peg. No console errors. |
+| 35 | The founder's Langfuse Cloud project (EU) with Azure OpenAI: the API's start, a real evaluation from the Evaluate page with the founder's verdict, then `experiments.py` on the three scenarios, each read back from Langfuse's API | Pass after fixes. At start-up the API registered the 22 prompts (`production`, version 1). The evaluation (141 s) was one `evaluate` trace in its session, with the graph's steps and 20 model calls, each a generation with its model (gpt-5-mini), tokens and cost and linked to its prompt's version, none unlinked; its scores (each review and their average, approved first time, revisions, conflicts, verdict, failed specialists, guardrail flags) and the founder's verdict, its email masked to [email], were on the trace, which the result linked to. Fixes: the experiment runner calls a task on its event loop, where the look-ups' MCP clients could not start theirs, so every FRED look-up failed; the team now runs in a thread, and a test calls the task as the runner does. One batch of spans timed out at the SDK's 5 s; the timeout is now 30 s. The judge's own call was not traced in an experiment; it is now. After the fixes the three scenarios ran in 288 s for $0.14: 57 model calls, all linked to their prompts, the look-ups through in every run (FRED itself answered a few calls with 502 or a timeout, said plainly), team and judge scores with the run's means, and no export failure. |
 
 ### Fixed during live verification
 
@@ -847,6 +855,87 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - The specialists cite official figures and competitors' own prices, worked out and read through MCP servers, without a run ever failing for a look-up.
 
+### Step 32 - The live graph: the team at work on the graph LangGraph runs (Built)
+
+**Goal:** the founder sees how the internals run while the team works. The founder asked for an information button in the progress card that opens the graph, animated in the agents' colours, with a live sidebar saying what the team is doing.
+
+**Built:**
+
+- A **Live graph** button in the progress card while the team works opens a pop-up with the graph LangGraph runs (`/pipeline`, drawn as on How it works, in the agents' colours). As the steps stream in: the step at work glows in its agent's colour, the arrows the work is moving along run (backwards along an edge back up the graph, such as a report sent back), the arrows the run has taken stand out, a finished step is ticked (counted, "×2", when it ran again; "!" when it failed), the steps still to come are faint, and those the run went past (a specialist the plan left out, research not due, a loop with nothing to do) are fainter and dashed. A key says what each mark means, beside the agents' colours.
+- Beside the graph, a live sidebar: what the team is doing now, with the clock, and each turn of each step, newest first, with who took it, when it began and ended, and what it did (or what it is doing). On a phone, "now" stays on top above the graph and the turns.
+- When the run ends the pop-up stays open on the finished run (or where it stopped, with why), until the founder closes it.
+- `lib/live-graph.ts` works out each node's state and the edges taken from the steps alone: a step that starts was handed the work by the steps with an edge to it that finished since it last started, less those that handed it on to another of them first (the plan hands the work to the look-ups, and they to the specialists). Mermaid draws the graph once; the states are classes on its nodes and edges, so the graph changes without being drawn again. Still, without the animations, for those who ask for less motion.
+
+**Check:**
+
+- Automated: each node's state and the edges taken through a whole run (the report sent back, the conflict settled, the revision), with the look-ups and research, a step that failed, and a run that stopped; the button, the pop-up lighting up as steps arrive, the sidebar, and the pop-up staying open on the finished run.
+- Live: a real evaluation on Azure OpenAI from the Evaluate page, watched on the graph from start to end (see the live verification table).
+
+**Done when:**
+
+- The founder can watch any evaluation move through the graph, and read what each step is doing, as it happens.
+
+### Step 33 - The document on a page of its own; a sidebar that folds (Built)
+
+**Goal:** the PDF gets the room it needs. The founder asked for **Open PDF** to take the whole page rather than a pop-up, for the sidebar to be toggled, and then for the studio's tools ("Ask the team to revise" and the rest) to fold away too.
+
+**Built:**
+
+- The document studio (the PDF beside its tools) is a page of its own: the whole window beside the sidebar, all of it on a phone, with **Back to the report** and the document's kind, version and title at the top. Every way in opens it: Open PDF, Revise with the team, Currency, units and text, History, and a paragraph revised or removed.
+- The page is in the address (`?session=…&view=document`, through the browser's history, which Next.js follows), so the browser's Back button returns to the report and a reload opens the document again. The report stays mounted, hidden, behind it, so back from it the report is as it was left: its chapter, its open forms, its scroll.
+- The studio's tools fold too (**Hide the tools**): into a strip of their icons down the left (a row on a phone), each opening the tools on it, with the PDF's download, so the PDF takes the page. This browser remembers it. A change to accept or discard, or an earlier version to restore, always shows the tools, so the review is never folded away.
+- On a large screen, a button beside the mark folds the sidebar into a narrow rail of the pages' icons (each named on hover and to screen readers), and opens it out again. This browser remembers it: like the theme, an attribute on `<html>` set before the page first paints, which the CSS follows (a `rail` variant and `--sidebar-width`), so a folded sidebar never shows open first. Every page gains the width; the document's page fills it.
+
+**Check:**
+
+- Automated: the document's page in place of the pop-up, in the address; back by its button and by the browser's, with the report's chapter kept; a reload opening it again; the studio's tests on the page; the sidebar folding and opening, remembered, and set before the first paint; the tools folding, remembered, a tool's icon opening them on it, and a draft always showing them.
+- Live: the Reports page against the API's saved reports (see the live verification table).
+
+**Done when:**
+
+- The PDF and its tools can take the whole window, and the founder can fold the sidebar away and back.
+
+### Step 34 - Today's exchange rate, filled in (Built)
+
+**Goal:** converting a report's currency needs no looking up. The founder asked for the rate to be filled in rather than shown as a grey example ("0.92", whatever the currencies).
+
+**Built:**
+
+- `rates.py` and `GET /rates/{base}`: the European Central Bank's daily reference rates (in euros, about 30 currencies, no key), fetched at most every six hours, as each of the app's other currencies per unit of `base`, to six significant figures. The UAE dirham and the Saudi riyal, which the ECB does not publish, come from their fixed pegs to the US dollar. 422 for a currency the app does not have, 503 when the ECB cannot be reached or answers without its rates.
+- The studio's Settings fill the rate in for the currency chosen, and say where it comes from and for which day (and that the dirham and the riyal are at their pegs). A rate the founder types, from their bank, stays for that currency, with the ECB's one click away. Without the rates the field is empty and says why, and the founder types the rate, as before. The conversion itself is unchanged: code, at whatever rate is given.
+- The app's `/api` proxy forwards `/rates`.
+
+**Check:**
+
+- Automated: the rates on a made-up ECB (cross rates, the pegs, only the app's currencies, fetched once for hours, an unknown currency, an ECB down or answering without rates); the Settings filling the rate in, following the currency chosen, keeping a typed rate, and without rates; the proxy forwarding `/rates`.
+- Live: the studio's Settings against the API and the real ECB (see the live verification table).
+
+**Done when:**
+
+- The rate is there, today's and sourced, whenever the founder converts a report's currency.
+
+### Step 35 - Langfuse: tracing, prompts, scores and experiments (Built)
+
+**Goal:** see and judge what the agents do with the model. The founder asked to integrate Langfuse with all its capabilities for the LLM, and chose Langfuse Cloud, the prompts kept in the code (registered and linked in Langfuse, not fetched from it), and everything traced with sensitive text masked.
+
+**Built:**
+
+- `tracing.py`: one trace per request that calls the model (an evaluation, a brief, the proposal and its revisions, a passage rewritten, a question), named, grouped by session and tagged (first request or follow-up, deep research and where, a template, a proposal part), with the reasoning efforts as metadata. Langfuse's LangChain handler records the graph's runs and every model call (messages, reply, model, tokens, cost, time) without any call site passing it: a context variable holds it while a trace is open, and LangChain adds it to every run (`register_configure_hook`); the graph's threads copy the context. The demo is traced too. Off, and nothing sent, without the keys; a fault in it never fails a request.
+- Masking before anything is sent: email addresses, phone numbers, card numbers (Luhn) and keys; figures, prices and dates kept.
+- Prompt management with the code as the source: `prompt_library.py` names the app's 22 system prompts (templates with `{{variables}}` where they depend on the request); at start-up each is registered in Langfuse, a new `production` version only when its text changed, and each call is linked to the version it used.
+- Scores: on each evaluation, the Chief of Staff's last review of each report and their average, all approved first time, reports revised, conflicts settled, the verdict, failed specialists, guardrail flags; the founder's verdict and comment (`POST /feedback`, from the result's **Was this strategy useful?**); and, with `LANGFUSE_JUDGE`, an LLM judge's scores on constraints, consistency, actionability and grounding (`judge.py`), after the answer has gone.
+- Experiments: `experiments.py` keeps the scenarios as the `cofounder-scenarios` dataset and runs the team on them through Langfuse's experiment runner, traced, scored by the team's judgements and the judge, with the run's means, to compare a prompt or reasoning change.
+- The response carries the run's trace id and address; the result links to it; `/health` says whether tracing is on and how many prompts are registered; How it works names Langfuse in the stack.
+
+**Check:**
+
+- Automated, on a made-up Langfuse (an in-memory span exporter, an HTTP stand-in): nothing traced without the keys; LangChain runs traced without a handler passed; an evaluation as one trace in its session with the graph's steps and the scores; prompts registered once and again only when changed; a call linked to its prompt's version; masking; the founder's verdict; the judge, live and in an experiment's evaluators; a broken Langfuse never failing a request; the frontend's trace link and verdict.
+- Live: the founder's Langfuse Cloud project and Azure OpenAI (see the live verification table).
+
+**Done when:**
+
+- Every model call can be read in Langfuse in the shape of the work, linked to its prompt's version, and each run carries the team's, the judge's and the founder's scores.
+
 ## Target layout
 
 ```
@@ -880,6 +969,11 @@ reports.py                 Written reports and their store    Steps 15, 17, 24, 
 extract.py                 The text of an uploaded file       Step 30
 library.py                 The founder's documents            Step 30
 lookups.py                 Look-ups through MCP servers       Step 31
+rates.py                   Today's exchange rates (ECB)       Step 34
+tracing.py                 Tracing, prompts, scores: Langfuse Step 35
+prompt_library.py          The prompts, named for Langfuse    Step 35
+judge.py                   An LLM judge of a strategy         Step 35
+experiments.py             Experiments on the scenarios       Step 35
 fred_server.py             The app's MCP server for FRED      Step 31
 report_pdf.py              Report as a PDF                    Steps 15, 17
 report_charts.py           The PDF's charts                   Step 17
@@ -889,5 +983,5 @@ scenarios/                 Startup scenarios                  Step 9
 templates/                 Decision templates                 Step 19
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-frontend/                  Next.js frontend                   Steps 13-14, 18
+frontend/                  Next.js frontend                   Steps 13-14, 18, 32
 ```
