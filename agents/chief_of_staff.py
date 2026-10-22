@@ -7,12 +7,14 @@ synthesis node merges their reports into one launch strategy.
 """
 
 import logging
+from contextlib import nullcontext
 
 import openai
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables.config import ContextThreadPoolExecutor
 from langgraph.types import Overwrite
 
+import tracing
 from agents.roles import SPECIALISTS
 from agents.specialist import GAP_PREFIX
 from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
@@ -40,18 +42,20 @@ STRATEGY_WORDS = 500
 APPROVAL_SCORE = 4
 
 
-def structured_invoke(schema, messages, tracker, role=CHIEF):
+def structured_invoke(schema, messages, tracker, role=CHIEF, prompt: str | None = None):
     """Invoke `role`'s model for a structured `schema`, counting each call on `tracker`.
 
     A reply that does not parse into the schema is retried once, and so is one
     the provider's content filter withheld, which is usually a false positive
     that a second attempt clears. Other API errors are not retried here: the
-    client has already retried them (LLM_MAX_RETRIES).
+    client has already retried them (LLM_MAX_RETRIES). In Langfuse each call is
+    linked to the prompt called `prompt` (prompt_library.py).
     """
     model = get_llm(role).with_structured_output(schema, include_raw=True)
     for _ in range(2):
         try:
-            reply = model.invoke(messages)
+            with tracing.prompt(prompt) if prompt else nullcontext():
+                reply = model.invoke(messages)
         except openai.ContentFilterFinishReasonError as error:
             tracker.record(None)
             logger.warning("The content filter withheld a %s reply (%s).",
@@ -89,7 +93,7 @@ def _attempt(call, what: str):
         return None
 
 
-def _ask_each(schema, prompts: dict[str, list], tracker, what: str, role=CHIEF) -> dict:
+def _ask_each(schema, prompts: dict[str, list], tracker, what: str, role=CHIEF, prompt: str | None = None) -> dict:
     """Ask for a structured `schema` reply to every prompt at the same time.
 
     The calls are independent, so they run in parallel rather than one after
@@ -102,7 +106,7 @@ def _ask_each(schema, prompts: dict[str, list], tracker, what: str, role=CHIEF) 
 
     def ask(key):
         return _attempt(
-            lambda: structured_invoke(schema, prompts[key], tracker, role), f"{what} {key}"
+            lambda: structured_invoke(schema, prompts[key], tracker, role, prompt), f"{what} {key}"
         )
 
     with ContextThreadPoolExecutor(max_workers=len(prompts)) as pool:
@@ -186,7 +190,7 @@ def plan_node(state: WorkflowState) -> dict:
     metrics: dict = {}
     with track("plan", metrics) as t:
         plan: DelegationPlan = structured_invoke(
-            DelegationPlan, _build_prompt(state, prior, venture), t
+            DelegationPlan, _build_prompt(state, prior, venture), t, prompt="chief/plan"
         )
 
     assignments = plan.assignments()
@@ -255,7 +259,7 @@ def review_node(state: WorkflowState) -> dict:
 
     metrics: dict = {}
     with track("review", metrics) as t:
-        replies = _ask_each(ReviewResult, prompts, t, "Review of")
+        replies = _ask_each(ReviewResult, prompts, t, "Review of", prompt="chief/review")
     for name in prompts:
         if name in replies:
             # The score decides, so the verdict always follows the rubric; models
@@ -327,7 +331,7 @@ def critique_node(state: WorkflowState) -> dict:
     metrics: dict = {}
     with track("critique", metrics) as t:
         # The specialists critique each other, so this is their model, not the Chief's.
-        critiques = _ask_each(SpecialistCritique, prompts, t, "Critique by", SPECIALIST)
+        critiques = _ask_each(SpecialistCritique, prompts, t, "Critique by", SPECIALIST, "specialists/critique")
     conflicts = [conflict for critique in critiques.values() for conflict in critique.conflicts]
 
     logger.debug("Critique round: %d conflicts raised", len(conflicts))
@@ -370,7 +374,7 @@ def resolve_node(state: WorkflowState) -> dict:
             )
             messages = [SystemMessage(_RESOLVE_PROMPT + RULES), HumanMessage(human)]
             decided: Resolutions | None = _attempt(
-                lambda: structured_invoke(Resolutions, messages, t), "Resolving the conflicts"
+                lambda: structured_invoke(Resolutions, messages, t, prompt="chief/resolve"), "Resolving the conflicts"
             )
             if decided is not None:
                 resolutions = decided.resolutions
@@ -437,6 +441,18 @@ def synthesis_node(state: WorkflowState) -> dict:
         human += f"\n\nDisagreements you settled:\n{_decisions_text(resolutions)}"
     metrics: dict = {}
     with track("synthesis", metrics) as t:
-        reply = get_llm(CHIEF).invoke([SystemMessage(_SYNTHESIS_PROMPT + RULES), HumanMessage(human)])
+        with tracing.prompt("chief/synthesis"):
+            reply = get_llm(CHIEF).invoke([SystemMessage(_SYNTHESIS_PROMPT + RULES), HumanMessage(human)])
         t.record(reply)
     return {"final_strategy": unfenced(reply.content), "metrics": metrics}
+
+
+def prompts() -> dict[str, str]:
+    """The Chief of Staff's prompts, and the specialists' critique, for Langfuse (prompt_library.py)."""
+    return {
+        "chief/plan": _PLANNER_PROMPT + RULES,
+        "chief/review": _REVIEW_PROMPT + RULES,
+        "specialists/critique": _CRITIQUE_PROMPT + RULES,
+        "chief/resolve": _RESOLVE_PROMPT + RULES,
+        "chief/synthesis": _SYNTHESIS_PROMPT + RULES,
+    }

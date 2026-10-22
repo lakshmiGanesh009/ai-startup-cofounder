@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+import threading
 import time
 import uuid
 from collections import Counter
@@ -27,6 +28,7 @@ import document
 import library
 from agents.proposal_writer import ProposalNotWritten, parts_to_write, revise_text, write_proposal
 from agents.roles import COMPANY_READERS, REPORT_WORDS, SPECIALISTS
+from agents.specialist import GAP_PREFIX
 from brief import PreparedBrief, Template, load_templates, prepare_brief
 from config import (
     API_KEY,
@@ -79,8 +81,10 @@ from reports import (
     VersionSummary,
     store,
 )
+import judge
 import lookups
 import providers
+import tracing
 from rates import Rates, RatesUnavailable, rates_from
 from security import (
     MAX_FIELD_CHARS,
@@ -126,8 +130,13 @@ async def lifespan(app: FastAPI):
     access = "callers need its key" if API_KEY else "open to anyone who can reach it (no API_KEY)"
     monitor.event("system", "api", f"The API started, keeping sessions and reports in {storage.where}; {access}.")
     logger.info("Sessions and reports are kept in %s; %s.", storage.where, access)
+    if tracing.enabled():
+        # The prompts are registered off the start-up path; until they are, calls are traced unlinked.
+        threading.Thread(target=tracing.register_prompts, name="langfuse-prompts", daemon=True).start()
+        monitor.event("system", "api", "Model calls are traced in Langfuse.")
     yield
     await storage.close()
+    tracing.flush()
 
 
 app = FastAPI(
@@ -210,6 +219,8 @@ class EvaluateResponse(BaseModel):
         description="Text that tried to instruct the agents, in the request or in the session's research: "
         "cut out of what the agents read.",
     )
+    trace_id: str | None = Field(None, description="The run's trace in Langfuse, when it is set up (tracing.py).")
+    trace_url: str | None = Field(None, description="Where to open that trace in Langfuse.")
 
 
 @app.get("/health")
@@ -236,6 +247,8 @@ async def health():
         },
         # Look-ups through MCP servers: FRED's official figures, and competitors' own pages (on Tavily).
         "lookups": {"fred": lookups.fred_configured(), "competitor_pages": lookups.tavily_configured()},
+        # Model calls traced in Langfuse, with the prompts registered there (tracing.py).
+        "tracing": {"langfuse": tracing.enabled(), "prompts": len(tracing.versions())},
     }
 
 
@@ -263,6 +276,28 @@ async def list_templates():
     """The decision templates (templates/*.json) a brief can be written from:
     each a request to fill in, with what to look up and ask for that decision."""
     return load_templates()
+
+
+class Feedback(BaseModel):
+    session_id: str = Field(pattern=SESSION_ID)
+    trace_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$", description="The run's trace, from its response.")
+    useful: bool = Field(description="Whether the founder found the strategy useful.")
+    comment: str = Field("", max_length=MAX_FIELD_CHARS)
+
+
+@app.post("/feedback", status_code=202)
+def feedback(given: Feedback):
+    """The founder's verdict on a strategy, as a score in Langfuse: `useful`
+    (1 or 0) with the comment, on the run's trace, or on its session. Recorded
+    only when Langfuse is set up; `recorded` says whether it was."""
+    if not tracing.enabled():
+        return {"recorded": False}
+    comment = tracing.mask_text(given.comment.strip()) or None
+    tracing.score("founder-feedback", 1 if given.useful else 0, trace_id=given.trace_id,
+                  session_id=given.session_id, comment=comment, data_type="BOOLEAN")
+    monitor.event("run", "feedback", f"The founder found the strategy {'useful' if given.useful else 'not useful'}.",
+                  given.session_id)
+    return {"recorded": True}
 
 
 @app.get("/rates/{base}", response_model=Rates)
@@ -358,7 +393,8 @@ async def prepare(request: PrepareRequest):
     await run_in_threadpool(_documents_found, request.context)
     started = time.perf_counter()
     try:
-        with reasoning(**_efforts(request.reasoning)):
+        tags = ["brief", *([f"template:{template.name}"] if template else [])]
+        with reasoning(**_efforts(request.reasoning)), tracing.trace("brief", input=request.prompt, tags=tags):
             prepared = await run_in_threadpool(
                 prepare_brief, request.prompt.strip(), request.context, template, request.research_provider
             )
@@ -410,12 +446,73 @@ def _start(request: EvaluateRequest) -> tuple[str, dict, dict, list[Flag]]:
     return session_id, state, {"configurable": {"thread_id": session_id}}, flags
 
 
-async def _finish(session_id: str, result: dict, flags: list[Flag]) -> EvaluateResponse:
-    """Record the session's report and answer with its results."""
+def _traced(request: EvaluateRequest, session_id: str) -> dict:
+    """What an evaluation's trace in Langfuse is filed under: its session, the
+    request, and tags and metadata to filter by (tracing.py)."""
+    efforts = _efforts(request.reasoning)
+    tags = ["evaluate", "follow-up" if request.session_id else "first-request"]
+    if request.deep_research:
+        tags.append(f"deep-research:{request.research_provider or providers.default()}")
+    metadata = {f"reasoning_{role}": effort for role, effort in efforts.items() if effort}
+    return {"session_id": session_id, "input": {"prompt": request.prompt, "context": request.context},
+            "tags": tags, "metadata": metadata}
+
+
+# The recommendation the strategy leads with, as Langfuse's verdict score.
+_VERDICT = re.compile(r"\b(go with conditions|not yet|no[- ]go|go)\b", re.IGNORECASE)
+
+
+def _verdict(strategy: str) -> str:
+    found = _VERDICT.search(strategy[:300])
+    return found.group(1).lower().replace(" ", "-") if found else "unclear"
+
+
+def _score(run: tracing.Trace, result: dict, flags: list[Flag]) -> None:
+    """The team's own judgements on the run, as scores on its trace: the Chief
+    of Staff's review of each report (its last), whether every report passed
+    first time, how many were revised, the conflicts settled, the verdict, the
+    specialists that failed, and text that tried to instruct the agents."""
+    if not run.id:
+        return
+    history = result.get("review_history") or []
+    latest: dict = {}
+    for round_ in history:
+        latest.update(round_)
+    for name, review in latest.items():
+        run.score(f"review-{name}", review.score, comment=review.feedback or None)
+    if latest:
+        run.score("review-average", round(sum(r.score for r in latest.values()) / len(latest), 2))
+    if history:
+        first = history[0]
+        run.score("approved-first-time", 1 if all(r.approved for r in first.values()) else 0, data_type="BOOLEAN")
+    resolutions = result.get("resolutions") or []
+    revised = {name for round_ in history[1:] for name in round_} | {
+        resolution.revise for resolution in resolutions if resolution.revise
+    }
+    run.score("revisions", len(revised), comment=", ".join(sorted(revised)) or None)
+    run.score("conflicts", len(resolutions))
+    run.score("verdict", _verdict(result.get("final_strategy", "")), data_type="CATEGORICAL")
+    failed = [name for name, text in (result.get("analyses") or {}).items() if text.startswith(GAP_PREFIX)]
+    run.score("failed-specialists", len(failed), comment=", ".join(failed) or None)
+    run.score("guardrail-flags", len(flags))
+
+
+async def _finish(session_id: str, result: dict, flags: list[Flag], run: tracing.Trace | None = None) -> EvaluateResponse:
+    """Record the session's report and answer with its results; on Langfuse,
+    score the run and give the way to its trace."""
     # In a worker thread: the results name the founder's documents, read from the database.
     await run_in_threadpool(lambda: store.record(session_id, SessionResults.from_state(result)))
     deep = result.get("deep_research")
+    trace_id = trace_url = None
+    if run is not None and run.id:
+        run.output({"objective": result["plan"].objective, "strategy": result["final_strategy"]})
+        await run_in_threadpool(_score, run, result, flags)
+        trace_id, trace_url = run.id, await run_in_threadpool(run.url)
+        if judge.enabled():
+            judge.judge_later(run.id, session_id, result.get("venture") or result["request"], result["final_strategy"])
     return EvaluateResponse(
+        trace_id=trace_id,
+        trace_url=trace_url,
         session_id=session_id,
         objective=result["plan"].objective,
         assignments=result["assignments"],
@@ -476,9 +573,9 @@ async def evaluate(request: EvaluateRequest):
         # ainvoke runs the nodes in worker threads, so a run that takes minutes
         # does not block the event loop, and other requests are still served.
         # The threads inherit the request's reasoning efforts.
-        with reasoning(**_efforts(request.reasoning)):
+        with reasoning(**_efforts(request.reasoning)), tracing.trace("evaluate", **_traced(request, session_id)) as run:
             result = await graph.ainvoke(state, config)
-        response = await _finish(session_id, result, flags)
+            response = await _finish(session_id, result, flags, run)
     except LLMNotConfigured as error:
         monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
         _record(request, session_id, started, error=str(error))
@@ -522,7 +619,7 @@ async def evaluate_stream(request: EvaluateRequest):
             return round(time.perf_counter() - began, 1)
 
         try:
-            with reasoning(**_efforts(request.reasoning)):
+            with reasoning(**_efforts(request.reasoning)), tracing.trace("evaluate", **_traced(request, session_id)) as run:
                 async for _, task in graph.astream(state, config, stream_mode=["tasks"]):
                     node = task["name"]
                     if "input" in task:
@@ -534,7 +631,7 @@ async def evaluate_stream(request: EvaluateRequest):
                         summary = summarize(node, task.get("result"), runs[node], given.get(node))
                         monitor.event("done", node, summary["summary"], session_id)
                         yield _event("done", {"node": node, "at": at(), **summary})
-            response = await _finish(session_id, (await graph.aget_state(config)).values, flags)
+                response = await _finish(session_id, (await graph.aget_state(config)).values, flags, run)
         except LLMNotConfigured as error:
             monitor.event("error", "evaluate", f"No evaluation could run: {error}", session_id)
             _record(request, session_id, began, error=str(error))
@@ -756,7 +853,10 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
     # What the founder wrote that the writers read: the change asked for, and the edits.
     edits = "\n\n".join(section.body for section in report.sections) if report.edited else ""
     flags = log_flags(scan(instruction, "your requested change") + scan(edits, "your edits to the report"))
-    with reasoning(**_efforts(choice)):
+    name = "proposal-revision" if report.proposal else "proposal"
+    with reasoning(**_efforts(choice)), tracing.trace(
+        name, session_id=report.session_id, input=instruction or None, tags=[name, *([f"part:{part}"] if part else [])]
+    ):
         try:
             proposal, failed = await run_in_threadpool(write_proposal, report, instruction, part)
         except LLMNotConfigured as error:
@@ -846,7 +946,9 @@ async def revise_report_text(session_id: SessionId, revision: TextRevision):
     if revision.passage and revision.passage not in current:
         raise HTTPException(status_code=409, detail="That passage is no longer in the report. Reload it.")
     flags = log_flags(scan(revision.instruction, "your requested change"))
-    with reasoning(**_efforts(revision.reasoning)):
+    with reasoning(**_efforts(revision.reasoning)), tracing.trace(
+        "passage-revision", session_id=session_id, input=revision.instruction, tags=["passage-revision"]
+    ):
         try:
             text = await run_in_threadpool(revise_text, report, revision.path, revision.instruction, revision.passage)
         except LLMNotConfigured as error:
@@ -1008,7 +1110,7 @@ class AskResult(Answered):
 
 def _ask(system: str, human: str) -> Answer:
     with track("ask", {}) as tracker:
-        return structured_invoke(Answer, [SystemMessage(system), HumanMessage(human)], tracker, CHIEF)
+        return structured_invoke(Answer, [SystemMessage(system), HumanMessage(human)], tracker, CHIEF, "documents/answer")
 
 
 @app.post("/ask", response_model=AskResult)
@@ -1022,7 +1124,7 @@ async def ask(question: Question):
     await run_in_threadpool(_documents_found, None, question.uploads, question.reports)
     flags = log_flags(scan(question.question, "your question"))
     started = time.perf_counter()
-    with reasoning(**_efforts(question.reasoning)):
+    with reasoning(**_efforts(question.reasoning)), tracing.trace("question", input=question.question, tags=["question"]):
         try:
             answered = await run_in_threadpool(
                 library.answer, question.question.strip(), question.uploads, question.reports, _ask

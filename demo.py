@@ -9,7 +9,9 @@ Needs a filled-in .env, since it calls a real model.
 import json
 import sys
 import uuid
+from pathlib import Path
 
+import tracing
 from graph import build_graph
 from state import RequestContext
 
@@ -57,13 +59,18 @@ def main(path: str) -> None:
     if context:
         state["context"] = RequestContext(**context)
 
+    # With Langfuse set up, each request is traced in the scenario's session.
+    session = config["configurable"]["thread_id"]
     _print_stage(f"REQUEST\n{scenario['prompt']}")
-    _print_result(graph.invoke(state, config))
+    with tracing.trace("demo", session_id=session, input=scenario["prompt"], tags=["demo", Path(path).stem]):
+        _print_result(graph.invoke(state, config))
 
     follow_up = scenario.get("follow_up")
     if follow_up:
         _print_stage(f"FOLLOW-UP\n{follow_up}")
-        _print_result(graph.invoke({"request": follow_up}, config))
+        with tracing.trace("demo", session_id=session, input=follow_up, tags=["demo", "follow-up"]):
+            _print_result(graph.invoke({"request": follow_up}, config))
+    tracing.flush()
 
 
 if __name__ == "__main__":

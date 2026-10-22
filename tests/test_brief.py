@@ -108,9 +108,9 @@ def test_a_template_says_what_to_look_up_and_what_to_ask(fake_llm, web, monkeypa
     systems = {}
     real = brief.structured_invoke
 
-    def spy(schema, messages, tracker, role):
+    def spy(schema, messages, tracker, role, prompt=None):
         systems[schema.__name__] = messages[0].content
-        return real(schema, messages, tracker, role)
+        return real(schema, messages, tracker, role, prompt)
 
     monkeypatch.setattr(brief, "structured_invoke", spy)
     template = next(t for t in load_templates() if t.name == "pricing")

@@ -187,7 +187,8 @@ def prepare_brief(
         topics = f"\n\nFor this kind of decision, look up: {'; '.join(template.research)}." if template and template.research else ""
         with track("research", metrics) as tracker:
             plan = structured_invoke(
-                SearchPlan, [SystemMessage(_SEARCH_PROMPT + topics + RULES), HumanMessage(brief)], tracker, SPECIALIST
+                SearchPlan, [SystemMessage(_SEARCH_PROMPT + topics + RULES), HumanMessage(brief)], tracker, SPECIALIST,
+                prompt="brief/search",
             )
         queries = list(dict.fromkeys(query.strip() for query in plan.queries if query.strip()))[:MAX_QUERIES]
         hits, note = search_all(queries, use)
@@ -205,6 +206,7 @@ def prepare_brief(
             [SystemMessage(_REVIEW_PROMPT + must_know + RULES), HumanMessage(f"{brief}\n\n{_results_text(hits)}")],
             tracker,
             CHIEF,
+            prompt="brief/review",
         )
     research = _renumbered(review.findings, hits)
     if hits and not research:
@@ -218,3 +220,11 @@ def prepare_brief(
         questions=questions,
         guardrails=flags,
     )
+
+
+def prompts() -> dict[str, str]:
+    """Preparing a brief's prompts as templates, for Langfuse (prompt_library.py)."""
+    return {
+        "brief/search": _SEARCH_PROMPT + "{{topics}}" + RULES,
+        "brief/review": _REVIEW_PROMPT + "{{must_know}}" + RULES,
+    }

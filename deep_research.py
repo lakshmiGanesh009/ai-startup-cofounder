@@ -169,7 +169,7 @@ def research_node(state: WorkflowState) -> dict:
             known = fence(known, "web research") if known else ""
             messages = [SystemMessage(_COMPETITORS_PROMPT + RULES), HumanMessage(f"{brief}\n\n{known}".strip())]
             try:
-                competitors = structured_invoke(Competitors, messages, tracker, CHIEF).companies[:MAX_COMPANIES]
+                competitors = structured_invoke(Competitors, messages, tracker, CHIEF, "research/competitors").companies[:MAX_COMPANIES]
             except LLM_ERRORS as error:  # the specialists' research still goes ahead
                 logger.warning("Naming the competitors failed: %s", error)
         tasks = {f"area:{name}": (_area_task(name, state["assignments"][name], brief), None) for name in areas}

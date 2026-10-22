@@ -201,8 +201,8 @@ export const STACK: { layer: string; icon: LayerIcon; tools: string[]; does: str
   {
     layer: "Observability",
     icon: "pulse",
-    tools: ["Request IDs", "JSON logs", "Prometheus", "The Monitor"],
-    does: "An ID on every request, its log lines and its errors; metrics at /metrics for Prometheus; the Monitor tab.",
+    tools: ["Request IDs", "JSON logs", "Prometheus", "The Monitor", "Langfuse"],
+    does: "An ID on every request, its log lines and its errors; metrics at /metrics for Prometheus; the Monitor tab; every model call traced in Langfuse, linked to its prompt's version, with the team's scores and yours.",
   },
   {
     layer: "Checks",

@@ -8,6 +8,7 @@ import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+import tracing
 from agents.roles import COMPANY_READERS, Role
 from guardrails import context_for_prompt, fence, unfenced
 from llm import get_llm
@@ -80,7 +81,8 @@ def specialist_node(role: Role):
         metrics: dict = {}
         with track(role.name, metrics) as t:
             try:
-                reply = get_llm().invoke(_build_prompt(role, state))
+                with tracing.prompt(f"specialists/{role.name}"):
+                    reply = get_llm().invoke(_build_prompt(role, state))
                 t.record(reply)
                 analysis = unfenced(reply.content)
             except Exception as error:  # a failed specialist must not sink the run

@@ -30,6 +30,7 @@ flowchart LR
         reports["Reports, drafts, versions, PDF (reports.py, document.py, report_pdf.py)"]
         guardrails["Prompt guardrails (guardrails.py)"]
         monitor["Monitor and metrics (monitor.py)"]
+        tracing["Tracing, prompts and scores (tracing.py)"]
     end
 
     fredserver["FRED MCP server (fred_server.py), a subprocess over stdio"]
@@ -38,6 +39,7 @@ flowchart LR
     fred["FRED API, the St. Louis Fed"]
     pg[("PostgreSQL: sessions, reports, versions, uploads, Monitor history")]
     prometheus["Prometheus, optional: scrapes /metrics"]
+    langfuse["Langfuse, optional: traces, prompt versions, scores, experiments"]
 
     founder --> pages --> proxy --> guard --> routes
     routes --> brief
@@ -58,13 +60,16 @@ flowchart LR
     docs --> pg
     monitor --> pg
     prometheus --> monitor
+    team -. "every model call" .-> tracing
+    brief -. "every model call" .-> tracing
+    tracing -- "masked, over HTTPS" --> langfuse
 ```
 
 Solid arrows are calls; dotted ones mark what every prompt passes through: the
 founder's text, the web's and the documents' are fenced and scanned before a
 model reads them. Without `DATABASE_URL` everything PostgreSQL keeps lives in
 memory instead; without `FRED_API_KEY` or `TAVILY_API_KEY` the look-ups and
-research they power are skipped.
+research they power are skipped, and without Langfuse's keys nothing is traced.
 
 ## State machine
 
@@ -423,6 +428,49 @@ Four things let an operator follow what the API did, and why.
 The monitor's statistics live in the API's process: run one worker, as
 `main.py` does, or each worker counts only its own requests (the sessions,
 reports and history in PostgreSQL are shared).
+
+### Tracing in Langfuse
+
+With Langfuse's keys set, `tracing.py` sends what the model was asked and
+answered to Langfuse, which the monitor does not keep. Without them it does
+nothing and nothing leaves the API; a fault in it never fails a request.
+
+- **Traces.** Each request that calls the model opens one trace (`evaluate`,
+  `brief`, `proposal`, `proposal-revision`, `passage-revision`, `question`),
+  under the request's session and tags. Inside it, LangChain's callbacks record
+  the graph's runs and each model call as a generation, with its messages,
+  reply, model, tokens, cost and time. No call site passes a handler: while a
+  trace is open a context variable holds Langfuse's LangChain handler, and
+  LangChain adds it to every run started in that context
+  (`register_configure_hook`); the graph's worker threads and the review's pool
+  copy the context, so their calls land in the same trace.
+- **Masking.** Every string Langfuse is given passes through `mask` first:
+  email addresses, phone numbers written as such, card numbers (by the Luhn
+  check) and keys become `[email]`, `[phone]`, `[card number]`, `[key]`;
+  figures, prices and dates are left alone. The founder's comment on a verdict
+  is masked the same way.
+- **Prompts.** The code is their source. `prompt_library.py` names each of the
+  app's 22 system prompts (`chief/plan`, `specialists/finance`, `brief/search`,
+  `proposal/market`, ...), as templates with `{{variables}}` where a prompt
+  depends on the request (the currency rule, a decision template's topics). At
+  start-up a thread registers each in Langfuse, as a new version labelled
+  `production` only when its text differs from the one served, and keeps each
+  version; every call then runs inside `tracing.prompt(name)`, which links its
+  generation to that version (`propagate_attributes(prompt=...)`).
+- **Scores.** At the end of an evaluation the team's own judgements become
+  scores on its trace: the last review of each report and their average,
+  whether all passed first time, how many reports were revised, the conflicts
+  settled, the verdict (go, go with conditions, not yet), failed specialists and
+  guardrail flags. The response carries the trace's id and address, the result
+  links to it, and the founder's verdict on the strategy arrives through
+  `POST /feedback` as `founder-feedback`. With `LANGFUSE_JUDGE` on, `judge.py`
+  reads the strategy afterwards, in a thread of its own, and scores
+  constraints, consistency, actionability and grounding.
+- **Experiments.** `experiments.py` keeps the example scenarios as the
+  `cofounder-scenarios` dataset and runs the team on each through Langfuse's
+  experiment runner, every call traced into the run, scored by the team's
+  judgements and the LLM judge, with the run's means; runs compare side by side
+  in Langfuse.
 
 ## Persistence
 

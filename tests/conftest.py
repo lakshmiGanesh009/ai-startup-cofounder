@@ -27,10 +27,12 @@ import pytest
 from langchain_core.messages import AIMessage, SystemMessage
 
 import llm
+import tracing
 from agents.proposal_writer import SCHEMAS as PROPOSAL_SCHEMAS
 from agents.proposal_writer import Rewritten
 from brief import BriefReview, Question, SearchPlan
 from deep_research import Competitor, Competitors
+from judge import Judgement
 from library import Answer
 from lookups import FredPick, FredPicks, FredSearches
 from state import (
@@ -55,6 +57,10 @@ PROVIDER_VARS = [
     "MODEL_NAME",
     "TAVILY_API_KEY",
     "FRED_API_KEY",
+    "LANGFUSE_PUBLIC_KEY",
+    "LANGFUSE_SECRET_KEY",
+    "LANGFUSE_BASE_URL",
+    "LANGFUSE_HOST",
 ]
 
 SPECIALIST_NAMES = ("marketing", "finance", "technical", "risk")
@@ -71,11 +77,13 @@ SPECIALIST_TITLES = {
 
 @pytest.fixture(autouse=True)
 def strip_credentials(monkeypatch):
-    """Remove every provider variable, and any model already built from them, so
-    tests never hit a real LLM or a real web search."""
+    """Remove every provider variable, and any model or Langfuse client already
+    built from them, so tests never hit a real LLM, a real web search or a real
+    Langfuse (tests/test_tracing.py sets up one of its own)."""
     for name in PROVIDER_VARS:
         monkeypatch.delenv(name, raising=False)
     llm._model.cache_clear()
+    tracing.reset()
 
 
 class FakeModel:
@@ -144,6 +152,8 @@ class FakeModel:
         self.lookup_prompts: list[str] = []
         self.fred_picks: FredPicks | None = None
         self.pick_prompts: list[str] = []
+        self.judgement = Judgement(constraints=4, consistency=5, actionability=3, grounding=7,
+                                   comment="The next steps name no owners.")
 
     def _plan_for(self, prompt: str) -> DelegationPlan:
         return self.plan
@@ -235,6 +245,7 @@ class FakeModel:
             Answer: self._answer_for,
             FredSearches: self._fred_searches_for,
             FredPicks: self._fred_picks_for,
+            Judgement: lambda prompt: self.judgement,
             **{part: self._part_for(key) for key, part in PROPOSAL_SCHEMAS.items()},
         }[schema]
         return _StructuredModel(self, produce, include_raw)

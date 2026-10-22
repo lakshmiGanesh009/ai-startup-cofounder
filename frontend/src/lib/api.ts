@@ -122,6 +122,9 @@ export type EvaluateResponse = {
   research?: DeepResearch | null;
   economic?: EconomicData | null;
   guardrails?: GuardrailFlag[];
+  // The run's trace in Langfuse, and where to open it, when Langfuse is set up.
+  trace_id?: string | null;
+  trace_url?: string | null;
 };
 
 export type ReasoningSettings = {
@@ -149,6 +152,8 @@ export type Health = {
   storage: { kind: "memory" | "postgres"; ok: boolean };
   // Look-ups through MCP servers: FRED's figures, and competitors' own pages (on Tavily).
   lookups?: { fred: boolean; competitor_pages: boolean };
+  // Model calls traced in Langfuse, and how many of the app's prompts are registered there.
+  tracing?: { langfuse: boolean; prompts: number };
 };
 
 export type Scenario = {
@@ -266,6 +271,18 @@ export function getRates(base: string): Promise<Rates> {
 // the Chief of Staff reads the results and checks the brief.
 export function prepareBrief(body: PrepareRequest): Promise<PreparedBrief> {
   return request("/brief/prepare", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export type Feedback = { session_id: string; trace_id?: string | null; useful: boolean; comment?: string };
+
+// The founder's verdict on a strategy, as a score on its run in Langfuse;
+// `recorded` is false when Langfuse is not set up.
+export function sendFeedback(body: Feedback): Promise<{ recorded: boolean }> {
+  return request("/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

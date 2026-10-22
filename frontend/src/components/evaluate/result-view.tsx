@@ -3,6 +3,7 @@
 // the plan, the reviews, the conflicts and what the request cost.
 
 import { DocumentList, type DocumentRef } from "@/components/documents";
+import { Feedback } from "@/components/evaluate/feedback";
 import { ResearchFindings, ResearchSources } from "@/components/evaluate/research";
 import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Markdown } from "@/components/markdown";
@@ -103,6 +104,12 @@ function Summary({ run }: { run: Run }) {
           })}
         </ul>
       </section>
+      {result.trace_url && (
+        <section>
+          <h3 className="kicker">Trace</h3>
+          <TraceLink url={result.trace_url} className="mt-2" />
+        </section>
+      )}
       <section>
         <h3 className="kicker">Conflicts</h3>
         <p className="mt-2 flex items-center gap-2 text-sm text-ink-2">
@@ -460,48 +467,65 @@ function Conflicts({ result }: { result: EvaluateResponse }) {
   );
 }
 
+// The run's trace in Langfuse: every model call, with its prompt, reply, tokens and cost, and the scores.
+function TraceLink({ url, className = "" }: { url: string; className?: string }) {
+  return (
+    <p className={`text-sm ${className}`}>
+      <a href={url} target="_blank" rel="noreferrer" className="font-medium text-ink underline decoration-rule-strong underline-offset-4 hover:decoration-ink">
+        Open the run in Langfuse ↗
+      </a>
+      <span className="mt-1 block text-xs leading-relaxed text-ink-3">
+        Every model call, with its prompt, reply, tokens and cost, and the scores on the run.
+      </span>
+    </p>
+  );
+}
+
 function RunMetrics({ result }: { result: EvaluateResponse }) {
   const rows = Object.entries(result.metrics);
   const longest = Math.max(1, ...rows.map(([, metric]) => metric.seconds));
   return (
-    <table className="w-full max-w-3xl text-left text-sm">
-      <thead>
-        <tr className="border-b border-rule-strong text-xs text-ink-3">
-          <th className="py-2 pr-4 font-medium">Stage</th>
-          <th className="py-2 pr-4 text-right font-medium">Calls</th>
-          <th className="py-2 pr-4 text-right font-medium">Tokens</th>
-          <th className="py-2 font-medium">Seconds</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-rule">
-        {rows.map(([node, metric]) => (
-          <tr key={node}>
-            <td className="py-2 pr-4">
-              {agentsOf(node).length > 1 ? (
-                <span className="inline-flex items-center gap-2">
-                  <AgentStack agents={agentsOf(node)} />
-                  {stepName(node)}
-                </span>
-              ) : (
-                <AgentName agent={agentOf(node)}>{stepName(node)}</AgentName>
-              )}
-            </td>
-            <td className="py-2 pr-4 text-right tabular">{metric.calls}</td>
-            <td className="py-2 pr-4 text-right tabular">{metric.tokens.toLocaleString("en-US")}</td>
-            <td className="py-2">
-              <div className="flex items-center gap-2.5">
-                <div
-                  aria-hidden
-                  className="h-1.5 rounded-full"
-                  style={{ width: `${Math.max(2, (metric.seconds / longest) * 60)}%`, background: agentFill(agentsOf(node)) }}
-                />
-                <span className="text-ink-2 tabular">{metric.seconds.toFixed(1)}</span>
-              </div>
-            </td>
+    <div className="max-w-3xl space-y-5">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-rule-strong text-xs text-ink-3">
+            <th className="py-2 pr-4 font-medium">Stage</th>
+            <th className="py-2 pr-4 text-right font-medium">Calls</th>
+            <th className="py-2 pr-4 text-right font-medium">Tokens</th>
+            <th className="py-2 font-medium">Seconds</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody className="divide-y divide-rule">
+          {rows.map(([node, metric]) => (
+            <tr key={node}>
+              <td className="py-2 pr-4">
+                {agentsOf(node).length > 1 ? (
+                  <span className="inline-flex items-center gap-2">
+                    <AgentStack agents={agentsOf(node)} />
+                    {stepName(node)}
+                  </span>
+                ) : (
+                  <AgentName agent={agentOf(node)}>{stepName(node)}</AgentName>
+                )}
+              </td>
+              <td className="py-2 pr-4 text-right tabular">{metric.calls}</td>
+              <td className="py-2 pr-4 text-right tabular">{metric.tokens.toLocaleString("en-US")}</td>
+              <td className="py-2">
+                <div className="flex items-center gap-2.5">
+                  <div
+                    aria-hidden
+                    className="h-1.5 rounded-full"
+                    style={{ width: `${Math.max(2, (metric.seconds / longest) * 60)}%`, background: agentFill(agentsOf(node)) }}
+                  />
+                  <span className="text-ink-2 tabular">{metric.seconds.toFixed(1)}</span>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {result.trace_url && <TraceLink url={result.trace_url} />}
+    </div>
   );
 }
 
@@ -538,6 +562,7 @@ export function ResultView({ run, number }: { run: Run; number: number }) {
             </span>
           </p>
           <Markdown labels>{result.final_strategy}</Markdown>
+          <Feedback result={result} />
         </div>
         <Summary run={run} />
       </div>

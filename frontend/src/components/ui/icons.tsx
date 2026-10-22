@@ -90,6 +90,27 @@ export function ArrowLeftIcon(props: IconProps) {
   );
 }
 
+// A thumb up, and turned over, down: the founder's verdict on a strategy.
+export function ThumbUpIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M2.5 7.25h2.5v6.25h-2.5z" />
+      <path d="M5 13.5h5.6a1.5 1.5 0 0 0 1.47-1.2l.8-4A1.5 1.5 0 0 0 11.4 6.5H9l.45-2.45A1.4 1.4 0 0 0 8.1 2.4L5 7.25" />
+    </Icon>
+  );
+}
+
+export function ThumbDownIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <g transform="rotate(180 8 8)">
+        <path d="M2.5 7.25h2.5v6.25h-2.5z" />
+        <path d="M5 13.5h5.6a1.5 1.5 0 0 0 1.47-1.2l.8-4A1.5 1.5 0 0 0 11.4 6.5H9l.45-2.45A1.4 1.4 0 0 0 8.1 2.4L5 7.25" />
+      </g>
+    </Icon>
+  );
+}
+
 // Three sliders: settings.
 export function SlidersIcon(props: IconProps) {
   return (

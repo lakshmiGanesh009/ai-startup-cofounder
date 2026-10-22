@@ -11,6 +11,7 @@ dependencies = [
     "httpx>=0.28",
     "langchain-core>=1.6.10",
     "langchain-openai>=1.7.1",
+    "langfuse>=5.0.4,<6",
     "langgraph>=1.2.15",
     "langgraph-checkpoint-postgres>=3.2.0",
     "markdown-it-py>=4.2.0",

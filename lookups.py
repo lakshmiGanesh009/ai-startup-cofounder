@@ -315,7 +315,7 @@ def lookup_node(state: WorkflowState) -> dict:
         plan = _plan_text(state)
         try:
             searches = structured_invoke(
-                FredSearches, [SystemMessage(_FRED_PROMPT + RULES), HumanMessage(plan)], tracker, CHIEF
+                FredSearches, [SystemMessage(_FRED_PROMPT + RULES), HumanMessage(plan)], tracker, CHIEF, "lookups/fred-searches"
             ).searches
         except LLM_ERRORS as error:  # the figures every plan needs are still read
             logger.warning("Choosing what to look up failed: %s", error)
@@ -324,7 +324,7 @@ def lookup_node(state: WorkflowState) -> dict:
             human = f"{plan}\n\nThe series found:\n{fence(_listing(found), 'FRED')}"
             try:
                 picks = structured_invoke(
-                    FredPicks, [SystemMessage(_PICK_PROMPT + RULES), HumanMessage(human)], tracker, CHIEF
+                    FredPicks, [SystemMessage(_PICK_PROMPT + RULES), HumanMessage(human)], tracker, CHIEF, "lookups/fred-picks"
                 ).picks
             except LLM_ERRORS as error:  # the closest series are read instead
                 logger.warning("Picking the series failed: %s", error)

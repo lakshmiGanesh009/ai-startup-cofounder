@@ -21,6 +21,7 @@ const ROUTES = new Set([
   "reports",
   "uploads",
   "ask",
+  "feedback",
 ]);
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 // What goes on to the API, and what comes back from it.

@@ -216,10 +216,29 @@ def _currency_rule() -> str:
     )
 
 
-def _system(part: str) -> str:
+def _system(part: str, currency_rule: str | None = None) -> str:
+    """A part's system prompt, in the document's currency, or with
+    `currency_rule` in its place (the template prompt_library.py registers)."""
+    rule = _currency_rule() if currency_rule is None else currency_rule
     if part == "executive":
-        return _EXECUTIVE + _currency_rule() + RULES
-    return f"{ROLES[OWNERS[part]].brief} {_PARTS[part]}\n{_STYLE}{_currency_rule()}{RULES}"
+        return _EXECUTIVE + rule + RULES
+    return f"{ROLES[OWNERS[part]].brief} {_PARTS[part]}\n{_STYLE}{rule}{RULES}"
+
+
+def _rewrite_system(role: str, document: str, rule: str) -> str:
+    """The system prompt for rewriting one passage, by `role`, of `document`."""
+    return (
+        f"{role} Revise one passage of the founder's {document} "
+        f"exactly as the founder asks, and nothing else. Keep its facts and figures unless the change asks "
+        f"for others, keep its markdown style, and add no remarks about the change.{rule}{RULES}"
+    )
+
+
+def prompts() -> dict[str, str]:
+    """The proposal's prompts as templates, for Langfuse (prompt_library.py)."""
+    templates = {f"proposal/{part}": _system(part, "{{currency_rule}}") for part in SCHEMAS}
+    templates["proposal/rewrite"] = _rewrite_system("{{role}}", "{{document}}", "{{currency_rule}}")
+    return templates
 
 
 def _background(report: Report) -> str:
@@ -336,7 +355,7 @@ def _ask(key: str, messages: list, tracker):
     """One structured call for a part; None, logged, if it fails."""
     role = CHIEF if key == "executive" else SPECIALIST
     try:
-        return structured_invoke(SCHEMAS[key], messages, tracker, role)
+        return structured_invoke(SCHEMAS[key], messages, tracker, role, f"proposal/{key}")
     except LLM_ERRORS as error:
         logger.warning("Proposal part %s failed: %s", key, error)
         return None
@@ -442,11 +461,8 @@ def revise_text(report: Report, path: str, instruction: str, passage: str | None
         current = text_at(report, path)
         owner = _owner(path)
         role = "You are the Chief of Staff of a startup founding team." if owner == "chief" else ROLES[owner].brief
-        system = (
-            f"{role} Revise one passage of the founder's {('investment proposal' if path.startswith('proposal') else 'report')} "
-            f"exactly as the founder asks, and nothing else. Keep its facts and figures unless the change asks "
-            f"for others, keep its markdown style, and add no remarks about the change.{_currency_rule()}{RULES}"
-        )
+        document = "investment proposal" if path.startswith("proposal") else "report"
+        system = _rewrite_system(role, document, _currency_rule())
         where = label(report, path)
         human = f"{_background(report)}\n\nThe part to revise is {where}. It reads:\n{fence(current, 'the team report')}"
         if passage:
@@ -458,7 +474,7 @@ def revise_text(report: Report, path: str, instruction: str, passage: str | None
         role_kind = CHIEF if owner == "chief" else SPECIALIST
         metrics: dict = {}
         with track("revise", metrics) as tracker:
-            rewritten = structured_invoke(Rewritten, [SystemMessage(system), HumanMessage(human)], tracker, role_kind)
+            rewritten = structured_invoke(Rewritten, [SystemMessage(system), HumanMessage(human)], tracker, role_kind, "proposal/rewrite")
         text = unfenced(rewritten.text).strip()
         logger.info("Revised %s for %s: %d calls, %d tokens", where, report.session_id,
                     metrics["revise"].calls, metrics["revise"].tokens)
