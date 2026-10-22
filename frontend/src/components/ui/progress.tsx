@@ -6,11 +6,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { formatSeconds } from "@/lib/team";
 
-export function useElapsed(): number {
-  const [elapsed, setElapsed] = useState(0);
+// The seconds since the work began: `since` (a time from Date.now()), or else
+// since the clock first showed.
+export function useElapsed(since?: number): number {
+  const [elapsed, setElapsed] = useState(() => (since ? (Date.now() - since) / 1000 : 0));
   // Kept across the effect's restarts, as when the page is hidden and shown
   // again on navigation, so the clock does not start over.
-  const started = useRef<number | null>(null);
+  const started = useRef<number | null>(since ?? null);
 
   useEffect(() => {
     started.current ??= Date.now();
@@ -21,8 +23,8 @@ export function useElapsed(): number {
   return elapsed;
 }
 
-export function Clock({ className = "" }: { className?: string }) {
-  const elapsed = useElapsed();
+export function Clock({ className = "", since }: { className?: string; since?: number }) {
+  const elapsed = useElapsed(since);
   return (
     <span className={`font-mono text-sm tabular text-ink-2 ${className}`} aria-label="Elapsed time">
       {formatSeconds(elapsed)}

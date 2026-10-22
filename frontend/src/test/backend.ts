@@ -160,6 +160,34 @@ export const DEEP: DeepResearch = {
   failed: ["risk"],
 };
 
+// The whole graph as /pipeline sends it (main.py's _diagram), for the live graph.
+export const GRAPH = [
+  "graph TD;",
+  "\t__start__([start])",
+  ...["plan", "research", "lookup", "review", "critique", "resolve", "synthesis", "marketing", "finance", "technical", "risk"].map(
+    (node) => `\t${node}(${node})`,
+  ),
+  "\t__end__([end])",
+  "\t__start__ --> plan;",
+  "\tcritique --> resolve;",
+  ...["marketing", "finance", "technical", "risk"].flatMap((name) => [
+    `\t${name} -.-> critique;`,
+    `\t${name} -.-> review;`,
+    `\t${name} -.-> synthesis;`,
+    `\tlookup -.-> ${name};`,
+    `\tplan -.-> ${name};`,
+    `\tresearch -.-> ${name};`,
+    `\tresolve -.-> ${name};`,
+    `\treview -.-> ${name};`,
+  ]),
+  "\tplan -.-> lookup;",
+  "\tplan -.-> research;",
+  "\tresolve -.-> synthesis;",
+  "\treview -.-> critique;",
+  "\treview -.-> synthesis;",
+  "\tsynthesis --> __end__;",
+].join("\n");
+
 // How the backend describes the team (/pipeline).
 export const PIPELINE: Pipeline = {
   mermaid: "graph TD;\n\t__start__([start])\n\tplan(plan)\n\t__start__ --> plan;",

@@ -10,6 +10,7 @@ import { ActivityLog } from "@/components/evaluate/activity-log";
 import { BriefReview } from "@/components/evaluate/brief-review";
 import { DocumentNamesProvider, type DocumentRef } from "@/components/documents";
 import { Composer, type Submission } from "@/components/evaluate/composer";
+import { LiveGraph, type Watched } from "@/components/evaluate/live-graph";
 import { type Brief, ResultView, type Run } from "@/components/evaluate/result-view";
 import { TeamProgress } from "@/components/evaluate/team-progress";
 import { AgentStack } from "@/components/ui/agent";
@@ -39,7 +40,8 @@ const DESCRIPTION =
   "Describe an idea or a decision. The Chief of Staff plans the work, four specialists analyse it, and the team reviews and reconciles their reports into one launch strategy.";
 
 type Saved = { runs: Run[]; followUp: string };
-type Pending = { prompt: string; steps: Step[] };
+// The request the team is working on: its steps so far, and when it began.
+type Pending = { prompt: string; steps: Step[]; started: number };
 // Preparing the first request's brief: the Chief of Staff at work on it, then
 // the founder reviewing what it found and asked.
 type Preparing = { submission: Submission; prepared: PreparedBrief | null };
@@ -55,6 +57,9 @@ function restore(): Saved {
 
 const neverChanges = () => () => {};
 
+// When a request begins, for the live graph's clock; called from the handlers that send one.
+const now = () => Date.now();
+
 export function EvaluateApp() {
   // The session is kept in this tab's storage, which the server cannot read,
   // so it is read only once the page runs in the browser.
@@ -62,7 +67,7 @@ export function EvaluateApp() {
   return inBrowser ? <Session /> : <PageHeader title="Evaluate an idea" description={DESCRIPTION} />;
 }
 
-function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
+function LiveRun({ pending, wait, onWatch }: { pending: Pending; wait: string; onWatch: () => void }) {
   const section = useRef<HTMLElement>(null);
   useEffect(() => {
     section.current?.scrollIntoView?.({ behavior: "smooth", block: "start" });
@@ -86,7 +91,7 @@ function LiveRun({ pending, wait }: { pending: Pending; wait: string }) {
       <div className="mt-8 grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_19rem]">
         <ActivityLog steps={pending.steps} />
         <div className="self-start rounded-xl border border-rule bg-sunken/40 p-5 lg:sticky lg:top-8">
-          <TeamProgress steps={pending.steps} live />
+          <TeamProgress steps={pending.steps} live onWatch={onWatch} />
         </div>
       </div>
     </section>
@@ -105,6 +110,9 @@ function Session() {
   const [preparing, setPreparing] = useState<Preparing | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The live graph's pop-up, and the run that ended last, which it stays open on.
+  const [watching, setWatching] = useState(false);
+  const [ended, setEnded] = useState<Watched | null>(null);
 
   useEffect(() => {
     getScenarios()
@@ -129,7 +137,10 @@ function Session() {
 
   async function send(prompt: string, context: RequestContext, brief?: Brief, deep = false, documents: DocumentRef[] = []) {
     setError(null);
-    setPending({ prompt, steps: [] });
+    const started = now();
+    setPending({ prompt, steps: [], started });
+    const seen: Step[] = [];
+    let problem: string | undefined;
     let seconds: number | undefined;
     try {
       const result = await evaluateStream(
@@ -142,6 +153,7 @@ function Session() {
         },
         (step) => {
           seconds = step.at;
+          seen.push(step);
           setPending((current) => current && { ...current, steps: [...current.steps, step] });
         },
       );
@@ -152,9 +164,11 @@ function Session() {
       setShown(null);
       return true;
     } catch (reason) {
-      setError((reason as Error).message);
+      problem = (reason as Error).message;
+      setError(problem);
       return false;
     } finally {
+      setEnded({ prompt, steps: seen, started, problem });
       setPending(null);
     }
   }
@@ -299,9 +313,12 @@ function Session() {
 
       {pending && (
         <div className="mt-12">
-          <LiveRun pending={pending} wait={wait} />
+          <LiveRun pending={pending} wait={wait} onWatch={() => setWatching(true)} />
         </div>
       )}
+
+      <LiveGraph open={watching} run={pending ?? ended} live={Boolean(pending)} onClose={() => setWatching(false)} />
+
 
       {error && (
         <Notice tone="bad" className="mt-8">

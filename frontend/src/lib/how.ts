@@ -286,6 +286,33 @@ const GRAPH_RANK = new Map(GRAPH_NODES.map(([node], rank) => [node, rank]));
 const NODE_LINE = /^\s*(\w+)(\(\[.*\]\)|\(.*\)|\[.*\])\s*;?\s*$/;
 const EDGE_LINE = /^\s*(\w+)\s*(-->|-\.->)\s*(\w+)\s*;?\s*$/;
 
+// Whose a node of the graph is.
+export function graphRole(node: string): DiagramRole | undefined {
+  return GRAPH_ROLE.get(node);
+}
+
+// An edge of the graph: the node it leaves and the one it leads to, and how it
+// is drawn, from and to (the other way round for an edge back up the graph).
+export type GraphEdge = { from: string; to: string; drawn: [string, string]; arrow: string };
+
+const rank = (node: string) => GRAPH_RANK.get(node) ?? GRAPH_NODES.length;
+
+// The graph's edges in the order they are drawn, which is the order the work
+// runs; an edge back up the graph is written the other way round, without its
+// arrowhead. Mermaid draws them in this order, so the live graph finds each one.
+export function graphEdges(source: string): GraphEdge[] {
+  return source
+    .split("\n")
+    .map((line) => line.match(EDGE_LINE))
+    .filter((edge): edge is RegExpMatchArray => edge !== null)
+    .map(([, from, arrow, to]): GraphEdge =>
+      rank(to) < rank(from)
+        ? { from, to, drawn: [to, from], arrow: arrow === "-->" ? "---" : "-.-" }
+        : { from, to, drawn: [from, to], arrow },
+    )
+    .sort((a, b) => rank(a.drawn[0]) - rank(b.drawn[0]) || rank(a.drawn[1]) - rank(b.drawn[1]));
+}
+
 // The graph LangGraph draws (GET /pipeline), with its nodes and edges in the
 // order the work runs, each node in its agent's colours, and each edge in the
 // colour of the node it leaves. An edge back up the graph (a report sent back
@@ -296,17 +323,9 @@ const EDGE_LINE = /^\s*(\w+)\s*(-->|-\.->)\s*(\w+)\s*;?\s*$/;
 export function graphDiagram(source: string, palette: Palette): string {
   const lines = source.split("\n");
   const nodes = lines.filter((line) => NODE_LINE.test(line));
-  const edges = lines
-    .map((line) => line.match(EDGE_LINE))
-    .filter((edge): edge is RegExpMatchArray => edge !== null);
+  const edges = graphEdges(source);
   if (!edges.length) return source;
-  const rank = (node: string) => GRAPH_RANK.get(node) ?? GRAPH_NODES.length;
   const head = lines.filter((line) => !NODE_LINE.test(line) && !EDGE_LINE.test(line) && line.trim());
-  // [where it is drawn from, the arrow, where it is drawn to, the node it leaves]
-  const drawn = edges.map(([, from, arrow, to]) =>
-    rank(to) < rank(from) ? [to, arrow === "-->" ? "---" : "-.-", from, from] : [from, arrow, to, from],
-  );
-  const ordered = drawn.sort(([a, , b], [c, , d]) => rank(a) - rank(c) || rank(b) - rank(d));
   const members: Partial<Record<DiagramRole, string[]>> = {};
   for (const line of nodes) {
     const node = line.match(NODE_LINE)![1];
@@ -316,9 +335,9 @@ export function graphDiagram(source: string, palette: Palette): string {
   return [
     ...head,
     ...[...nodes].sort((a, b) => rank(a.match(NODE_LINE)![1]) - rank(b.match(NODE_LINE)![1])),
-    ...ordered.map(([from, arrow, to]) => `\t${from} ${arrow} ${to};`),
+    ...edges.map(({ drawn: [from, to], arrow }) => `\t${from} ${arrow} ${to};`),
     styled(palette, members),
-    ...ordered.map(([, , , leaves], index) => {
+    ...edges.map(({ from: leaves }, index) => {
       const role = GRAPH_ROLE.get(leaves);
       const colour = role && role !== "team" ? palette.roles[role].line : palette.muted;
       return `  linkStyle ${index} stroke:${colour},stroke-width:1.5px`;

@@ -26,7 +26,10 @@ refinement, and a recorded run of both for anyone who cannot watch it live.
    service, one founder, almost no budget. While it runs, the live view names
    each step: point out the plan (which agents were assigned, and which were
    left out), the specialists starting at the same time, and the look-up of
-   official figures on FRED.
+   official figures on FRED. Click **Live graph** in the progress card to watch
+   the same on the graph itself: the step at work glows in its agent's colour,
+   the arrows the work moves along run, and a sidebar says what each step is
+   doing; leave it open through the run, since it stays on the finished graph.
 3. **The result.** The recommendation leads (go, go with conditions, or not yet),
    then the strategy, its claims tagged with the agent they came from. Then the
    tabs under it:
@@ -65,7 +68,7 @@ conflict resolutions, strategy), then the same for the follow-up.
 | Multi-agent coordination quality | 2, the live view; 3, Conflicts |
 | Delegation and synthesis effectiveness | 3, Plan and the strategy; 4, only the affected agents rerun |
 | Reflection and self-correction capability | 3, Reviews; 4, the refinement |
-| Workflow clarity and state modeling | 1, the diagrams; 4, the session kept between requests |
+| Workflow clarity and state modeling | 1, the diagrams; 2, the live graph; 4, the session kept between requests |
 | System optimization and performance | 3, Run; 6, the Monitor; [performance.md](performance.md) |
 | Code quality and modularity | [architecture.md](architecture.md), the tests |
 | Documentation clarity | this guide, [architecture.md](architecture.md) |

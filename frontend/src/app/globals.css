@@ -396,6 +396,8 @@
   color: var(--ink);
   max-width: 68ch;
   font-optical-sizing: auto;
+  /* A word longer than the line ("Typeform/HelloSign/Notion/…") breaks, rather than widening a phone's page. */
+  overflow-wrap: anywhere;
 }
 
 .doc > * + * {
@@ -719,4 +721,118 @@ dialog::backdrop {
   max-width: 100%;
   height: auto;
   margin-inline: auto;
+}
+
+/* ---- The live graph: the run lit up on the graph as the team works ----
+   Mermaid sets each box's colours inline and !important, so a step's state
+   shows in its opacity, its glow (in --live, its agent's colour) and its mark;
+   an edge's in its opacity, width and running dashes. */
+.live-graph g.node {
+  transition: opacity 0.5s ease;
+}
+
+.live-graph g.node.live-waiting {
+  opacity: 0.4;
+}
+
+.live-graph g.node.live-skipped {
+  opacity: 0.2;
+}
+
+.live-graph g.node.live-skipped > :first-child {
+  stroke-dasharray: 4 3;
+}
+
+.live-graph g.node.live-running,
+.live-key-running {
+  animation: live-glow 1.6s ease-in-out infinite;
+}
+
+.live-key-running {
+  --live: var(--primary);
+}
+
+@keyframes live-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px var(--live));
+  }
+  50% {
+    filter: drop-shadow(0 0 9px var(--live)) drop-shadow(0 0 2px var(--live));
+  }
+}
+
+.live-graph path.flowchart-link {
+  opacity: 0.25;
+  transition: opacity 0.5s ease;
+}
+
+.live-graph path.flowchart-link.live-taken,
+.live-graph path.flowchart-link.live-moving {
+  opacity: 1;
+  stroke-width: 2.25px !important;
+}
+
+.live-graph path.flowchart-link.live-moving {
+  stroke-dasharray: 7 5 !important;
+  animation: live-flow 0.6s linear infinite;
+}
+
+/* An edge back up the graph is drawn from where it leads, so its dashes run back. */
+.live-graph path.flowchart-link.live-moving.live-back {
+  animation-direction: reverse;
+}
+
+@keyframes live-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+.live-key-moving {
+  background: repeating-linear-gradient(90deg, var(--ink-2) 0 5px, transparent 5px 9px);
+  animation: live-key-flow 0.6s linear infinite;
+}
+
+@keyframes live-key-flow {
+  to {
+    background-position: 9px 0;
+  }
+}
+
+/* A finished step's mark pops in. */
+.live-mark-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: live-pop 0.35s ease-out;
+}
+
+@keyframes live-pop {
+  from {
+    transform: scale(0.2);
+    opacity: 0;
+  }
+}
+
+/* The whole graph in view beside the turns: it fills its box, as large as fits. */
+@media (min-width: 64rem) {
+  .live-graph svg {
+    width: 100%;
+    height: 100%;
+    max-width: 100% !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-graph g.node.live-running,
+  .live-key-running {
+    animation: none;
+    filter: drop-shadow(0 0 6px var(--live));
+  }
+
+  .live-graph path.flowchart-link.live-moving,
+  .live-key-moving,
+  .live-mark-pop {
+    animation: none;
+  }
 }

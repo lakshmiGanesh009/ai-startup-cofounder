@@ -1,12 +1,13 @@
 // The team's six stages of work, each in the colour of the agent who does it.
 // Before a request it explains them; while the team works it shows, from the
 // steps the API streams, which stage is under way, what each finished, and
-// which specialists are writing.
+// which specialists are writing, with a button that opens the same live on the
+// graph LangGraph runs.
 
 import { useId } from "react";
 
 import { AgentAvatar, AgentStack } from "@/components/ui/agent";
-import { AlertIcon, CheckIcon } from "@/components/ui/icons";
+import { AlertIcon, CheckIcon, InfoIcon } from "@/components/ui/icons";
 import { type AgentKey, agentClass, SPECIALIST_AGENTS } from "@/lib/agents";
 import type { Specialist, Step } from "@/lib/api";
 import {
@@ -156,7 +157,7 @@ function Specialists({ states, team }: { states: Record<string, NodeState>; team
   );
 }
 
-export function TeamProgress({ steps, live }: { steps: Step[]; live: boolean }) {
+export function TeamProgress({ steps, live, onWatch }: { steps: Step[]; live: boolean; onWatch?: () => void }) {
   const states = nodeStates(steps);
   const team = assigned(steps);
   // The idle panel stays in the page, hidden, while the live one shows.
@@ -164,9 +165,22 @@ export function TeamProgress({ steps, live }: { steps: Step[]; live: boolean }) 
 
   return (
     <section aria-labelledby={heading}>
-      <h2 id={heading} className="kicker">
-        {live ? "The team at work" : "How the team works"}
-      </h2>
+      <div className="flex items-center gap-3">
+        <h2 id={heading} className="kicker">
+          {live ? "The team at work" : "How the team works"}
+        </h2>
+        {live && onWatch && (
+          <button
+            type="button"
+            onClick={onWatch}
+            title="See how the agents are working, live on the graph LangGraph runs"
+            className="ml-auto flex shrink-0 items-center gap-1.5 rounded-md border border-rule bg-surface px-2 py-1 text-xs font-medium text-ink-2 transition-colors hover:border-rule-strong hover:text-ink"
+          >
+            <InfoIcon className="size-3.5" />
+            Live graph
+          </button>
+        )}
+      </div>
       <ol className="mt-4">
         {STAGES.map((stage, index) => {
           // Before the first step arrives, the Chief of Staff is already planning.

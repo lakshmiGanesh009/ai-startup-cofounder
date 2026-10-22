@@ -133,13 +133,19 @@ const AT_WORK: Record<string, string> = {
   synthesis: "The Chief of Staff is writing the launch strategy.",
 };
 
+// What a step at work is doing, in a sentence: a specialist on its run-th turn.
+export function doing(node: string, run = 1): string {
+  if (node in SPECIALIST_TITLES) return writing([node], run > 1 ? "revising" : "writing");
+  return AT_WORK[node] ?? `${actor(node)} is working.`;
+}
+
 // What the team is doing now, from the steps so far.
 export function activity(steps: Step[]): string {
   if (!steps.length) return AT_WORK.plan;
   const busy = Object.entries(nodeStates(steps)).filter(([, state]) => state.working);
   const writers = busy.filter(([node, state]) => node in SPECIALIST_TITLES && state.runs === 1).map(([node]) => node);
   const revisers = busy.filter(([node, state]) => node in SPECIALIST_TITLES && state.runs > 1).map(([node]) => node);
-  const others = busy.filter(([node]) => !(node in SPECIALIST_TITLES)).map(([node]) => AT_WORK[node] ?? `${actor(node)} is working.`);
+  const others = busy.filter(([node]) => !(node in SPECIALIST_TITLES)).map(([node]) => doing(node));
   const sentences = [
     ...others,
     ...(writers.length ? [writing(writers, "writing")] : []),

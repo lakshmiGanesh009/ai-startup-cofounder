@@ -185,7 +185,7 @@ const LEGEND: { role: DiagramRole; name: string }[] = [
   { role: "research", name: "Web research" },
 ];
 
-function Legend({ roles }: { roles: DiagramRole[] }) {
+export function Legend({ roles }: { roles: DiagramRole[] }) {
   return (
     <ul aria-label="Colours" className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-ink-2">
       {LEGEND.filter(({ role }) => roles.includes(role)).map(({ role, name }) => (
@@ -209,22 +209,10 @@ function Legend({ roles }: { roles: DiagramRole[] }) {
 
 // A diagram's colours are fixed when it is drawn, so it is drawn again, from
 // the page's tokens, when the page turns light or dark (useDark).
-
-export function MermaidDiagram({
-  build,
-  label,
-  roles = DIAGRAM_ROLES,
-  backwards = false,
-}: {
-  build: (palette: Palette) => string;
-  label: string;
-  roles?: DiagramRole[];
-  backwards?: boolean;
-}) {
+export function useDiagram(build: (palette: Palette) => string, backwards = false) {
   const dark = useDark();
   const [drawn, setDrawn] = useState<{ source: string; svg: string } | null>(null);
   const [failed, setFailed] = useState<{ source: string; problem: string } | null>(null);
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -242,7 +230,22 @@ export function MermaidDiagram({
     };
   }, [build, dark, backwards]);
 
-  const source = drawn?.source ?? failed?.source ?? "";
+  return { svg: drawn?.svg ?? null, source: drawn?.source ?? failed?.source ?? "", problem: failed?.problem ?? null };
+}
+
+export function MermaidDiagram({
+  build,
+  label,
+  roles = DIAGRAM_ROLES,
+  backwards = false,
+}: {
+  build: (palette: Palette) => string;
+  label: string;
+  roles?: DiagramRole[];
+  backwards?: boolean;
+}) {
+  const { svg, source, problem } = useDiagram(build, backwards);
+  const [copied, setCopied] = useState(false);
 
   async function copy() {
     try {
@@ -253,14 +256,13 @@ export function MermaidDiagram({
     }
   }
 
-  const svg = drawn?.svg ?? null;
   return (
     <figure aria-label={label} className="space-y-4">
       {svg ? (
         // Mermaid sanitises what it draws (securityLevel "strict"); the source is the app's own.
         <div className="relative diagram overflow-x-auto rounded-lg border border-rule bg-surface p-4" dangerouslySetInnerHTML={{ __html: svg }} />
-      ) : failed ? (
-        <Notice tone="warn">The diagram could not be drawn ({failed.problem}). Its Mermaid source is below.</Notice>
+      ) : problem ? (
+        <Notice tone="warn">The diagram could not be drawn ({problem}). Its Mermaid source is below.</Notice>
       ) : (
         <p className="py-16 text-center text-sm text-ink-3">Drawing the diagram…</p>
       )}
