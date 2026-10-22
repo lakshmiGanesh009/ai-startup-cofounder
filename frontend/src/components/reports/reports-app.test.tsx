@@ -603,9 +603,13 @@ describe("the document page", () => {
     const dialog = await screen.findByRole("region", { name: "Document studio" });
 
     expect(within(dialog).getByText("US dollar")).toBeTruthy();
+    // Today's rate is filled in, with where it comes from.
+    const rate = within(dialog).getByLabelText<HTMLInputElement>(/^1 USD =/);
+    await waitFor(() => expect(rate.value).toBe("0.92"));
+    expect(rate.getAttribute("placeholder")).toBeNull();
+    expect(within(dialog).getByText(/^Today's rate, from the European Central Bank reference rates of 21 Oct 2026\.$/)).toBeTruthy();
     const convert = within(dialog).getByRole("button", { name: "Convert to EUR" });
-    expect(convert).toHaveProperty("disabled", true); // no rate yet
-    await user().type(within(dialog).getByLabelText(/^1 USD =/), "0.92");
+    expect(convert).toHaveProperty("disabled", false);
     await user().click(convert);
 
     expect(lastTo(sent, "/drafts")).toEqual({
@@ -622,6 +626,44 @@ describe("the document page", () => {
     await within(dialog).findByText("Saved as version 2.");
     expect((lastTo(sent, "/accept")?.body as { content: { settings: { currency: string } } }).content.settings.currency).toBe("EUR");
     expect(screen.getByTitle("Euro").textContent).toBe("EUR");
+  });
+
+  test("today's rate follows the currency chosen; a rate typed stays, and the ECB's is one click away", async () => {
+    const { sent } = fakeReports({ proposal: true });
+    renderPage();
+    await user().click(await screen.findByRole("button", { name: "Currency, units and text" }));
+    const page = await screen.findByRole("region", { name: "Document studio" });
+    const rate = within(page).getByLabelText<HTMLInputElement>(/^1 USD =/);
+    await waitFor(() => expect(rate.value).toBe("0.92"));
+
+    await user().selectOptions(within(page).getByLabelText("Change it to"), "INR");
+    expect(rate.value).toBe("94.469");
+    await user().selectOptions(within(page).getByLabelText("Change it to"), "AED");
+    expect(rate.value).toBe("3.6725");
+    expect(within(page).getByText(/with the dirham and the riyal at their pegs to the US dollar\.$/)).toBeTruthy();
+
+    // The founder's bank's rate, kept for its currency.
+    await user().selectOptions(within(page).getByLabelText("Change it to"), "EUR");
+    await user().clear(rate);
+    await user().type(rate, "0,91");
+    expect(rate.value).toBe("0.91");
+    expect(within(page).getByText(/^Your own rate; the ECB's for 21 Oct 2026 is 0\.92\./)).toBeTruthy();
+    await user().selectOptions(within(page).getByLabelText("Change it to"), "GBP");
+    await user().selectOptions(within(page).getByLabelText("Change it to"), "EUR");
+    expect(rate.value).toBe("0.91");
+    await user().click(within(page).getByRole("button", { name: "Convert to EUR" }));
+    expect((lastTo(sent, "/drafts")?.body as { change: { rate: number } }).change.rate).toBe(0.91);
+  });
+
+  test("without today's rates, the rate is left for the founder, and says why", async () => {
+    fakeReports({ proposal: true, failures: { rates: 503 } });
+    renderPage();
+    await user().click(await screen.findByRole("button", { name: "Currency, units and text" }));
+    const page = await screen.findByRole("region", { name: "Document studio" });
+
+    expect(await within(page).findByText(/^Today's rate could not be fetched \(.*It failed \(503\)\.\)\. Enter it from your bank or the ECB\.$/)).toBeTruthy();
+    expect(within(page).getByLabelText<HTMLInputElement>(/^1 USD =/).value).toBe("");
+    expect(within(page).getByRole("button", { name: "Convert to EUR" })).toHaveProperty("disabled", true);
   });
 
   test("a relabel, the units, the settings, and redaction are drafts too", async () => {

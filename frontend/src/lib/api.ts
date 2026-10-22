@@ -254,6 +254,14 @@ export function getTemplates(): Promise<Template[]> {
   return request("/templates");
 }
 
+// Today's rates from a currency to the app's others: the ECB's reference rates,
+// with the pegged dirham and riyal worked out from the dollar's.
+export type Rates = { base: string; date: string; source: string; rates: Record<string, number>; pegged: string[] };
+
+export function getRates(base: string): Promise<Rates> {
+  return request(`/rates/${encodeURIComponent(base)}`);
+}
+
 // About 20-30 s: the Chief of Staff plans the searches, Tavily runs them, and
 // the Chief of Staff reads the results and checks the brief.
 export function prepareBrief(body: PrepareRequest): Promise<PreparedBrief> {

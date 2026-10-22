@@ -24,11 +24,13 @@ import {
   contentOf,
   type Draft,
   type DraftChange,
+  getRates,
   getVersion,
   type GuardrailFlag,
   listVersions,
   makeDraft,
   type PartKey,
+  type Rates,
   type Reasoning,
   type Report,
   reportPdf,
@@ -77,6 +79,11 @@ function pdfKey(shown: Shown, report: Report): string {
   if (shown.kind === "draft") return `draft-${shown.draft.base_version}-${shown.draft.summary}-${shown.draft.changes.length}`;
   if (shown.kind === "version") return `version-${shown.report.version}`;
   return `saved-${report.version}`;
+}
+
+// A day as "21 Oct 2026".
+function readableDay(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 function ago(when: string): string {
@@ -504,11 +511,35 @@ function SettingsTool({
   const { settings } = report;
   const others = Object.keys(CURRENCIES).filter((code) => code !== settings.currency);
   const [to, setTo] = useState(others[0] ?? "EUR");
-  const [rate, setRate] = useState("");
   const [relabel, setRelabel] = useState(false);
   const [preparedBy, setPreparedBy] = useState(settings.prepared_by);
   const [hidden, setHidden] = useState<string[]>(settings.hidden);
+  // Today's rates from the report's currency fill the rate in; a rate the
+  // founder types for a currency stays until they change it.
+  const [today, setToday] = useState<Rates | null>(null);
+  const [noRates, setNoRates] = useState<string | null>(null);
+  const [typed, setTyped] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let cancelled = false;
+    getRates(settings.currency)
+      .then((answer) => {
+        if (cancelled) return;
+        setToday(answer);
+        setNoRates(null);
+      })
+      .catch((error: Error) => {
+        if (!cancelled) setNoRates(error.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [settings.currency]);
+
+  const fetched = today?.base === settings.currency ? today.rates[to] : undefined;
+  const rate = typed[to] ?? (fetched === undefined ? "" : String(fetched));
   const value = Number(rate);
+  const pegged = today && [to, settings.currency].some((code) => today.pegged.includes(code));
 
   return (
     <div className="space-y-7">
@@ -539,7 +570,7 @@ function SettingsTool({
         </label>
         {!relabel && (
           <div>
-            <Label htmlFor="currency-rate" hint="today's rate, from your bank or ECB">
+            <Label htmlFor="currency-rate" hint="your bank's, if it differs">
               1 {settings.currency} =
             </Label>
             <div className="flex items-center gap-2">
@@ -547,12 +578,40 @@ function SettingsTool({
                 id="currency-rate"
                 inputMode="decimal"
                 value={rate}
-                onChange={(event) => setRate(event.target.value.replace(",", "."))}
-                placeholder="0.92"
+                onChange={(event) => setTyped((current) => ({ ...current, [to]: event.target.value.replace(",", ".") }))}
+                aria-describedby="currency-rate-source"
                 className={`${inputClass} tabular`}
               />
               <span className="text-sm text-ink-2">{to}</span>
             </div>
+            <p id="currency-rate-source" className="mt-1.5 text-xs leading-relaxed text-ink-3">
+              {fetched !== undefined && typed[to] === undefined && (
+                <>
+                  Today&apos;s rate, from the {today!.source} of {readableDay(today!.date)}
+                  {pegged && ", with the dirham and the riyal at their pegs to the US dollar"}.
+                </>
+              )}
+              {fetched !== undefined && typed[to] !== undefined && (
+                <>
+                  Your own rate; the ECB&apos;s for {readableDay(today!.date)} is {fetched}.{" "}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setTyped((current) => {
+                        const kept = { ...current };
+                        delete kept[to];
+                        return kept;
+                      })
+                    }
+                    className="font-medium text-ink-2 underline underline-offset-2 hover:text-ink"
+                  >
+                    Use it
+                  </button>
+                </>
+              )}
+              {fetched === undefined && noRates && <>Today&apos;s rate could not be fetched ({noRates}). Enter it from your bank or the ECB.</>}
+              {fetched === undefined && !noRates && (today ? "No rate for this currency today; enter it from your bank." : "Fetching today's rate…")}
+            </p>
           </div>
         )}
         <Button

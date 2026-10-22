@@ -13,6 +13,7 @@ const ROUTES = new Set([
   "health",
   "scenarios",
   "templates",
+  "rates",
   "pipeline",
   "monitoring",
   "brief",

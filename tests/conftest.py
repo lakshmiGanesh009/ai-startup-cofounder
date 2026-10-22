@@ -313,12 +313,14 @@ def fresh_monitor():
 
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
-    """Neither Tavily nor Azure OpenAI's web search, nor an MCP server, is
-    called for real: a test that searches or researches answers through
-    search._transport or azure_web._client, and one that looks something up
-    through MCP puts a server of its own in lookups.SERVERS (tests/mcp_fakes.py)."""
+    """Neither Tavily nor Azure OpenAI's web search, nor an MCP server, nor
+    the ECB is called for real: a test that searches or researches answers
+    through search._transport or azure_web._client, one that looks something up
+    through MCP puts a server of its own in lookups.SERVERS (tests/mcp_fakes.py),
+    and one that asks for exchange rates answers through rates._transport."""
     import azure_web
     import lookups
+    import rates
     import search
 
     def refuse_server(name):
@@ -341,6 +343,8 @@ def no_network(monkeypatch):
 
     monkeypatch.setattr(search, "_transport", httpx.MockTransport(refuse))
     monkeypatch.setattr(search, "POLL_SECONDS", 0)
+    monkeypatch.setattr(rates, "_transport", httpx.MockTransport(refuse))
+    monkeypatch.setattr(rates, "_cache", None)
     monkeypatch.setattr(azure_web, "_client", Refusing)
 
 

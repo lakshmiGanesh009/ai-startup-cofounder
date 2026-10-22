@@ -81,6 +81,7 @@ from reports import (
 )
 import lookups
 import providers
+from rates import Rates, RatesUnavailable, rates_from
 from security import (
     MAX_FIELD_CHARS,
     MAX_PROMPT_CHARS,
@@ -262,6 +263,18 @@ async def list_templates():
     """The decision templates (templates/*.json) a brief can be written from:
     each a request to fill in, with what to look up and ask for that decision."""
     return load_templates()
+
+
+@app.get("/rates/{base}", response_model=Rates)
+def exchange_rates(base: str):
+    """Today's rates from `base` to the app's other currencies (rates.py), to
+    fill in when the founder converts a report; the founder can change them."""
+    if base not in CURRENCIES:
+        raise HTTPException(status_code=422, detail=f"There is no currency called {base!r} here.")
+    try:
+        return rates_from(base)
+    except RatesUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
 
 
 def _diagram() -> str:

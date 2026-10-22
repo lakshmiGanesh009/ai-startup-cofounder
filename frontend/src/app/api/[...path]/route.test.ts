@@ -143,6 +143,10 @@ describe("the API proxy", () => {
 
     expect([metrics.status, climbing.status]).toEqual([404, 404]);
     expect(fetch).not.toHaveBeenCalled();
+
+    // Today's exchange rates, for the studio's Settings, are one of them.
+    expect((await call(GET, "http://app.test/api/rates/USD")).status).toBe(200);
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   test("an API that cannot be reached is a 502 that says so", async () => {

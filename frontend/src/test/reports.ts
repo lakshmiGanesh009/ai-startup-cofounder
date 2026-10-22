@@ -4,11 +4,20 @@
 import type { Answering } from "@/test/backend";
 import { fakeBackend } from "@/test/backend";
 import sample from "@/test/sample-report.json";
-import type { Draft, FieldChange, Proposal, Report } from "@/lib/api";
+import type { Draft, FieldChange, Proposal, Rates, Report } from "@/lib/api";
 
 export const SAMPLE_REPORT = sample as unknown as Report;
 export const SESSION = SAMPLE_REPORT.session_id;
 const PATH = `/reports/${SESSION}`;
+
+// Today's rates from the dollar (GET /rates/USD).
+export const RATES: Rates = {
+  base: "USD",
+  date: "2026-10-21",
+  source: "European Central Bank reference rates",
+  rates: { EUR: 0.92, GBP: 0.746173, INR: 94.469, AED: 3.6725, SAR: 3.75 },
+  pegged: ["AED", "SAR"],
+};
 
 export function fakeReports({ proposal = false, failures = {} as Record<string, number>, extra = {} as Record<string, Answering> } = {}) {
   const state = {
@@ -121,6 +130,8 @@ export function fakeReports({ proposal = false, failures = {} as Record<string, 
     [`PUT ${PATH}/proposal`]: answer("saveProposal", (body) => changed({ proposal: body.proposal as Proposal, edited: true })),
     [`GET ${PATH}/pdf`]: answer("pdf", () => "%PDF"),
     [`POST ${PATH}/pdf`]: answer("previewPdf", () => "%PDF"),
+    "GET /rates/USD": answer("rates", () => RATES),
+    "GET /rates/EUR": answer("rates", () => ({ ...RATES, base: "EUR", rates: { USD: 1.08696, AED: 3.99185 } })),
     ...extra,
   });
   return { ...backend, state };
