@@ -1,0 +1,152 @@
+<!-- ============ Cover ============ -->
+<section class="page wide dark cover" id="cover">
+  <div class="body">
+    <div class="content">
+      <div style="display:flex;align-items:center;gap:0.14in">
+        <svg width="40" height="40" viewBox="0 0 24 24" aria-hidden="true">
+          <g stroke="#ffffff" stroke-width="1.1" opacity="0.4"><path d="M12 8.5V5M15.5 12H19M12 15.5V19M8.5 12H5"/></g>
+          <circle cx="12" cy="12" r="3.25" fill="#9085e9"/>
+          <circle cx="12" cy="3.5" r="2" fill="#eb6834"/>
+          <circle cx="20.5" cy="12" r="2" fill="#1baf7a"/>
+          <circle cx="12" cy="20.5" r="2" fill="#4a93ea"/>
+          <circle cx="3.5" cy="12" r="2" fill="#e87ba4"/>
+        </svg>
+        <p class="kicker" style="margin:0">Capstone project · Deep dive</p>
+      </div>
+      <h1>The AI Startup Co&#8209;Founder Team</h1>
+      <p class="sub">How the whole project works: the agents and their workflow, the technology beneath them, and how the system is kept correct, safe and observable.</p>
+
+      <div class="team">
+        <div class="who"><span class="agent-dot c-chief"><i class="icon" data-icon="chief"></i></span><div><div class="name">Chief of Staff</div><div class="role">plans, reviews, decides</div></div></div>
+        <div class="who"><span class="agent-dot c-marketing"><i class="icon" data-icon="megaphone"></i></span><div><div class="name">Marketing Strategy</div><div class="role">the go-to-market</div></div></div>
+        <div class="who"><span class="agent-dot c-finance"><i class="icon" data-icon="chart"></i></span><div><div class="name">Financial Planning</div><div class="role">price, budget, runway</div></div></div>
+        <div class="who"><span class="agent-dot c-technical"><i class="icon" data-icon="chip"></i></span><div><div class="name">Technical Feasibility</div><div class="role">what to build first</div></div></div>
+        <div class="who"><span class="agent-dot c-risk"><i class="icon" data-icon="shield"></i></span><div><div class="name">Risk &amp; Compliance</div><div class="role">law, privacy, safety</div></div></div>
+      </div>
+      <div class="meta">
+        <div><span class="k">Edition</span>October 2026, from the main branch</div>
+        <div><span class="k">Built with</span>Python 3.12, LangGraph, FastAPI, Next.js 16 and Azure OpenAI</div>
+        <div><span class="k">With this document</span>01 Highlights deck · 02 Brief, architecture and user flow</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<!-- ============ Contents ============ -->
+<section class="page wide" id="contents">
+  <div class="body">
+    <p class="kicker">Contents</p>
+    <h2 class="title">Nine parts, from the brief to production</h2>
+    <p class="lede">Every entry is a link, and every page links back here from its footer. Figures quoted as "measured" come from the code, the test suites and a recorded live run on 22 October 2026.</p>
+    <div class="content toc" data-outline>
+      <p class="part">1 · Overview</p>
+      <a href="#summary"><span class="n">1.1</span><span class="t">Executive summary</span><span class="p" data-page-of="summary"></span></a>
+      <a href="#glance"><span class="n">1.2</span><span class="t">The product at a glance</span><span class="p" data-page-of="glance"></span></a>
+      <p class="part">2 · The brief, and how it was met</p>
+      <a href="#brief-asked"><span class="n">2.1</span><span class="t">What the brief asked for</span><span class="p" data-page-of="brief-asked"></span></a>
+      <a href="#traceability"><span class="n">2.2</span><span class="t">Every requirement, traced to the code</span><span class="p" data-page-of="traceability"></span></a>
+      <a href="#deliverables"><span class="n">2.3</span><span class="t">Deliverables and evaluation criteria</span><span class="p" data-page-of="deliverables"></span></a>
+      <p class="part">3 · Architecture and technology</p>
+      <a href="#architecture"><span class="n">3.1</span><span class="t">System architecture</span><span class="p" data-page-of="architecture"></span></a>
+      <a href="#stack-brief"><span class="n">3.2</span><span class="t">The technologies the brief named</span><span class="p" data-page-of="stack-brief"></span></a>
+      <a href="#stack-added-1"><span class="n">3.3</span><span class="t">Added beyond the brief: intelligence and data</span><span class="p" data-page-of="stack-added-1"></span></a>
+      <a href="#stack-added-2"><span class="n">3.4</span><span class="t">Added beyond the brief: product and operations</span><span class="p" data-page-of="stack-added-2"></span></a>
+      <a href="#codebase"><span class="n">3.5</span><span class="t">The codebase</span><span class="p" data-page-of="codebase"></span></a>
+      <p class="part">4 · The agent team and its workflow</p>
+      <a href="#team"><span class="n">4.1</span><span class="t">The founding team</span><span class="p" data-page-of="team"></span></a>
+      <a href="#state-machine"><span class="n">4.2</span><span class="t">The state machine</span><span class="p" data-page-of="state-machine"></span></a>
+      <a href="#state"><span class="n">4.3</span><span class="t">The shared state</span><span class="p" data-page-of="state"></span></a>
+      <a href="#delegation"><span class="n">4.4</span><span class="t">Delegation</span><span class="p" data-page-of="delegation"></span></a>
+      <a href="#pac"><span class="n">4.5</span><span class="t">Plan, act, check, and cross-critique</span><span class="p" data-page-of="pac"></span></a>
+      <a href="#synthesis"><span class="n">4.6</span><span class="t">Synthesis: one strategy</span><span class="p" data-page-of="synthesis"></span></a>
+      <a href="#recorded-run"><span class="n">4.7</span><span class="t">A recorded run, end to end</span><span class="p" data-page-of="recorded-run"></span></a>
+      <p class="part">5 · Grounding the work in evidence</p>
+      <a href="#brief-prep"><span class="n">5.1</span><span class="t">Preparing the brief</span><span class="p" data-page-of="brief-prep"></span></a>
+      <a href="#deep-research"><span class="n">5.2</span><span class="t">Deep research and competitors</span><span class="p" data-page-of="deep-research"></span></a>
+      <a href="#mcp"><span class="n">5.3</span><span class="t">Look-ups through MCP</span><span class="p" data-page-of="mcp"></span></a>
+      <a href="#documents"><span class="n">5.4</span><span class="t">The founder's documents</span><span class="p" data-page-of="documents"></span></a>
+      <p class="part">6 · Correctness and safety</p>
+      <a href="#pydantic"><span class="n">6.1</span><span class="t">Type safety with Pydantic</span><span class="p" data-page-of="pydantic"></span></a>
+      <a href="#audit-1"><span class="n">6.2</span><span class="t">The audit, call by call</span><span class="p" data-page-of="audit-1"></span></a>
+      <a href="#gaps"><span class="n">6.3</span><span class="t">What Pydantic does not cover yet</span><span class="p" data-page-of="gaps"></span></a>
+      <a href="#guardrails"><span class="n">6.4</span><span class="t">Prompt guardrails</span><span class="p" data-page-of="guardrails"></span></a>
+      <a href="#runaway"><span class="n">6.5</span><span class="t">Keeping the agents bounded</span><span class="p" data-page-of="runaway"></span></a>
+      <p class="part">7 · The product</p>
+      <a href="#evaluate-ux"><span class="n">7.1</span><span class="t">The Evaluate page</span><span class="p" data-page-of="evaluate-ux"></span></a>
+      <a href="#proposal"><span class="n">7.2</span><span class="t">Reports and the investment proposal</span><span class="p" data-page-of="proposal"></span></a>
+      <a href="#document-control"><span class="n">7.3</span><span class="t">Document control</span><span class="p" data-page-of="document-control"></span></a>
+      <a href="#frontend"><span class="n">7.4</span><span class="t">The front end</span><span class="p" data-page-of="frontend"></span></a>
+      <p class="part">8 · Production readiness</p>
+      <a href="#api"><span class="n">8.1</span><span class="t">The API</span><span class="p" data-page-of="api"></span></a>
+      <a href="#persistence-security"><span class="n">8.2</span><span class="t">Persistence and security</span><span class="p" data-page-of="persistence-security"></span></a>
+      <a href="#observability"><span class="n">8.3</span><span class="t">Observability</span><span class="p" data-page-of="observability"></span></a>
+      <a href="#langfuse"><span class="n">8.4</span><span class="t">Langfuse: tracing and evaluation</span><span class="p" data-page-of="langfuse"></span></a>
+      <a href="#deployment"><span class="n">8.5</span><span class="t">Deployment and CI</span><span class="p" data-page-of="deployment"></span></a>
+      <a href="#testing"><span class="n">8.6</span><span class="t">Testing and quality</span><span class="p" data-page-of="testing"></span></a>
+      <a href="#performance"><span class="n">8.7</span><span class="t">Performance</span><span class="p" data-page-of="performance"></span></a>
+      <p class="part">9 · Reflections</p>
+      <a href="#tradeoffs"><span class="n">9.1</span><span class="t">Design trade-offs</span><span class="p" data-page-of="tradeoffs"></span></a>
+      <a href="#next-steps"><span class="n">9.2</span><span class="t">Limitations and next steps</span><span class="p" data-page-of="next-steps"></span></a>
+      <a href="#config"><span class="n">9.3</span><span class="t">Configuration reference</span><span class="p" data-page-of="config"></span></a>
+      <a href="#glossary"><span class="n">9.4</span><span class="t">Glossary</span><span class="p" data-page-of="glossary"></span></a>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<!-- ============ 1.1 Executive summary ============ -->
+<section class="page wide" id="summary">
+  <div class="body">
+    <p class="kicker"><span class="num">1.1</span>Executive summary</p>
+    <h2 class="title">One brief in, one launch strategy out, from a team that checks its own work</h2>
+    <div class="content cols c-7-5">
+      <div class="body-text">
+        <p>The AI Startup Co-Founder Team turns a founder's brief into a launch strategy the way a real founding team would. A <strong>Chief of Staff</strong> works out the decision at stake and delegates; <strong>Marketing, Finance, Technical and Risk &amp; Compliance</strong> specialists analyse it at the same time; the Chief of Staff scores every report against a rubric and sends weak ones back; the specialists cross-check each other and the Chief of Staff settles their conflicts; then it writes one strategy that leads with <em>go</em>, <em>go with conditions</em> or <em>not yet</em>.</p>
+        <p>It is a <strong>LangGraph</strong> state machine behind a <strong>FastAPI</strong> service, with a <strong>Next.js</strong> app that shows the team at work, live, on the graph it runs. Before the team starts it can research the brief on the web and ask the founder what only the founder knows; while it works it reads official figures through an <strong>MCP</strong> server; afterwards the agents write an investment proposal whose financial figures are worked out in code, and the founder controls every change to the document.</p>
+        <p>It is built like a product: sessions and reports in <strong>PostgreSQL</strong>, an API key the browser never sees, rate limits, prompt guardrails, structured logs, Prometheus metrics, <strong>Langfuse</strong> tracing and evaluation, Docker and GitLab CI, and 578 automated tests.</p>
+        <div class="callout primary mt">
+          <h3>On type safety, in brief</h3>
+          Every API request is a Pydantic model with enforced limits, and every decision the agents make (plans, reviews, conflicts and their resolutions, look-ups, the proposal's parts, answers and the judge's scores) comes back as a Pydantic model the model was constrained to produce: 17 of the app's 22 prompts. The four specialist reports and the final strategy are free text by design. <a href="#pydantic">Part 6</a> sets out the audit, call by call, including two gaps worth closing.
+        </div>
+      </div>
+      <div>
+        <div class="stat-grid">
+          <div class="stat"><div class="label">Agents</div><div class="value">5</div><div class="sub">a Chief of Staff and four specialists</div></div>
+          <div class="stat"><div class="label">State machine</div><div class="value">11 nodes</div><div class="sub">40 edges, 37 of them conditional</div></div>
+          <div class="stat"><div class="label">A full evaluation</div><div class="value">2 min 30 s</div><div class="sub">recorded run: 24 model calls, about 101k tokens</div></div>
+          <div class="stat"><div class="label">Typed prompts</div><div class="value">17 of 22</div><div class="sub">answer as Pydantic-validated structured output</div></div>
+          <div class="stat"><div class="label">Automated tests</div><div class="value">578</div><div class="sub">398 backend at 96.8% coverage; 180 frontend</div></div>
+          <div class="stat"><div class="label">Built in steps</div><div class="value">36</div><div class="sub">Steps 0 to 35, each one reviewable on its own</div></div>
+        </div>
+        <p class="small muted mt">Measured on 22 October 2026: the tests by running both suites, the run on Azure OpenAI gpt-5-mini with the default reasoning (specialists minimal, Chief of Staff medium).</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 1.2 The product at a glance ============ -->
+<section class="page wide" id="glance">
+  <div class="body">
+    <p class="kicker"><span class="num">1.2</span>The product at a glance</p>
+    <h2 class="title">What the founder sees: the team's work, live, and a document to share</h2>
+    <div class="content cols c-7-5">
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.45in;object-fit:cover;object-position:top left" src="../assets/screenshots/live-graph-specialists.jpg" alt="The live graph during a run: the Marketing and Technical specialists glow in their colours while a sidebar describes each step">
+        <figcaption><strong>The live graph.</strong> The graph LangGraph runs, lit up as the team works: Marketing and Technical are writing while Finance and Risk have finished; the sidebar says what each step did.</figcaption>
+      </figure>
+      <div style="display:grid;grid-template-rows:auto auto;gap:0.16in">
+        <figure class="shot-frame">
+          <img class="shot" style="height:1.72in;object-fit:cover;object-position:top left" src="../assets/screenshots/result-strategy-c.jpg" alt="The strategy memo, led by its recommendation, with each specialist's review score beside it">
+          <figcaption><strong>The strategy.</strong> It leads with the recommendation, each claim tagged with the agent it came from, each review beside it.</figcaption>
+        </figure>
+        <figure class="shot-frame">
+          <img class="shot" style="height:1.72in;object-fit:cover;object-position:top left" src="../assets/screenshots/document-studio-c.jpg" alt="The document studio: the investment proposal's PDF beside its revise, settings, text and history tools">
+          <figcaption><strong>The document studio.</strong> The investment proposal as a PDF beside its tools; every change comes back as a draft.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 520" role="img" aria-label="How a structured model call is made type-safe: a Pydantic model becomes a strict JSON Schema, Azure OpenAI can only answer in that shape, the reply is validated back into the Pydantic model, code applies the checks the schema does not, and the typed result goes into the workflow's state. A reply that cannot be used is retried once, then fails loudly.">
+  <defs>
+    <marker id="so-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#7c786d"/>
+    </marker>
+  </defs>
+
+  <!-- 1 Pydantic model -->
+  <g class="n">
+    <rect x="4" y="30" width="236" height="290" rx="12" fill="#1f2430" stroke="#1f2430"/>
+    <text class="t-label" x="22" y="58" style="fill:#9aa3b5">1 · PYDANTIC MODEL</text>
+    <text class="t-mono" x="22" y="92" style="fill:#c3a6ff">class<tspan style="fill:#e6e1d4"> Task(BaseModel):</tspan></text>
+    <text class="t-mono" x="38" y="116" style="fill:#e6e1d4">specialist: <tspan style="fill:#8ec5ff">Literal</tspan>[</text>
+    <text class="t-mono" x="54" y="138" style="fill:#9fd8b6">"marketing", "finance",</text>
+    <text class="t-mono" x="54" y="160" style="fill:#9fd8b6">"technical", "risk"]</text>
+    <text class="t-mono" x="38" y="184" style="fill:#e6e1d4">task: <tspan style="fill:#8ec5ff">str</tspan></text>
+    <text class="t-mono" x="22" y="220" style="fill:#c3a6ff">class<tspan style="fill:#e6e1d4"> DelegationPlan(...):</tspan></text>
+    <text class="t-mono" x="38" y="244" style="fill:#e6e1d4">objective: <tspan style="fill:#8ec5ff">str</tspan></text>
+    <text class="t-mono" x="38" y="268" style="fill:#e6e1d4">tasks: <tspan style="fill:#8ec5ff">list</tspan>[Task]</text>
+    <text class="t-mono" x="22" y="300" style="fill:#8a93a6">state.py</text>
+  </g>
+  <path class="wire" d="M240 175 H266" marker-end="url(#so-arrow)"/>
+
+  <!-- 2 Strict JSON Schema -->
+  <g class="n">
+    <rect class="box" x="270" y="30" width="214" height="290" rx="12"/>
+    <text class="t-label" x="288" y="58">2 · STRICT SCHEMA</text>
+    <text class="t-body" x="288" y="90">Sent with the call as</text>
+    <text class="t-body" x="288" y="110">response_format:</text>
+    <text class="t-mono" x="288" y="146" style="fill:#1c1b18">"type": "json_schema"</text>
+    <text class="t-mono" x="288" y="170" style="fill:#1c1b18">"strict": true</text>
+    <text class="t-mono" x="288" y="194" style="fill:#1c1b18">"enum": [four names]</text>
+    <text class="t-mono" x="288" y="218" style="fill:#1c1b18">"required": [all]</text>
+    <text class="t-mono" x="288" y="242" style="fill:#1c1b18">"additionalProperties":</text>
+    <text class="t-mono" x="304" y="264" style="fill:#1c1b18">false</text>
+    <text class="t-small" x="288" y="300">via LangChain and the SDK</text>
+  </g>
+  <path class="wire" d="M484 175 H510" marker-end="url(#so-arrow)"/>
+
+  <!-- 3 Azure OpenAI -->
+  <g class="n">
+    <rect x="514" y="30" width="200" height="290" rx="12" fill="#e4ebf5" stroke="#163c6b" stroke-width="1.4"/>
+    <text class="t-label" x="532" y="58">3 · THE MODEL</text>
+    <icon name="spark" x="532" y="76" s="22" c="#163c6b"/>
+    <text class="t-strong" x="562" y="93">Azure OpenAI</text>
+    <text class="t-body" x="532" y="128">gpt-5-mini decodes</text>
+    <text class="t-body" x="532" y="148">under the schema:</text>
+    <text class="t-body" x="532" y="168">it can only reply</text>
+    <text class="t-body" x="532" y="188">with these fields,</text>
+    <text class="t-body" x="532" y="208">these types and</text>
+    <text class="t-body" x="532" y="228">these names</text>
+    <text class="t-small" x="532" y="300">structured outputs</text>
+  </g>
+  <path class="wire" d="M714 175 H740" marker-end="url(#so-arrow)"/>
+
+  <!-- 4 Validation -->
+  <g class="n">
+    <rect class="box" x="744" y="30" width="200" height="290" rx="12" stroke="#17692d"/>
+    <text class="t-label" x="762" y="58">4 · VALIDATED</text>
+    <icon name="check" x="762" y="76" s="22" c="#17692d"/>
+    <text class="t-strong" x="792" y="93">Back into Pydantic</text>
+    <text class="t-body" x="762" y="128">The JSON is parsed</text>
+    <text class="t-body" x="762" y="148">into the model; a</text>
+    <text class="t-body" x="762" y="168">field of the wrong</text>
+    <text class="t-body" x="762" y="188">type or a name not</text>
+    <text class="t-body" x="762" y="208">in the list is</text>
+    <text class="t-body" x="762" y="228">rejected, never used</text>
+    <text class="t-small" x="762" y="300">model_validate_json</text>
+  </g>
+  <path class="wire" d="M944 175 H970" marker-end="url(#so-arrow)"/>
+
+  <!-- 5 Checks in code -->
+  <g class="n">
+    <rect class="box" x="974" y="30" width="200" height="290" rx="12"/>
+    <text class="t-label" x="992" y="58">5 · CHECKED IN CODE</text>
+    <icon name="sliders" x="992" y="76" s="22" c="#4b4840"/>
+    <text class="t-strong" x="1022" y="93">What a schema</text>
+    <text class="t-strong" x="992" y="115">cannot say</text>
+    <text class="t-body" x="992" y="148">approval follows the</text>
+    <text class="t-body" x="992" y="168">score (4 or more);</text>
+    <text class="t-body" x="992" y="188">lists capped; judge</text>
+    <text class="t-body" x="992" y="208">scores clamped 1 to</text>
+    <text class="t-body" x="992" y="228">5; money worked out</text>
+    <text class="t-body" x="992" y="248">from the drivers</text>
+  </g>
+  <path class="wire" d="M1174 175 H1200" marker-end="url(#so-arrow)"/>
+
+  <!-- 6 Typed state -->
+  <g class="n">
+    <rect x="1204" y="30" width="192" height="290" rx="12" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.4"/>
+    <text class="t-label" x="1222" y="58">6 · TYPED STATE</text>
+    <icon name="state" x="1222" y="76" s="22" c="#4a3aa7"/>
+    <text class="t-strong" x="1252" y="93">WorkflowState</text>
+    <text class="t-body" x="1222" y="128">The graph routes</text>
+    <text class="t-body" x="1222" y="148">on typed objects:</text>
+    <text class="t-body" x="1222" y="168">the plan, reviews,</text>
+    <text class="t-body" x="1222" y="188">conflicts and their</text>
+    <text class="t-body" x="1222" y="208">resolutions, kept by</text>
+    <text class="t-body" x="1222" y="228">the checkpointer</text>
+  </g>
+
+  <!-- Failure paths -->
+  <text class="t-label" x="4" y="372">WHEN A REPLY CANNOT BE USED</text>
+  <g class="n">
+    <rect class="box" x="4" y="388" width="440" height="124" rx="12" fill="#faefd6" stroke="#855600"/>
+    <icon name="refresh" x="22" y="406" s="20" c="#855600"/>
+    <text class="t-strong" x="52" y="422">Retried once</text>
+    <text class="t-body" x="22" y="452">A reply that does not parse, or one Azure's</text>
+    <text class="t-body" x="22" y="474">content filter withheld, is asked for again</text>
+    <text class="t-small" x="22" y="498">structured_invoke, agents/chief_of_staff.py</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="464" y="388" width="440" height="124" rx="12" fill="#f8e2e0" stroke="#a1272b"/>
+    <icon name="alert" x="482" y="406" s="20" c="#a1272b"/>
+    <text class="t-strong" x="512" y="422">Then it fails loudly</text>
+    <text class="t-body" x="482" y="452">LLMReplyError: a review, critique or resolve</text>
+    <text class="t-body" x="482" y="474">is skipped; a failed plan answers 502</text>
+    <text class="t-small" x="482" y="498">nothing unvalidated enters the state</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="924" y="388" width="472" height="124" rx="12" fill="#efece5" stroke="#cfc8b8"/>
+    <icon name="info" x="942" y="406" s="20" c="#4b4840"/>
+    <text class="t-strong" x="972" y="422">Free text is the exception</text>
+    <text class="t-body" x="942" y="452">The four reports and the strategy are prose</text>
+    <text class="t-body" x="942" y="474">for the founder; the reports are then reviewed</text>
+    <text class="t-small" x="942" y="498">see the audit: 17 of 22 prompts are structured</text>
+  </g>
+</svg>

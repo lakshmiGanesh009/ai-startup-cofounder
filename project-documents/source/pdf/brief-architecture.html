@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The AI Startup Co-Founder Team: Project Brief, Architecture and User Flow</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* The cover. */
+  .cover .body { display: flex; flex-direction: column; }
+  .cover .mark-row { display: flex; align-items: center; gap: 4mm; margin-top: 6mm; }
+  .cover .mark-row .kicker { margin: 0; color: #c8d4e6; }
+  .cover h1 { font-family: var(--serif); font-weight: 500; font-size: 38pt; line-height: 1.06; letter-spacing: -0.015em; color: #fff; margin: 30mm 0 5mm; }
+  .cover .sub { font-family: var(--serif); font-style: italic; font-size: 17pt; line-height: 1.3; color: #dfe6f1; margin: 0 0 9mm; }
+  .cover .what { font-size: 11.5pt; color: #c9d3e1; max-width: 140mm; line-height: 1.5; }
+  .cover .contents { margin-top: auto; border-top: 1px solid rgba(255,255,255,.18); padding-top: 6mm; }
+  .cover .contents a { display: flex; gap: 4mm; align-items: baseline; color: #fff; padding: 2.2mm 0; border-bottom: 1px solid rgba(255,255,255,.1); font-size: 11pt; }
+  .cover .contents a .n { color: #9fb2cc; width: 7mm; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .cover .contents a .t { flex: 1; }
+  .cover .contents a .d { color: #9fb2cc; font-size: 9pt; }
+  .cover .contents a .p { color: #9fb2cc; font-variant-numeric: tabular-nums; width: 8mm; text-align: right; }
+  .cover .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm 6mm; margin-top: 9mm; font-size: 8.6pt; color: #c9d3e1; }
+  .cover .meta .k { display: block; font-size: 7pt; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #8fa3bf; margin-bottom: 1mm; }
+
+  /* The brief, as README.md writes it, in two columns. */
+  .brief-page .body { display: flex; flex-direction: column; }
+  .brief { flex: 1 1 auto; min-height: 0; column-count: 2; column-gap: 9mm; column-fill: auto; column-rule: 1px solid var(--rule); font-size: 9.4pt; line-height: 1.45; color: var(--ink); }
+  .brief h1 { column-span: all; }
+  .brief h2, .brief h3 { break-after: avoid; }
+  .brief li, .brief table, .brief p { break-inside: avoid; }
+  /* Where each page's second column starts, so no section is split. */
+  .brief.part-a h2:nth-of-type(4), .brief.part-b h2:nth-of-type(2), .brief.part-c h2:nth-of-type(3) { break-before: column; }
+  .brief.part-b h2:nth-of-type(2), .brief.part-c h2:nth-of-type(3) { margin-top: 0; }
+  .brief h1 { font-family: var(--serif); font-weight: 500; font-size: 17pt; line-height: 1.2; margin: 0 0 4mm; color: var(--ink); }
+  .brief h2 { font-family: var(--serif); font-weight: 500; font-size: 13.5pt; line-height: 1.25; margin: 4.5mm 0 1.8mm; color: var(--ink); }
+  .brief > h2:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  .brief h3 { font-size: 9.6pt; font-weight: 600; margin: 3.2mm 0 1.2mm; }
+  .brief p { margin: 0 0 2mm; }
+  .brief ul { margin: 0 0 2mm; padding-left: 5mm; }
+  .brief li { margin: 0 0 0.8mm; }
+  .brief table { margin: 1mm 0 2.5mm; font-size: 8.8pt; width: 100%; }
+  .brief th { font-size: 8.4pt; text-transform: none; letter-spacing: 0; }
+  .brief td { padding-right: 3mm; }
+  .verbatim { display: flex; gap: 2.5mm; align-items: center; font-size: 8.4pt; color: var(--ink-2); background: var(--sunken); border-radius: 6px; padding: 2mm 3mm; margin: 0 0 5mm; }
+
+  /* The diagram pages. */
+  .figure-page .diagram { flex: 1 1 auto; display: flex; align-items: center; justify-content: center; min-height: 0; }
+  .figure-page .diagram svg { max-height: 100%; width: 100%; }
+  .legend-row { display: flex; flex-wrap: wrap; gap: 2mm 7mm; font-size: 8.2pt; color: var(--ink-2); margin-top: 2mm; }
+  .legend-row b { font-weight: 600; color: var(--ink); }
+</style>
+</head>
+<body>
+
+<!-- ============ Cover ============ -->
+<section class="page a4p dark cover" id="cover">
+  <div class="body">
+    <div class="mark-row">
+      <svg width="46" height="46" viewBox="0 0 24 24" aria-hidden="true">
+        <g stroke="#ffffff" stroke-width="1.1" opacity="0.4"><path d="M12 8.5V5M15.5 12H19M12 15.5V19M8.5 12H5"/></g>
+        <circle cx="12" cy="12" r="3.25" fill="#9085e9"/>
+        <circle cx="12" cy="3.5" r="2" fill="#eb6834"/>
+        <circle cx="20.5" cy="12" r="2" fill="#1baf7a"/>
+        <circle cx="12" cy="20.5" r="2" fill="#4a93ea"/>
+        <circle cx="3.5" cy="12" r="2" fill="#e87ba4"/>
+      </svg>
+      <p class="kicker">Capstone project · Project documents</p>
+    </div>
+    <h1>The AI Startup Co&#8209;Founder Team</h1>
+    <p class="sub">An autonomous multi-agent venture simulator</p>
+    <p class="what">The project brief, word for word, followed by the system architecture, the agent workflow the brief asks for, and the founder's journey through the app.</p>
+
+    <nav class="contents" aria-label="Contents" data-outline>
+      <a href="#brief" data-outline-headings=".brief h2"><span class="n">1</span><span class="t">The project brief</span><span class="d">as set, word for word</span><span class="p" data-page-of="brief"></span></a>
+      <a href="#architecture"><span class="n">2</span><span class="t">System architecture</span><span class="d">browser to models and data</span><span class="p" data-page-of="architecture"></span></a>
+      <a href="#workflow"><span class="n">3</span><span class="t">The agent workflow</span><span class="d">the LangGraph state machine</span><span class="p" data-page-of="workflow"></span></a>
+      <a href="#userflow"><span class="n">4</span><span class="t">User flow</span><span class="d">the founder's journey</span><span class="p" data-page-of="userflow"></span></a>
+    </nav>
+
+    <div class="meta">
+      <div><span class="k">Stack</span>LangGraph, FastAPI and Next.js on Azure OpenAI</div>
+      <div><span class="k">Repository</span>2033154_Rahul/ai-startup-cofounder</div>
+      <div><span class="k">Edition</span>October 2026, from the main branch</div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<!-- ============ 1 · The project brief ============ -->
+<section class="page a4p brief-page" id="brief">
+  <div class="body">
+    <p class="kicker"><span class="num">1</span>The project brief</p>
+    <div class="verbatim"><i class="icon c-primary" data-icon="info"></i>Reproduced word for word from the capstone brief at the top of the repository's README.md; only the layout is new.</div>
+    <div class="brief fit part-a">
+<!-- brief: 0-5 -->
+    </div>
+  </div>
+  <div class="foot"><span>1 · The project brief</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4p brief-page">
+  <div class="body">
+    <p class="kicker"><span class="num">1</span>The project brief, continued</p>
+    <div class="brief fit part-b">
+<!-- brief: 6-7 -->
+    </div>
+  </div>
+  <div class="foot"><span>1 · The project brief</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<section class="page a4p brief-page">
+  <div class="body">
+    <p class="kicker"><span class="num">1</span>The project brief, continued</p>
+    <div class="brief fit part-c">
+<!-- brief: 8-11 -->
+    </div>
+  </div>
+  <div class="foot"><span>1 · The project brief</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<!-- ============ 2 · System architecture ============ -->
+<section class="page a4l figure-page" id="architecture">
+  <div class="body" style="display:flex;flex-direction:column">
+    <p class="kicker"><span class="num">2</span>System architecture</p>
+    <h2 class="title">From the founder's browser to the models and the data</h2>
+    <div class="diagram"><!-- include: diagrams/system-architecture.svg --></div>
+    <div class="legend-row">
+      <span><b>Browser to API:</b> the browser only talks to the Next.js app, whose server adds the API key.</span>
+      <span><b>Every request</b> passes the guard before a route; every model prompt passes the guardrails.</span>
+      <span><b>Optional:</b> without a database, sessions live in memory; without keys, research, look-ups and tracing are skipped.</span>
+    </div>
+  </div>
+  <div class="foot"><span>2 · System architecture</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<!-- ============ 3 · The agent workflow ============ -->
+<section class="page a4l figure-page" id="workflow">
+  <div class="body" style="display:flex;flex-direction:column">
+    <p class="kicker"><span class="num">3</span>The agent workflow</p>
+    <h2 class="title">Plan, act, check: a LangGraph state machine with bounded loops</h2>
+    <div class="diagram"><!-- include: diagrams/agent-workflow.svg --></div>
+    <div class="legend-row">
+      <span><b>11 nodes, 40 edges,</b> 37 of them routes the state chooses (graph.py).</span>
+      <span><b>Hierarchical:</b> the Chief of Staff plans, reviews, settles conflicts and writes the strategy.</span>
+      <span><b>Bounded:</b> one revision after review, one critique round; every model call has a timeout and retries.</span>
+    </div>
+  </div>
+  <div class="foot"><span>3 · The agent workflow</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+<!-- ============ 4 · User flow ============ -->
+<section class="page a4l figure-page" id="userflow">
+  <div class="body" style="display:flex;flex-direction:column">
+    <p class="kicker"><span class="num">4</span>User flow</p>
+    <h2 class="title">The founder's journey: from a brief to a document to share</h2>
+    <div class="diagram"><!-- include: diagrams/user-flow.svg --></div>
+    <div class="legend-row">
+      <span><b>You decide what the team works on;</b> the team decides how; nothing the team or the code changes in a document is saved until you accept it.</span>
+      <span><b>How it works</b> explains the pipeline with live diagrams, and its Monitor shows what the API has done.</span>
+    </div>
+  </div>
+  <div class="foot"><span>4 · User flow</span><span><span class="pn"></span> / <span class="pt"></span></span></div>
+</section>
+
+</body>
+</html>

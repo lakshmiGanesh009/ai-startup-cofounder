@@ -1,0 +1,112 @@
+<!-- ============ 7.1 The Evaluate page ============ -->
+<section class="page wide" id="evaluate-ux">
+  <div class="body">
+    <p class="kicker"><span class="num">7.1</span>The product</p>
+    <h2 class="title">The Evaluate page: write a brief, watch the team work, read the decision</h2>
+    <div class="content cols c-4-8">
+      <div class="body-text small">
+        <ol class="steps">
+          <li><b>Compose.</b> A brief of your own, a decision template (five) or a worked example (three); optional context; your files and earlier reports. "Research it and check the brief first" is on by default; deep research is a switch. <span class="t-src">⌘/Ctrl+Enter</span> sends it.</li>
+          <li><b>Watch.</b> The progress card fills in step by step, each with what it did ("Reviewed 4 reports: approved 2, sent back…"), who is working now and the time taken. <b>Live graph</b> opens the graph itself, lit up as it runs.</li>
+          <li><b>Read.</b> The strategy, set as a memo, leads with its verdict, the reviews beside it. Below: the specialists' reports, the research, the plan, the reviews round by round, the conflicts and the run's cost, step by step, with a link to its trace.</li>
+          <li><b>Follow up.</b> The session is kept in the browser tab: a follow-up reruns only the agents it concerns, and "Was this strategy useful?" records the founder's verdict.</li>
+        </ol>
+        <p class="mb0">The sidebar sets the reasoning of the specialists and of the Chief of Staff, where web research runs, and light, dark or the system's appearance.</p>
+      </div>
+      <div class="cols c-6-6" style="gap:0.18in">
+        <figure class="shot-frame">
+          <img class="shot" style="height:4.0in;object-fit:cover;object-position:top left" src="../assets/screenshots/progress-c.jpg" alt="The progress card early in a run: the plan finished and the look-up of official figures under way">
+          <figcaption><strong>While it runs.</strong> The plan is done in 16 s; the look-up of official figures has started.</figcaption>
+        </figure>
+        <figure class="shot-frame">
+          <img class="shot" style="height:4.0in;object-fit:cover;object-position:top left" src="../assets/screenshots/result-reviews-c.jpg" alt="The Reviews tab: round 1 sends Marketing and Technical back with feedback; round 2 approves Marketing">
+          <figcaption><strong>Self-correction, shown.</strong> Round 1 sends two reports back with feedback; round 2 approves one.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 7.2 Reports and the investment proposal ============ -->
+<section class="page wide" id="proposal">
+  <div class="body">
+    <p class="kicker"><span class="num">7.2</span>The product</p>
+    <h2 class="title">From a strategy to an investment proposal, its money worked out in code</h2>
+    <div class="content cols c-5-7">
+      <div class="body-text small">
+        <p>On demand, the agents write a session's report up as an investment proposal (executive summary, market and marketing, technical and operational architecture, financial plan, risk matrix, KPIs), each part structured data written by the agent that owns it.</p>
+        <div class="card sunken" style="padding:0.1in 0.14in;margin-bottom:0.1in">
+          <h4>Three waves, so the figures agree</h4>
+          <p class="mb0"><span class="chip marketing">Marketing</span> <span class="chip technical">Technical</span> <span class="chip risk">Risk</span> at once, then <span class="chip finance">Finance</span> with the market and technical parts in front of it and their costs summed, then the <span class="chip chief">Chief of Staff</span>'s summary and KPIs, with the investment metrics.</p>
+        </div>
+        <p><strong>Numbers in code, not prose.</strong> Finance gives the drivers (customers, fixed costs, one-off fees, prices); code works out revenue, operating costs, NPV, IRR, payback and break-even. Checks compare year one's fixed costs with the launch costs, year three's revenue with the obtainable market, and average with year-end customers; a failing check sends Finance back once, and any still failing is shown in the PDF and on the page.</p>
+        <p class="mb0"><strong>The PDF</strong> is drawn on the server with fpdf2: charts from the figures (market sizes, the funnel, the roadmap, costs, revenue against costs, the cash position, a risk heat map), every section labelled with its agent or "calculated", assumptions highlighted. Raw HTML in a report is printed as text and no image is fetched. The recorded run's proposal took 77 s; its PDF runs to 26 pages.</p>
+      </div>
+      <div style="display:grid;grid-template-rows:auto auto;gap:0.14in">
+        <figure class="shot-frame">
+          <img class="shot" style="height:2.12in;object-fit:cover;object-position:top left" src="../assets/screenshots/proposal-projections-c.jpg" alt="The financial plan's three-year projections: revenue against operating costs, and Finance's drivers">
+          <figcaption>Three-year projections, worked out from Finance's drivers.</figcaption>
+        </figure>
+        <figure class="shot-frame">
+          <img class="shot" style="height:2.12in;object-fit:cover;object-position:top left" src="../assets/screenshots/proposal-risk-matrix-c.jpg" alt="The risk matrix: risks placed by probability and impact, each with its mitigation">
+          <figcaption>The risk matrix: each risk typed by category, probability and impact.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 7.3 Document control ============ -->
+<section class="page wide" id="document-control">
+  <div class="body">
+    <p class="kicker"><span class="num">7.3</span>The product</p>
+    <h2 class="title">Document control: exact changes by code, every one a draft you accept</h2>
+    <div class="content cols c-6-6">
+      <div class="stack small">
+        <ul class="k-list">
+          <li><span class="k">Settings</span><span class="v">The currency of every amount, the units, who it is prepared by, and the team's sections to leave out belong to the document. Amounts are plain numbers, formatted in its currency everywhere.</span></li>
+          <li><span class="k">Currency, by code</span><span class="v">A conversion multiplies every figure by the rate (today's, from the European Central Bank, filled in) and rewrites every amount in the text: symbols, codes and names, "$15k", "$10–20k", but not another currency or a year. 22 currencies.</span></li>
+          <li><span class="k">Units, by code</span><span class="v">Areas, distances, weights, volumes, speeds and temperatures, imperial or metric, only where the unit cannot be mistaken ("5m" might be five million).</span></li>
+          <li><span class="k">Text, by code</span><span class="v">Find and replace, redact names and figures, or remove a passage, across the title, the objective, the team's sections and the proposal's prose; never a fixed choice such as the verdict.</span></li>
+          <li><span class="k">One passage</span><span class="v">The agent who wrote a text rewrites only it, or one paragraph of it; code splices it back and leaves the rest as it was.</span></li>
+          <li><span class="k">Drafts</span><span class="v">Every change the team or a tool makes comes back as a draft: each changed field before and after, words struck through and added, amounts in both currencies, and the draft's own PDF. Nothing is saved until it is accepted, from the version it was made from. A section edited by hand saves at once.</span></li>
+          <li><span class="k">Versions</span><span class="v">Each save keeps the version it replaces, the last 30, with the change that made it; any can be looked at and restored.</span></li>
+        </ul>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.55in;object-fit:cover;object-position:top left" src="../assets/screenshots/document-studio-c.jpg" alt="The document studio: the Revise tool with each part's agent, beside the 26-page PDF">
+        <figcaption><strong>The studio</strong> opens the PDF on a page of its own, beside its tools: Revise (the whole proposal or one part, by its agent), Settings, Text and History. The tools fold into a strip of icons.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 7.4 The front end ============ -->
+<section class="page wide" id="frontend">
+  <div class="body">
+    <p class="kicker"><span class="num">7.4</span>The product</p>
+    <h2 class="title">The front end: an editorial design, live progress, and no key in the browser</h2>
+    <div class="content cols c-5-7">
+      <div class="body-text small">
+        <p><strong>Next.js 16 and React 19</strong>, three pages: Evaluate, Reports, and How it works with its Monitor. The pages call the API through the app's own route, whose server adds the API key, forwards only the routes the pages use, caps request bodies, and streams an evaluation's events as they arrive. Every page carries a content security policy and the usual security headers.</p>
+        <p><strong>Live progress</strong> is a server-sent event stream, read with <code>fetch</code> since an <code>EventSource</code> can only send GET requests. The live graph is Mermaid's drawing of the real graph, with each node and edge lit up from the step stream alone.</p>
+        <p><strong>The design system</strong> lives in tokens: warm paper and ink, one navy accent, hairline rules instead of boxes, Newsreader for the documents the agents write and Geist for the rest. Each agent's colour was validated beside its neighbours, in light and in dark; status colours always sit beside words.</p>
+        <p class="mb0"><strong>Checked like the backend:</strong> 180 tests in 25 files with Vitest and Testing Library against a fake backend, 96% of lines covered, plus type checks and lint; and the UI steps were checked from live screenshots, light, dark and at phone width.</p>
+      </div>
+      <div class="cols c-6-6" style="gap:0.16in">
+        <figure class="shot-frame">
+          <img class="shot" style="height:4.05in;object-fit:cover;object-position:top left" src="../assets/screenshots/how-it-works-c.jpg" alt="The How it works page in light mode: from a brief to a decision, in nine steps">
+          <figcaption>How it works: the pipeline in nine steps, each in its agents' colours.</figcaption>
+        </figure>
+        <figure class="shot-frame">
+          <img class="shot" style="height:4.05in;object-fit:cover;object-position:top left" src="../assets/screenshots/followup-dark-c.jpg" alt="The Evaluate page in dark mode, showing a follow-up whose untouched reports are kept from earlier">
+          <figcaption>Dark mode, on a follow-up: two reports "kept from earlier".</figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

@@ -1,0 +1,111 @@
+<!-- ============ 5.1 Preparing the brief ============ -->
+<section class="page wide" id="brief-prep">
+  <div class="body">
+    <p class="kicker"><span class="num">5.1</span>Grounding the work in evidence</p>
+    <h2 class="title">Before the team starts: research the brief, and ask what only the founder knows</h2>
+    <div class="content cols c-5-7">
+      <div class="body-text small">
+        <ol class="steps">
+          <li><b>A template, if wanted.</b> Five decision templates (evaluate a new idea, plan the go-to-market, set the price, get ready to raise, respond to a competitor) each give a brief to fill in, what that kind of decision needs looked up, and what the Chief of Staff must know.</li>
+          <li><b>Search.</b> A structured call writes two to four web searches (<code>SearchPlan</code>; code keeps four at most). They run at once on Azure OpenAI's Bing search, the default, or on Tavily, as the sidebar chooses, and each page is kept once.</li>
+          <li><b>Read.</b> The Chief of Staff reads the brief with the numbered results (<code>BriefReview</code>): up to eight facts, each citing the results it came from, and up to three questions, only about facts only the founder knows (budget, team, traction, goals), never a choice the team is there to make. Code drops any fact that cites no real result, and renumbers the sources in order of first citation.</li>
+          <li><b>Review.</b> The founder leaves out any fact that does not fit, and answers or skips each question. The answers and the facts kept travel with the request to every agent; the specialists cite them as [n], and the report gains a Web Research section with the sources.</li>
+        </ol>
+        <p class="mb0">With no research provider set up, or when every search fails, the brief is still checked, and a note says why there is no research. The founder's brief, and every page the searches return, pass through the guardrails.</p>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.15in;object-fit:cover;object-position:top left" src="../assets/screenshots/brief-review-c.jpg" alt="The brief check from the recorded run: a guardrail notice about a web page, the Chief of Staff's two questions with suggested answers, and the numbered sources">
+        <figcaption><strong>The recorded run's brief check</strong> took 57 s: 8 facts from 13 sources and 2 questions, each with suggested answers. A web page the search returned was caught hiding words in invisible characters; it was cut out, and the founder was told.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 5.2 Deep research ============ -->
+<section class="page wide" id="deep-research">
+  <div class="body">
+    <p class="kicker"><span class="num">5.2</span>Grounding the work in evidence</p>
+    <h2 class="title">Deep research: a cited report for each specialist, and profiles of the competitors</h2>
+    <div class="content cols c-6-6">
+      <div class="body-text small">
+        <p>With <strong>Deep research</strong> switched on, a research step runs after the plan, beside the look-ups. A structured call names up to three real competitors (<code>Competitors</code>, capped at three in code). Then, all at once, one research task runs for each assigned specialist's area, written from its task and the founder's brief, and one for each competitor, answering in a fixed profile: summary, pricing, customers, funding, recent moves, strengths, weaknesses.</p>
+        <p>Each report numbers its own sources from 1. A <strong>source book</strong> gives every page one number for the whole session, after the brief's research, and renumbers the citations to match, so a specialist's [12], the strategy's and the report's all mean the same page.</p>
+        <p>Each specialist reads its own area's report; Marketing and Finance, who price and position against them, also read the competitor profiles. A follow-up reuses the session's research. A task that fails leaves its area out and is listed as not researched; it never fails the request.</p>
+        <div class="callout primary">With deep research on Tavily, each competitor's own pricing page is also found and read through <strong>Tavily's MCP server</strong>, and quoted in its profile with its source.</div>
+      </div>
+      <div class="stack">
+        <h4>Where research runs: measured in the live checks</h4>
+        <table class="tight">
+          <thead><tr><th></th><th>Azure OpenAI <span class="muted">(default)</span></th><th>Tavily <span class="muted">(demanding tasks)</span></th></tr></thead>
+          <tbody>
+            <tr><td><strong>How</strong></td><td>The Responses API's web search, Bing, on the team's own deployment, at low reasoning</td><td>Tavily's Research API, <code>mini</code> model; its Search API for briefs</td></tr>
+            <tr><td><strong>Profiles</strong></td><td>Strict JSON schema: every field required, none added</td><td>Tavily's output schema</td></tr>
+            <tr><td><strong>One task</strong></td><td>10 to 20 s, a few Bing searches</td><td>20 to 90 s, 20 to 80 credits</td></tr>
+            <tr><td><strong>A whole evaluation</strong></td><td>45 s: four areas, three competitors, 55 sources, 42 Bing searches</td><td>94 s: four areas, three competitors, 72 sources, 209 credits</td></tr>
+            <tr><td><strong>Cost</strong></td><td>Billed to Azure, per search</td><td>From Tavily credits (1,000 a month free)</td></tr>
+          </tbody>
+        </table>
+        <p class="small muted">The whole-evaluation figures come from the live checks of Steps 20 and 21 (<span class="t-src">DEVELOPMENT_PLAN.md</span>), on different scenarios. Both providers answer in the same shapes, so the brief, the research step and the page do not depend on which ran.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 5.3 Look-ups through MCP ============ -->
+<section class="page wide" id="mcp">
+  <div class="body">
+    <p class="kicker"><span class="num">5.3</span>Grounding the work in evidence</p>
+    <h2 class="title">Official figures through the app's own MCP server, exact and cited</h2>
+    <div class="content cols c-5-7">
+      <div class="body-text small">
+        <p><strong>The server.</strong> <span class="t-src">fred_server.py</span> is a Model Context Protocol server with two tools, <code>search_series</code> and <code>series_data</code>, whose results are Pydantic models. The API starts it as a subprocess and speaks to it over stdio; of the API's settings, only the FRED key reaches it, and it cuts the key out of the request lines it logs.</p>
+        <p><strong>Planned look-ups, not a tool loop.</strong> After the plan, the Chief of Staff names up to four FRED searches for the figures the decision turns on. Code lists the current series that cover each one; the Chief of Staff picks up to four that fit the venture's market and place, saying why; ids it was not offered are dropped. The 10-year Treasury yield and consumer prices are always read. Code then works out each series' latest value and its change over the year.</p>
+        <p><strong>Read by every specialist</strong>, fenced as data, cited as <code>[FRED · DGS10]</code>, and kept for the session's follow-ups. The look-up runs beside deep research, and the specialists start once both are done. If FRED is down, as it is during maintenance, the figures are left out with a note and the run goes on.</p>
+        <div class="callout primary">Why planned look-ups? The time, the cost and the figures stay predictable: the Chief of Staff decides what to look up, code fetches it and does the sums, and the specialists read the result.</div>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.25in;object-fit:cover;object-position:top left" src="../assets/screenshots/result-fred-c.jpg" alt="The Research tab from the recorded run: five FRED series with their latest values and change over the year">
+        <figcaption><strong>The recorded run's figures.</strong> Five series, each with why the team reads it: the 10-year Treasury yield at 5.12% (up 1.11 points over the year), consumer prices up 3.7%, US advertising-services employment, average hourly earnings and unemployment.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 5.4 The founder's documents ============ -->
+<section class="page wide" id="documents">
+  <div class="body">
+    <p class="kicker"><span class="num">5.4</span>Grounding the work in evidence</p>
+    <h2 class="title">The founder's own documents in, and cited answers out</h2>
+    <div class="content cols c-3 roomy-text">
+      <div class="card">
+        <h3>Reading a file</h3>
+        <p class="small">PDF, Word, PowerPoint, Excel, OpenDocument, CSV, RTF, HTML, Markdown and text. The type is told from the content (a PDF's header, an Office file's parts), never from the name; an older Office file, an image or a password-protected PDF is refused with the reason.</p>
+        <p class="small">Read within limits: 10 MB, an archive's unpacked size and ratio (against zip bombs), XML through defusedxml, 400 pages, 5,000 rows a sheet, 400,000 characters. Only the text is kept, in passages of about 1,500 characters that each say where they are: "page 3", "slide 2", "sheet Revenue, rows 2–41".</p>
+      </div>
+      <div class="card">
+        <h3>Each agent reads its share</h3>
+        <p class="small">A request can name up to five uploads and five earlier reports. For each agent, the passages are ranked by BM25 against its own work (a specialist's task and role, the Chief of Staff's venture and request) within 9,000 characters: each document first gets an equal share, so a long report cannot crowd out a short file.</p>
+        <p class="small">The passages are fenced as the founder's material, and every agent cites what it uses by the passage's mark. The report records the documents the run worked from; a follow-up keeps them.</p>
+      </div>
+      <div class="card">
+        <h3>Questions, answered from the documents</h3>
+        <p class="small">"Ask about it" puts a question to a report, the files its run worked from and any others: the passages that bear on it, within 14,000 characters, go to the Chief of Staff, which answers from them alone and cites each.</p>
+        <p class="small">The answer is a typed reply (<code>Answer</code>: the text and the marks it cites); code matches each mark back to a real passage, so the response lists only what it really cites and drops any mark the model made up.</p>
+      </div>
+    </div>
+    <div class="card sunken mt">
+      <h4>Five kinds of citation, one look: each becomes a tag on the page</h4>
+      <div class="chips" style="gap:0.1in;margin-top:0.06in">
+        <span class="chip primary">[4] a web source</span>
+        <span class="chip research">[FRED · DGS10] an official figure</span>
+        <span class="chip primary">[D1 · page 3] an uploaded file</span>
+        <span class="chip chief">[R1 · Launch Strategy] an earlier report</span>
+        <span class="chip finance">[finance] the agent a claim came from</span>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

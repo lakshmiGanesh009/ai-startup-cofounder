@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 664" role="img" aria-label="User flow. On the Evaluate page the founder writes a brief, optionally has the Chief of Staff research and check it, reviews the facts and answers questions, runs the team and watches it work, then reads the strategy and follows up. On the Reports page the founder edits the report, has the team write the investment proposal, changes it in the document studio, and accepts, asks about and downloads it.">
+  <defs>
+    <marker id="uf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#7c786d"/>
+    </marker>
+    <marker id="uf-arrow-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#163c6b"/>
+    </marker>
+  </defs>
+
+  <text class="t-label" x="15" y="22">ON THE EVALUATE PAGE</text>
+
+  <!-- 1 Brief -->
+  <g class="n">
+    <rect class="box" x="15" y="36" width="250" height="196" rx="12"/>
+    <circle cx="44" cy="66" r="15" fill="#163c6b"/>
+    <text class="t-strong" x="44" y="71" text-anchor="middle" style="fill:#ffffff">1</text>
+    <text class="t-title" x="70" y="72">Brief</text>
+    <rect x="31" y="92" width="44" height="24" rx="12" fill="#e4ebf5"/>
+    <text class="t-small" x="53" y="109" text-anchor="middle" style="fill:#163c6b">You</text>
+    <text class="t-body" x="31" y="144">Write a brief, or fill in a</text>
+    <text class="t-body" x="31" y="164">decision template, or start</text>
+    <text class="t-body" x="31" y="184">from an example; add</text>
+    <text class="t-body" x="31" y="204">context and your files</text>
+  </g>
+  <path class="wire" d="M265 134 H291" marker-end="url(#uf-arrow)"/>
+
+  <!-- 2 Check the brief -->
+  <g class="n">
+    <rect class="box" x="295" y="36" width="250" height="196" rx="12" stroke="#4a3aa7"/>
+    <circle cx="324" cy="66" r="15" fill="#4a3aa7"/>
+    <text class="t-strong" x="324" y="71" text-anchor="middle" style="fill:#ffffff">2</text>
+    <text class="t-title" x="350" y="72">Check the brief</text>
+    <rect x="311" y="92" width="112" height="24" rx="12" fill="#e6e3f4"/>
+    <text class="t-small" x="367" y="109" text-anchor="middle" style="fill:#3b2e8a">Chief of Staff</text>
+    <text class="t-body" x="311" y="144">Two to four web searches,</text>
+    <text class="t-body" x="311" y="164">then cited facts and up to</text>
+    <text class="t-body" x="311" y="184">three questions</text>
+    <text class="t-small" x="311" y="214">optional · about half a minute</text>
+  </g>
+  <path class="wire" d="M545 134 H571" marker-end="url(#uf-arrow)"/>
+
+  <!-- 3 Review -->
+  <g class="n">
+    <rect class="box" x="575" y="36" width="250" height="196" rx="12"/>
+    <circle cx="604" cy="66" r="15" fill="#163c6b"/>
+    <text class="t-strong" x="604" y="71" text-anchor="middle" style="fill:#ffffff">3</text>
+    <text class="t-title" x="630" y="72">Review</text>
+    <rect x="591" y="92" width="44" height="24" rx="12" fill="#e4ebf5"/>
+    <text class="t-small" x="613" y="109" text-anchor="middle" style="fill:#163c6b">You</text>
+    <text class="t-body" x="591" y="144">Leave out any fact that</text>
+    <text class="t-body" x="591" y="164">does not fit your case;</text>
+    <text class="t-body" x="591" y="184">answer or skip each</text>
+    <text class="t-body" x="591" y="204">question</text>
+  </g>
+  <path class="wire" d="M825 134 H851" marker-end="url(#uf-arrow)"/>
+
+  <!-- 4 Run the team -->
+  <g class="n">
+    <rect class="box" x="855" y="36" width="250" height="196" rx="12" stroke="#4a3aa7"/>
+    <circle cx="884" cy="66" r="15" fill="#4a3aa7"/>
+    <text class="t-strong" x="884" y="71" text-anchor="middle" style="fill:#ffffff">4</text>
+    <text class="t-title" x="910" y="72">The team works</text>
+    <rect x="871" y="92" width="86" height="24" rx="12" fill="#e6e3f4"/>
+    <text class="t-small" x="914" y="109" text-anchor="middle" style="fill:#3b2e8a">The team</text>
+    <text class="t-body" x="871" y="144">Plan, official figures, four</text>
+    <text class="t-body" x="871" y="164">reports at once, review,</text>
+    <text class="t-body" x="871" y="184">cross-check, strategy</text>
+    <text class="t-small" x="871" y="214">shown live · about two minutes</text>
+  </g>
+  <path class="wire" d="M1105 134 H1131" marker-end="url(#uf-arrow)"/>
+
+  <!-- 5 Decide -->
+  <g class="n">
+    <rect class="box" x="1135" y="36" width="250" height="196" rx="12"/>
+    <circle cx="1164" cy="66" r="15" fill="#163c6b"/>
+    <text class="t-strong" x="1164" y="71" text-anchor="middle" style="fill:#ffffff">5</text>
+    <text class="t-title" x="1190" y="72">Decide</text>
+    <rect x="1151" y="92" width="44" height="24" rx="12" fill="#e4ebf5"/>
+    <text class="t-small" x="1173" y="109" text-anchor="middle" style="fill:#163c6b">You</text>
+    <text class="t-body" x="1151" y="144">Read the verdict, then the</text>
+    <text class="t-body" x="1151" y="164">reviews, conflicts, sources</text>
+    <text class="t-body" x="1151" y="184">and cost; rate the</text>
+    <text class="t-body" x="1151" y="204">strategy</text>
+  </g>
+
+  <!-- Skip the check -->
+  <path d="M140 232 C 140 300, 980 300, 980 236" fill="none" stroke="#7c786d" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#uf-arrow)"/>
+  <text class="t-edge" x="560" y="296" text-anchor="middle">or run the team straight away</text>
+
+  <!-- Follow up -->
+  <path d="M1230 232 C 1230 292, 1040 292, 1040 236" fill="none" stroke="#163c6b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#uf-arrow-p)"/>
+  <text class="t-edge" x="1135" y="296" text-anchor="middle" style="fill:#163c6b">follow up: only the</text>
+  <text class="t-edge" x="1135" y="314" text-anchor="middle" style="fill:#163c6b">affected specialists rerun</text>
+
+  <!-- To the Reports page -->
+  <path class="wire" d="M1330 232 V340 H300 V378" marker-end="url(#uf-arrow)"/>
+  <text class="t-small" x="735" y="332" text-anchor="middle">every session's report is kept: in PostgreSQL, or in memory</text>
+
+  <text class="t-label" x="15" y="370">ON THE REPORTS PAGE</text>
+
+  <!-- 6 The report -->
+  <g class="n">
+    <rect class="box" x="15" y="382" width="320" height="196" rx="12"/>
+    <circle cx="44" cy="412" r="15" fill="#163c6b"/>
+    <text class="t-strong" x="44" y="417" text-anchor="middle" style="fill:#ffffff">6</text>
+    <text class="t-title" x="70" y="418">The report</text>
+    <rect x="31" y="438" width="44" height="24" rx="12" fill="#e4ebf5"/>
+    <text class="t-small" x="53" y="455" text-anchor="middle" style="fill:#163c6b">You</text>
+    <text class="t-body" x="31" y="490">Every session's report, kept with its</text>
+    <text class="t-body" x="31" y="510">versions; edit any section; a stale</text>
+    <text class="t-body" x="31" y="530">save is refused, never overwritten</text>
+  </g>
+  <path class="wire" d="M335 480 H361" marker-end="url(#uf-arrow)"/>
+
+  <!-- 7 The proposal -->
+  <g class="n">
+    <rect class="box" x="365" y="382" width="320" height="196" rx="12" stroke="#4a3aa7"/>
+    <circle cx="394" cy="412" r="15" fill="#4a3aa7"/>
+    <text class="t-strong" x="394" y="417" text-anchor="middle" style="fill:#ffffff">7</text>
+    <text class="t-title" x="420" y="418">Investment proposal</text>
+    <rect x="381" y="438" width="86" height="24" rx="12" fill="#e6e3f4"/>
+    <text class="t-small" x="424" y="455" text-anchor="middle" style="fill:#3b2e8a">The team</text>
+    <text class="t-body" x="381" y="490">Each agent writes its own part, in</text>
+    <text class="t-body" x="381" y="510">three waves; NPV, IRR, payback and</text>
+    <text class="t-body" x="381" y="530">break-even are worked out in code</text>
+    <text class="t-small" x="381" y="560">about one to one and a half minutes</text>
+  </g>
+  <path class="wire" d="M685 480 H711" marker-end="url(#uf-arrow)"/>
+
+  <!-- 8 Document studio -->
+  <g class="n">
+    <rect class="box" x="715" y="382" width="320" height="196" rx="12"/>
+    <circle cx="744" cy="412" r="15" fill="#163c6b"/>
+    <text class="t-strong" x="744" y="417" text-anchor="middle" style="fill:#ffffff">8</text>
+    <text class="t-title" x="770" y="418">Document studio</text>
+    <rect x="731" y="438" width="170" height="24" rx="12" fill="#e4ebf5"/>
+    <text class="t-small" x="816" y="455" text-anchor="middle" style="fill:#163c6b">You, the team and code</text>
+    <text class="t-body" x="731" y="490">Revise a part or one passage; convert</text>
+    <text class="t-body" x="731" y="510">the currency or the units; find and</text>
+    <text class="t-body" x="731" y="530">replace, or redact, everywhere</text>
+    <text class="t-small" x="731" y="560">every change comes back as a draft</text>
+  </g>
+  <path class="wire" d="M1035 480 H1061" marker-end="url(#uf-arrow)"/>
+
+  <!-- 9 Accept and share -->
+  <g class="n">
+    <rect class="box" x="1065" y="382" width="320" height="196" rx="12"/>
+    <circle cx="1094" cy="412" r="15" fill="#163c6b"/>
+    <text class="t-strong" x="1094" y="417" text-anchor="middle" style="fill:#ffffff">9</text>
+    <text class="t-title" x="1120" y="418">Accept and share</text>
+    <rect x="1081" y="438" width="44" height="24" rx="12" fill="#e4ebf5"/>
+    <text class="t-small" x="1103" y="455" text-anchor="middle" style="fill:#163c6b">You</text>
+    <text class="t-body" x="1081" y="490">See each change marked, then accept</text>
+    <text class="t-body" x="1081" y="510">or discard it; restore any version;</text>
+    <text class="t-body" x="1081" y="530">ask cited questions; download the PDF</text>
+  </g>
+  <!-- revise again -->
+  <path d="M1225 578 C 1225 630, 875 630, 875 582" fill="none" stroke="#163c6b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#uf-arrow-p)"/>
+  <text class="t-edge" x="1050" y="652" text-anchor="middle" style="fill:#163c6b">change it again</text>
+</svg>

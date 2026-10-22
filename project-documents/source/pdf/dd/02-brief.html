@@ -1,0 +1,114 @@
+<!-- ============ 2.1 What the brief asked for ============ -->
+<section class="page wide" id="brief-asked">
+  <div class="body">
+    <p class="kicker"><span class="num">2.1</span>The brief, and how it was met</p>
+    <h2 class="title">The brief: a founding team of agents that collaborates, not a static plan</h2>
+    <p class="lede">The capstone brief asks for an autonomous multi-agent system that simulates a founding team: specialised agents working under a Chief of Staff, with structured reasoning loops, critique and refinement, ending in one launch strategy. The brief is reproduced word for word in <em>02 Brief, architecture and user flow</em>; this is its shape.</p>
+    <div class="content cols c-3">
+      <div class="card">
+        <h4>The problem</h4>
+        <p class="small">Startup decisions span product, market, technology, finance and risk; they need debate, iteration and leadership-driven synthesis. Single AI outputs come out isolated and fragmented.</p>
+        <h4 class="mt">The goal</h4>
+        <ul class="small">
+          <li>Startup roles as specialised agents: Marketing, Finance, Technical, Risk</li>
+          <li>Structured reasoning loops: ReAct or Plan–Act–Check</li>
+          <li>Hierarchical delegation through a Chief of Staff</li>
+          <li>Critique and refinement cycles</li>
+          <li>One unified launch strategy</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h4>Functional requirements</h4>
+        <ul class="small">
+          <li><strong>Role-based agents</strong>: the four specialists</li>
+          <li><strong>Manager-led delegation</strong>: a Chief of Staff that coordinates, delegates and synthesises</li>
+          <li><strong>Iterative reasoning</strong>: Plan–Act–Check loops, reflection and critique</li>
+          <li><strong>Multi-agent coordination</strong>: back-and-forth between agents, conflict resolution and refinement</li>
+          <li><strong>Optimisation</strong>: fewer redundant reasoning calls, lower latency, structured outputs</li>
+        </ul>
+        <h4 class="mt">Sample prompts it must handle</h4>
+        <p class="small">"Evaluate this startup idea in the AI healthcare space." "Identify risks in our go-to-market plan." "Refine the pricing strategy after financial review."</p>
+      </div>
+      <div class="card">
+        <h4>Technical details</h4>
+        <p class="small">Python and LangGraph, with langchain, openai / anthropic, pydantic, fastapi (optional), uvicorn and dotenv; the variables OPENAI_API_KEY, ANTHROPIC_API_KEY, MODEL_NAME and DEBUG_MODE.</p>
+        <h4 class="mt">Deliverables</h4>
+        <ul class="small">
+          <li>A functional multi-agent system</li>
+          <li>Architecture and workflow design</li>
+          <li>Optimisation and refactoring</li>
+          <li>A demonstration, with an iterative refinement</li>
+          <li>Documentation</li>
+        </ul>
+        <h4 class="mt">Judged on</h4>
+        <p class="small">Coordination, delegation and synthesis, self-correction, workflow clarity and state modelling, optimisation, code quality, documentation.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 2.2 Traceability ============ -->
+<section class="page wide" id="traceability">
+  <div class="body">
+    <p class="kicker"><span class="num">2.2</span>The brief, and how it was met</p>
+    <h2 class="title">Every functional requirement, and where it lives in the code</h2>
+    <div class="content">
+      <table class="tight">
+        <thead><tr><th style="width:2.3in">The brief asks for</th><th>How the project meets it</th><th style="width:2.35in">Where</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Role-based agents</strong>: Marketing Strategy, Financial Planning, Technical Feasibility, Risk &amp; Compliance</td><td>Four specialists, each a role definition (a title, an area, and the brief that gives it a point of view) on one shared graph node, so they differ only in their roles</td><td><span class="t-src">agents/roles.py · agents/specialist.py</span></td></tr>
+          <tr><td><strong>A Chief of Staff</strong> coordinating tasks, with structured delegation and synthesis</td><td>Plans with a Pydantic <code>DelegationPlan</code>: an objective, and one task per specialist the request needs; routes the work to those specialists only; writes the one strategy</td><td><span class="t-src">agents/chief_of_staff.py · graph.py</span></td></tr>
+          <tr><td><strong>ReAct or Plan–Act–Check loops</strong></td><td>Plan–Act–Check across the team: the Chief of Staff plans, the specialists act, the Chief of Staff scores each report 1 to 5 against a rubric and sends any under 4 back once (decision D1)</td><td><span class="t-src">review_node · MAX_ITERATIONS</span></td></tr>
+          <tr><td><strong>Reflection and critique cycles</strong></td><td>A sent-back report is rewritten whole with the feedback; then each specialist critiques the others' reports</td><td><span class="t-src">specialist.py · critique_node</span></td></tr>
+          <tr><td><strong>Back-and-forth between agents</strong>, conflict resolution and refinement</td><td>Each specialist flags up to two clashes with another's report; the Chief of Staff settles them in one call, by the founder's constraints first, and sends the specialist whose report must change back to revise</td><td><span class="t-src">critique_node · resolve_node · MAX_CRITIQUE_ROUNDS</span></td></tr>
+          <tr><td><strong>Fewer redundant reasoning calls</strong></td><td>Only assigned specialists run; approved reports are never re-reviewed; no critique for a lone report; follow-ups rerun only the specialists they affect</td><td><span class="t-src">graph.py routes · docs/performance.md</span></td></tr>
+          <tr><td><strong>Lower latency and structured outputs</strong></td><td>Specialists, reviews and critiques run in parallel; one reused model client; 17 of the 22 prompts answer as Pydantic-validated structured output</td><td><span class="t-src">_ask_each · llm.py · state.py</span></td></tr>
+          <tr><td><strong>A stateful system</strong> that refines a strategy</td><td>A checkpointer keeps each session's state (PostgreSQL, or memory); a follow-up refines the reports that it concerns</td><td><span class="t-src">graph.py · persistence.py</span></td></tr>
+          <tr><td><strong>The three sample prompts</strong></td><td>Each is an example scenario the app offers and the tests run, including "Refine the pricing strategy after financial review." as a follow-up</td><td><span class="t-src">scenarios/ · tests/test_scenarios.py</span></td></tr>
+          <tr><td><strong>The variables</strong> OPENAI_API_KEY, MODEL_NAME, DEBUG_MODE, ANTHROPIC_API_KEY</td><td>OpenAI with MODEL_NAME is the alternative to Azure OpenAI; DEBUG_MODE turns on DEBUG logs and LangGraph's step traces. Anthropic was not needed (decision D2)</td><td><span class="t-src">llm.py · config.py · .env.example</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 2.3 Deliverables and evaluation criteria ============ -->
+<section class="page wide" id="deliverables">
+  <div class="body">
+    <p class="kicker"><span class="num">2.3</span>The brief, and how it was met</p>
+    <h2 class="title">Each deliverable and each criterion, and where to see it</h2>
+    <div class="content cols c-6-6">
+      <div>
+        <h4>The five deliverables</h4>
+        <table class="tight">
+          <thead><tr><th style="width:1.75in">Deliverable</th><th>Where it is</th></tr></thead>
+          <tbody>
+            <tr><td><strong>1 Functional multi-agent system</strong><br><span class="muted">agents, delegation, reflection, coordinated execution</span></td><td>The running app: the API (<span class="t-src">main.py</span>), the graph (<span class="t-src">graph.py</span>) and the agents (<span class="t-src">agents/</span>), with the Next.js UI</td></tr>
+            <tr><td><strong>2 Architecture and workflow design</strong><br><span class="muted">state machine, delegation, reasoning loop</span></td><td><span class="t-src">docs/architecture.md</span>; the How it works page, which draws the real graph; document 02; Parts 3 and 4 here</td></tr>
+            <tr><td><strong>3 Optimisation and refactoring</strong><br><span class="muted">modular code, performance, error handling</span></td><td><span class="t-src">docs/performance.md</span>: measured before and after; the error-handling rules in the architecture document; <a href="#performance">8.7</a></td></tr>
+            <tr><td><strong>4 Demonstration</strong><br><span class="muted">live walkthrough, iterative refinement</span></td><td><span class="t-src">docs/demo.md</span>, a ten-minute script with a recorded run; <span class="t-src">demo.py</span> in a terminal; the live graph</td></tr>
+            <tr><td><strong>5 Documentation</strong><br><span class="muted">diagram, roles, workflow, trade-offs</span></td><td><span class="t-src">README.md</span>, <span class="t-src">docs/</span>, <span class="t-src">DEVELOPMENT_PLAN.md</span> (36 steps, 34 live checks), and these three documents</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h4>The seven evaluation criteria</h4>
+        <table class="tight">
+          <thead><tr><th style="width:1.85in">Criterion</th><th>The evidence</th></tr></thead>
+          <tbody>
+            <tr><td>Multi-agent coordination quality</td><td>The live view and live graph; the Conflicts tab: who disagreed, the decision, who revised</td></tr>
+            <tr><td>Delegation and synthesis effectiveness</td><td>The Plan tab (objective and tasks); a follow-up reassigning only the agents it concerns</td></tr>
+            <tr><td>Reflection and self-correction</td><td>The Reviews tab: scores, feedback, revised reports; the LLM judge's scores in Langfuse experiments</td></tr>
+            <tr><td>Workflow clarity and state modelling</td><td>The graph drawn from the compiled code; typed state; sessions kept between requests</td></tr>
+            <tr><td>System optimisation and performance</td><td>The Run tab (calls, tokens, seconds per step); the Monitor; <span class="t-src">docs/performance.md</span></td></tr>
+            <tr><td>Code quality and modularity</td><td>One module per job; 578 tests; coverage gates at 80%, met at 94 to 97%; CI on every push</td></tr>
+            <tr><td>Documentation clarity</td><td>The architecture, performance and demo documents; the How it works page; this deep dive</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

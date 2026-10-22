@@ -1,0 +1,177 @@
+<!-- ============ 9.1 Design trade-offs ============ -->
+<section class="page wide" id="tradeoffs">
+  <div class="body">
+    <p class="kicker"><span class="num">9.1</span>Reflections</p>
+    <h2 class="title">Design trade-offs: what each choice buys, and what it costs</h2>
+    <div class="content">
+      <table class="tight roomy">
+        <thead><tr><th style="width:3.1in">The choice</th><th style="width:3.6in">What it buys</th><th>What it costs</th></tr></thead>
+        <tbody>
+          <tr><td><strong>One specialist node, four roles</strong></td><td>No four near-identical files; the agents differ only in point of view</td><td>Per-agent behaviour must be said in role text, not code</td></tr>
+          <tr><td><strong>One revision, one critique round</strong></td><td>Cheap, and a run always ends</td><td>Less iteration; both are settings, so more rounds need no code</td></tr>
+          <tr><td><strong>No critique for a lone report</strong></td><td>Fewer calls, lower latency</td><td>Nothing to cross-check it against anyway</td></tr>
+          <tr><td><strong>Two conflicts each, settled in one call</strong></td><td>Decisions that agree, for one call instead of one each</td><td>Minor clashes beyond the first two go unresolved</td></tr>
+          <tr><td><strong>Failures non-fatal where possible</strong></td><td>One failed call does not sink a two-minute run</td><td>A run can end with a named gap or an unreviewed report</td></tr>
+          <tr><td><strong>Word targets: 250 a report, 500 the strategy</strong></td><td>Every later call is faster and cheaper</td><td>Less detail; the model treats them as targets</td></tr>
+          <tr><td><strong>Reviews and critiques in parallel</strong></td><td>Lower latency, same calls and tokens</td><td>Bursts of up to four calls reach a rate limit sooner</td></tr>
+          <tr><td><strong>The proposal only on request</strong></td><td>An evaluation stays about two minutes</td><td>Five more calls (six if Finance is sent back) and over a minute, when it is asked for</td></tr>
+          <tr><td><strong>Proposal parts as data, money in code</strong></td><td>Figures that agree, recalculated after any edit</td><td>A rigid shape: what does not fit goes in the prose fields</td></tr>
+          <tr><td><strong>Planned look-ups, not agent tool loops</strong></td><td>Predictable time and cost; exact, cited figures</td><td>Less autonomy for the specialists</td></tr>
+          <tr><td><strong>Deeper reasoning for the Chief of Staff only</strong></td><td>Better decisions at a fraction of the cost of reasoning everywhere</td><td>An evaluation takes about twice as long as at minimal</td></tr>
+          <tr><td><strong>Neutralise prompt injection, don't refuse</strong></td><td>A run survives a hostile web page or an odd brief</td><td>Relies on fences and rules as well as the scan</td></tr>
+          <tr><td><strong>PostgreSQL for what must last</strong></td><td>Nothing lost on a restart; safe concurrent saves</td><td>A database to run; once one is set, the API will not start without reaching it</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 9.2 Limitations and next steps ============ -->
+<section class="page wide" id="next-steps">
+  <div class="body">
+    <p class="kicker"><span class="num">9.2</span>Reflections</p>
+    <h2 class="title">Limitations, and what would come next</h2>
+    <div class="content cols c-6-6 roomy-text" style="gap:0.32in">
+      <div class="stack">
+        <div class="card">
+          <h3>Close the type-safety gaps</h3>
+          <p class="small mb0">Enforce the ranges and counts that now live in descriptions (review and judge scores, conflicts, searches); retry a reply that fails validation once, then handle it like any unusable reply; validate a research profile's raw JSON with a model. Each small, each testable with the fake model (<a href="#gaps">6.3</a>).</p>
+        </div>
+        <div class="card">
+          <h3>More than one worker</h3>
+          <p class="small mb0">The Monitor's statistics and the rate limits live in the API's process, so the app runs one worker. Sessions, reports and the history are already shared in PostgreSQL; a shared store for the limits would let replicas share them too.</p>
+        </div>
+        <div class="card">
+          <h3>Accounts</h3>
+          <p class="small mb0">Access is one API key, held by the app's server. A product with several founders would add user accounts and sign-in, with sessions and reports owned by a user; TLS and a domain belong to the reverse proxy in front.</p>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="card">
+          <h3>The model's limits</h3>
+          <p class="small mb0">At minimal reasoning, gpt-5-mini writes plausible numbers without reasoning over them, which is why the money is worked out in code and checked. Higher efforts help at the cost of time; the sliders and the experiments make that trade measurable.</p>
+        </div>
+        <div class="card">
+          <h3>Tools in the specialists' hands</h3>
+          <p class="small mb0">Look-ups are planned by the Chief of Staff (decision D1). Letting a specialist call tools in a ReAct loop is the natural next option, bounded like everything else, once its cost is measured.</p>
+        </div>
+        <div class="card">
+          <h3>Where the project stands</h3>
+          <p class="small mb0">Steps 0 to 30 are marked Done in the plan; Steps 31 to 35 (MCP look-ups, the live graph, the document page, exchange rates, Langfuse) are marked Built: built and checked live, before being marked Done. Web searches on Azure go to Bing, outside Azure's compliance boundary, which the README notes.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 9.3 Configuration reference ============ -->
+<section class="page wide" id="config">
+  <div class="body">
+    <p class="kicker"><span class="num">9.3</span>Reflections · reference</p>
+    <h2 class="title">Configuration: everything is set in .env, explained in .env.example</h2>
+    <div class="content cols c-3" style="gap:0.24in">
+      <div class="stack">
+        <div><h4>The model</h4>
+          <table class="compact tight roomy"><tbody>
+            <tr><td><code>AZURE_OPENAI_API_KEY</code>, <code>_ENDPOINT</code></td><td>Azure OpenAI, used when set</td></tr>
+            <tr><td><code>AZURE_OPENAI_DEPLOYMENT_NAME</code></td><td>gpt-5-mini</td></tr>
+            <tr><td><code>AZURE_OPENAI_API_VERSION</code></td><td>2025-04-01-preview</td></tr>
+            <tr><td><code>AZURE_OPENAI_REASONING_EFFORT</code></td><td>specialists: minimal</td></tr>
+            <tr><td><code>AZURE_OPENAI_CHIEF_REASONING_EFFORT</code></td><td>Chief of Staff: medium</td></tr>
+            <tr><td><code>OPENAI_API_KEY</code>, <code>MODEL_NAME</code></td><td>OpenAI instead; gpt-4o-mini</td></tr>
+          </tbody></table></div>
+        <div><h4>Loops and calls</h4>
+          <table class="compact tight roomy"><tbody>
+            <tr><td><code>MAX_ITERATIONS</code>, <code>MAX_CRITIQUE_ROUNDS</code></td><td>1, 1</td></tr>
+            <tr><td><code>LLM_TIMEOUT</code>, <code>LLM_TIMEOUT_HIGH</code></td><td>120 s, 300 s</td></tr>
+            <tr><td><code>LLM_MAX_RETRIES</code></td><td>2</td></tr>
+          </tbody></table></div>
+      </div>
+      <div class="stack">
+        <div><h4>Research and look-ups</h4>
+          <table class="compact tight roomy"><tbody>
+            <tr><td><code>TAVILY_API_KEY</code></td><td>adds Tavily as a choice</td></tr>
+            <tr><td><code>SEARCH_TIMEOUT</code>, <code>RESEARCH_TIMEOUT</code></td><td>20 s, 300 s</td></tr>
+            <tr><td><code>FRED_API_KEY</code></td><td>turns on official figures</td></tr>
+            <tr><td><code>LOOKUP_TIMEOUT</code></td><td>30 s</td></tr>
+            <tr><td><code>TAVILY_MCP_URL</code></td><td>Tavily's hosted server</td></tr>
+          </tbody></table></div>
+        <div><h4>Storage</h4>
+          <table class="compact tight roomy"><tbody>
+            <tr><td><code>DATABASE_URL</code></td><td>PostgreSQL; unset: memory</td></tr>
+            <tr><td><code>TEST_DATABASE_URL</code></td><td>a database the tests may empty</td></tr>
+            <tr><td><code>POSTGRES_PASSWORD</code></td><td>for Docker's database</td></tr>
+          </tbody></table></div>
+      </div>
+      <div class="stack">
+        <div><h4>Access and limits</h4>
+          <table class="compact tight roomy"><tbody>
+            <tr><td><code>API_KEY</code></td><td>the key callers must send</td></tr>
+            <tr><td><code>MAX_REQUEST_BYTES</code></td><td>1,000,000</td></tr>
+            <tr><td><code>REQUESTS_PER_MINUTE</code>, <code>RUNS_PER_HOUR</code></td><td>300, 30</td></tr>
+            <tr><td><code>MAX_CONCURRENT_RUNS</code></td><td>4</td></tr>
+            <tr><td><code>CORS_ORIGINS</code></td><td>direct browser callers</td></tr>
+          </tbody></table></div>
+        <div><h4>Observability</h4>
+          <table class="compact tight roomy"><tbody>
+            <tr><td><code>DEBUG_MODE</code>, <code>LOG_FORMAT</code></td><td>false; text or json</td></tr>
+            <tr><td><code>LANGFUSE_PUBLIC_KEY</code>, <code>_SECRET_KEY</code></td><td>turn on tracing</td></tr>
+            <tr><td><code>LANGFUSE_BASE_URL</code></td><td>the EU cloud by default</td></tr>
+            <tr><td><code>LANGFUSE_SAMPLE_RATE</code>, <code>LANGFUSE_JUDGE</code></td><td>1.0; off</td></tr>
+          </tbody></table></div>
+        <p class="small muted mb0">The web app reads <code>BACKEND_URL</code> and <code>API_KEY</code> from <code>frontend/.env.local</code>, on its server only.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 9.4 Glossary ============ -->
+<section class="page wide" id="glossary">
+  <div class="body">
+    <p class="kicker"><span class="num">9.4</span>Reflections · reference</p>
+    <h2 class="title">Glossary</h2>
+    <div class="content cols c-3 small" style="gap:0.1in 0.3in">
+      <ul class="k-list">
+        <li><span class="k">Chief of Staff</span><span class="v">The manager agent: plans, reviews, settles conflicts, writes the strategy.</span></li>
+        <li><span class="k">Specialist</span><span class="v">One of four agents with an area: marketing, finance, technical, risk.</span></li>
+        <li><span class="k">LangGraph</span><span class="v">The library that runs the agents as a state machine of nodes and edges.</span></li>
+        <li><span class="k">Router</span><span class="v">A function that reads the state and names the next step or steps.</span></li>
+        <li><span class="k">Checkpointer</span><span class="v">Saves a session's state after each step, so it can be resumed.</span></li>
+        <li><span class="k">Session</span><span class="v">A first request and its follow-ups, sharing one state.</span></li>
+        <li><span class="k">Reducer</span><span class="v">The rule that merges what parallel steps write to one field.</span></li>
+        <li><span class="k">Follow-up</span><span class="v">A later request in a session; only the agents it concerns rerun.</span></li>
+        <li><span class="k">Deep research</span><span class="v">A cited web report per specialist's area, and competitor profiles.</span></li>
+      </ul>
+      <ul class="k-list">
+        <li><span class="k">Plan–Act–Check</span><span class="v">Plan the work, do it, check it, send back what falls short.</span></li>
+        <li><span class="k">Cross-critique</span><span class="v">Specialists flag where another's report contradicts their own.</span></li>
+        <li><span class="k">Structured output</span><span class="v">A model reply constrained to a JSON Schema, parsed into a typed object.</span></li>
+        <li><span class="k">Pydantic</span><span class="v">The library that defines those types and validates data against them.</span></li>
+        <li><span class="k">Reasoning effort</span><span class="v">How long gpt-5-mini thinks before answering: minimal to high.</span></li>
+        <li><span class="k">Guardrails</span><span class="v">Fences and rules that keep outside text from steering the agents.</span></li>
+        <li><span class="k">Prompt injection</span><span class="v">Text that tries to give a model instructions it should not follow.</span></li>
+        <li><span class="k">LLM judge</span><span class="v">A separate model call that scores the strategy against its brief.</span></li>
+        <li><span class="k">Live graph</span><span class="v">The graph LangGraph runs, drawn with Mermaid and lit up step by step.</span></li>
+      </ul>
+      <ul class="k-list">
+        <li><span class="k">MCP</span><span class="v">Model Context Protocol: a standard way to give models tools and data.</span></li>
+        <li><span class="k">FRED</span><span class="v">The St. Louis Fed's database of official economic series.</span></li>
+        <li><span class="k">BM25</span><span class="v">A ranking of passages by how well their words match a query.</span></li>
+        <li><span class="k">SSE</span><span class="v">Server-sent events: a response that streams messages as they happen.</span></li>
+        <li><span class="k">Trace, score</span><span class="v">In Langfuse: a request's record of model calls, and a judgement on it.</span></li>
+        <li><span class="k">Draft</span><span class="v">A change to a document, shown before it is accepted and saved.</span></li>
+        <li><span class="k">NPV, IRR, payback</span><span class="v">Investment returns, worked out in code from the projections.</span></li>
+        <li><span class="k">Prometheus</span><span class="v">A monitoring system that scrapes the API's /metrics.</span></li>
+        <li><span class="k">Monitor</span><span class="v">The How it works tab that shows what the API has done.</span></li>
+      </ul>
+    </div>
+    <div class="callout primary mt" style="display:flex;justify-content:space-between;align-items:center">
+      <span><strong>Further reading in the repository:</strong> README.md (the brief, setup and the API), docs/architecture.md, docs/performance.md, docs/demo.md, DEVELOPMENT_PLAN.md.</span>
+      <a href="#contents">Back to the contents</a>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

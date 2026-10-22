@@ -1,0 +1,279 @@
+<!-- ============ 8.1 The API ============ -->
+<section class="page wide" id="api">
+  <div class="body">
+    <p class="kicker"><span class="num">8.1</span>Production readiness</p>
+    <h2 class="title">The API: 29 routes, every one typed, documented and guarded</h2>
+    <div class="content cols c-6-6" style="gap:0.3in">
+      <div class="stack">
+        <table class="tight roomy">
+          <thead><tr><th style="width:2.55in">The team</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /brief/prepare</code></td><td>research a brief; cited facts and questions</td></tr>
+            <tr><td><code>POST /evaluate</code></td><td>run the team; the whole result at once</td></tr>
+            <tr><td><code>POST /evaluate/stream</code></td><td>the same, as server-sent events</td></tr>
+            <tr><td><code>POST /feedback</code></td><td>the founder's verdict, as a Langfuse score</td></tr>
+          </tbody>
+        </table>
+        <table class="tight roomy">
+          <thead><tr><th style="width:2.55in">The founder's documents</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>POST /uploads</code>, <code>GET /uploads/{id}</code></td><td>read a file into passages; what was read</td></tr>
+            <tr><td><code>POST /ask</code></td><td>a question, answered from documents, cited</td></tr>
+          </tbody>
+        </table>
+        <table class="tight roomy">
+          <thead><tr><th style="width:2.55in">Running it</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /health</code></td><td>open; storage, research, look-ups, tracing</td></tr>
+            <tr><td><code>GET /monitoring</code>, <code>GET /metrics</code></td><td>the Monitor's snapshot; Prometheus</td></tr>
+            <tr><td><code>GET /pipeline</code></td><td>the graph as Mermaid, from the running code</td></tr>
+            <tr><td><code>GET /scenarios</code>, <code>GET /templates</code>, <code>GET /rates/{base}</code></td><td>examples, decision templates, exchange rates</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="stack">
+        <table class="tight roomy">
+          <thead><tr><th style="width:2.9in">Reports and documents</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /reports</code>, <code>GET /reports/{id}</code></td><td>every report; one, with its version</td></tr>
+            <tr><td><code>PUT /reports/{id}</code></td><td>save edits; 409 if it changed meanwhile</td></tr>
+            <tr><td><code>POST …/proposal</code>, <code>…/proposal/revise</code></td><td>write the proposal; revise by instruction</td></tr>
+            <tr><td><code>PUT …/proposal</code></td><td>save the founder's own edits</td></tr>
+            <tr><td><code>POST …/revise</code></td><td>rewrite one text, or one passage</td></tr>
+            <tr><td><code>POST …/drafts</code>, <code>POST …/accept</code></td><td>exact changes by code; accept a draft</td></tr>
+            <tr><td><code>GET …/versions</code>, <code>…/versions/{v}</code>, <code>POST …/restore</code></td><td>history, one version, restore it</td></tr>
+            <tr><td><code>GET …/pdf</code>, <code>POST …/pdf</code></td><td>the PDF; a draft's PDF, saving nothing</td></tr>
+            <tr><td><code>POST …/reset</code></td><td>rebuild from the session's latest results</td></tr>
+          </tbody>
+        </table>
+        <div class="callout primary small">Every response carries an <code>X-Request-ID</code>, which every log line about it names. Errors are plain: 401 without the key, 413 too large, 422 invalid, 429 over a limit with <code>Retry-After</code>, 502 when a model call failed after its retries, 503 when no model is configured. Interactive documentation is served at <code>/docs</code>.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 8.2 Persistence and security ============ -->
+<section class="page wide" id="persistence-security">
+  <div class="body">
+    <p class="kicker"><span class="num">8.2</span>Production readiness</p>
+    <h2 class="title">Nothing lost on a restart, and nothing open that should not be</h2>
+    <div class="content cols c-6-6" style="gap:0.32in">
+      <div>
+        <div class="who"><span class="agent-dot sm c-primary"><i class="icon" data-icon="server"></i></span><div><div class="name">Persistence: PostgreSQL</div><div class="role">or memory, without <code>DATABASE_URL</code>, as the tests run</div></div></div>
+        <ul class="k-list small roomy-text">
+          <li><span class="k">Sessions</span><span class="v">LangGraph's <code>AsyncPostgresSaver</code>, built on the event loop that serves requests, so a follow-up after a restart starts from the session's state.</span></li>
+          <li><span class="k">Reports</span><span class="v">One row a session. A change reads it <code>FOR UPDATE</code>, applies it and writes it in one transaction, so a save from an older version is refused, even with several workers; the replaced version goes to <code>report_versions</code>, the last 30 kept.</span></li>
+          <li><span class="k">Uploads</span><span class="v">The text read from each file, never the file; the newest 500.</span></li>
+          <li><span class="k">The Monitor's history</span><span class="v">Written in batches by a thread of its own: the latest 1,000 evaluations and 10,000 events; read back on start.</span></li>
+          <li><span class="k">Migrations</span><span class="v">Numbered, applied under an advisory lock so two workers starting together do not both migrate. With a database set, the API will not start without it, rather than quietly forget.</span></li>
+        </ul>
+      </div>
+      <div>
+        <div class="who"><span class="agent-dot sm c-primary"><i class="icon" data-icon="shield"></i></span><div><div class="name">Security and limits</div><div class="role">checked before any route, <span class="t-src">security.py</span></div></div></div>
+        <ul class="k-list small roomy-text">
+          <li><span class="k">The key</span><span class="v">With <code>API_KEY</code> set, every route but <code>/health</code> needs it, compared in constant time. The browser never holds it: the app's server adds it.</span></li>
+          <li><span class="k">Size</span><span class="v">A body over 1 MB is refused (413), whether or not it says how big it is; an uploaded file may be up to 10 MB.</span></li>
+          <li><span class="k">Rates</span><span class="v">300 requests a minute and 30 runs an hour per caller, over sliding windows; at most 4 runs at once, each holding its place until its response ends. Over a limit: 429 with <code>Retry-After</code>.</span></li>
+          <li><span class="k">Who a caller is</span><span class="v">Its address, or, only for a request carrying the key, the browser address the app's proxy forwards, so nobody can spread their requests over made-up addresses.</span></li>
+          <li><span class="k">What is logged</span><span class="v">No brief text: a failed search logs its error, not the query.</span></li>
+          <li><span class="k">The pages</span><span class="v">A content security policy, no framing by other sites, a strict referrer policy. TLS belongs to the reverse proxy in front.</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 8.3 Observability ============ -->
+<section class="page wide" id="observability">
+  <div class="body">
+    <p class="kicker"><span class="num">8.3</span>Production readiness</p>
+    <h2 class="title">Observability: every request traceable, every step measured</h2>
+    <div class="content cols c-5-7">
+      <div class="body-text small">
+        <p><strong>Request IDs.</strong> Each request gets an ID (the one it sent, if usable), returned in <code>X-Request-ID</code> and stamped on every log line about it, with its session. The threads that run the agents copy the context, so their lines carry the ID too, and a founder's "it failed" leads straight to the right lines.</p>
+        <p><strong>Logs.</strong> One line a request, with the route's template, status and time; as text, or as one JSON object a line with <code>LOG_FORMAT=json</code>. The polled routes log at DEBUG; an unexpected error is logged with its traceback.</p>
+        <p><strong>The Monitor.</strong> Since the API started: evaluations ended and running, briefs and proposals, requests and server errors, the median and 95th-percentile time of an evaluation and of each step, model calls, tokens, reviews, conflicts and research cost, and the last 300 events. Health turns to errors if one was logged in the last 15 minutes.</p>
+        <p class="mb0"><strong>Prometheus.</strong> The same as counters and histograms at <code>/metrics</code> (<code>cofounder_*</code>), routes labelled by template so no session ID becomes a label.</p>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.45in;object-fit:cover;object-position:top left" src="../assets/screenshots/monitor-c.jpg" alt="The Monitor after the recorded session: healthy, 2 evaluations, a median time to a decision of 2:01, no server errors, 35 model calls and 155.8k tokens">
+        <figcaption><strong>The Monitor after the recorded session:</strong> healthy; 2 evaluations with a median of 2:01; no server errors; 35 model calls, 155.8k tokens; 5 of 6 reports approved; 11 conflicts settled.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 8.4 Langfuse ============ -->
+<section class="page wide" id="langfuse">
+  <div class="body">
+    <p class="kicker"><span class="num">8.4</span>Production readiness</p>
+    <h2 class="title">Langfuse: what each agent was asked and answered, at what cost, and how well</h2>
+    <div class="content cols c-3">
+      <div class="card">
+        <h3>Traces, masked</h3>
+        <p class="small">Each request that calls a model is one trace (evaluate, brief, proposal, revisions, questions), grouped by session and tagged. Inside it, every model call is a generation with its messages, reply, model, tokens, cost and time.</p>
+        <p class="small">No call site passes a handler: while a trace is open, LangChain picks Langfuse's handler up from the request's context, in every worker thread.</p>
+        <p class="small mb0">Before anything leaves, emails, phone numbers, card numbers (by the Luhn check) and keys become <code>[email]</code>, <code>[phone]</code>, <code>[card number]</code>, <code>[key]</code>. Without Langfuse's keys, nothing is traced and nothing leaves.</p>
+      </div>
+      <div class="card">
+        <h3>Prompts, versioned from the code</h3>
+        <p class="small">The code is their source. At start-up each of the 22 prompts is registered, as a new version labelled <code>production</code> only when its text has changed, and every call is linked to the version it used, so versions can be compared on cost, speed and scores.</p>
+        <h3 class="mt">Scores on every run</h3>
+        <p class="small mb0">The team's own judgements: <code>review-marketing</code> and the others, <code>review-average</code>, <code>approved-first-time</code>, <code>revisions</code>, <code>conflicts</code>, the <code>verdict</code>, <code>failed-specialists</code>, <code>guardrail-flags</code>; and the founder's <code>founder-feedback</code>.</p>
+      </div>
+      <div class="card">
+        <h3>An LLM judge</h3>
+        <p class="small">With <code>LANGFUSE_JUDGE</code> on, after the answer has gone, a separate call scores the strategy from 1 to 5 on constraints, consistency, actionability and grounding, with what lowers them most.</p>
+        <h3 class="mt">Experiments</h3>
+        <p class="small">The example scenarios are the <code>cofounder-scenarios</code> dataset. One command runs the team on each, traced and scored by the team and the judge, so a change to a prompt or a reasoning effort is compared run against run:</p>
+        <pre>uv run python experiments.py \
+  --name "chief at low" --chief low</pre>
+      </div>
+    </div>
+    <div class="callout primary small mt"><strong>Checked live in Step 35</strong>, on the team's Langfuse Cloud project (EU): at start-up the API registered the 22 prompts; a real evaluation of 141 s was one trace of 20 model calls, each a generation with its model, tokens and cost and linked to its prompt's version; the team's scores and the founder's verdict sat on the trace, the founder's email masked to <code>[email]</code>.</div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 8.5 Deployment and CI ============ -->
+<section class="page wide" id="deployment">
+  <div class="body">
+    <p class="kicker"><span class="num">8.5</span>Production readiness</p>
+    <h2 class="title">One command to run it, here or in containers; the same checks on every push</h2>
+    <div class="content cols c-3">
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-primary"><i class="icon" data-icon="flow"></i></span><div><div class="name">One launcher</div><div class="role">start.sh</div></div></div>
+        <pre>./start.sh          # asks how
+./start.sh local    # API + web here
+./start.sh docker   # in containers
+./start.sh stop</pre>
+        <p class="small mt mb0">Locally it starts the API and the web app on 127.0.0.1, hands the web app's server the API's address and key, labels each server's lines and stops both together. It offers the next free port when one is taken, and asks before creating a database password.</p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-primary"><i class="icon" data-icon="server"></i></span><div><div class="name">Docker, as an option</div><div class="role">Dockerfile, frontend/Dockerfile, Compose</div></div></div>
+        <ul class="small">
+          <li>The API: a uv build stage, then <code>python:3.12-slim</code> with only the environment and the code, run as user <code>cofounder</code></li>
+          <li>The web app: Next.js's standalone server on <code>node:22-alpine</code>, run as <code>node</code></li>
+          <li>Compose: <code>postgres:16-alpine</code> with its data in a volume; each service starts once the one it needs is healthy</li>
+          <li>Published on 127.0.0.1 only; no key in any image: every <code>.env</code> stays out of the build</li>
+        </ul>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-primary"><i class="icon" data-icon="check"></i></span><div><div class="name">GitLab CI</div><div class="role">.gitlab-ci.yml</div></div></div>
+        <ul class="small">
+          <li><strong>backend</strong>: the tests on <code>python:3.12-slim</code>, with a PostgreSQL service so the persistence tests run too</li>
+          <li><strong>frontend</strong>: lint, types, tests and the build on <code>node:22-alpine</code></li>
+          <li><strong>images</strong>: both images built on the default branch, with Docker-in-Docker; allowed to fail, since Docker is an option</li>
+        </ul>
+        <p class="small mb0">On every push and merge request.</p>
+      </div>
+    </div>
+    <table class="tight roomy mt2">
+      <thead><tr><th style="width:1.6in"></th><th>Locally, the default</th><th>In Docker, an option</th></tr></thead>
+      <tbody>
+        <tr><td><strong>The API</strong></td><td><code>uv run python main.py</code>, on 127.0.0.1:8000</td><td>its image, published on 127.0.0.1:8000, logging JSON lines</td></tr>
+        <tr><td><strong>The web app</strong></td><td><code>npm run dev</code>, on 127.0.0.1:3000</td><td>Next.js's standalone server, on 127.0.0.1:3000</td></tr>
+        <tr><td><strong>The database</strong></td><td>the PostgreSQL that <code>DATABASE_URL</code> names, or memory</td><td><code>postgres:16-alpine</code>, its data in the <code>db</code> volume</td></tr>
+        <tr><td><strong>Keys</strong></td><td>read from <code>.env</code> as the API starts</td><td>read from <code>.env</code> as the containers start; never in an image</td></tr>
+        <tr><td><strong>Stopping</strong></td><td>Ctrl+C stops both servers</td><td><code>./start.sh stop</code>; running requests get 30 s to finish</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 8.6 Testing and quality ============ -->
+<section class="page wide" id="testing">
+  <div class="body">
+    <p class="kicker"><span class="num">8.6</span>Production readiness</p>
+    <h2 class="title">578 automated tests, and 34 live checks against the real model</h2>
+    <div class="content" style="display:flex;flex-direction:column;gap:0.2in">
+      <div class="stat-row" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat"><div class="label">Backend tests</div><div class="value">398</div><div class="sub">pytest, all passing in 30 s</div></div>
+        <div class="stat"><div class="label">Backend coverage</div><div class="value">96.8%</div><div class="sub">of 5,448 statements; the gate is 80%</div></div>
+        <div class="stat"><div class="label">Frontend tests</div><div class="value">180</div><div class="sub">Vitest, in 25 files, all passing</div></div>
+        <div class="stat"><div class="label">Frontend coverage</div><div class="value">96.2%</div><div class="sub">of lines; 94.2% of statements; gate 80%</div></div>
+      </div>
+      <div class="cols c-3">
+        <div class="card">
+          <h3>No credentials, no model calls</h3>
+          <p class="small mb0">The tests swap in a fake model, which returns a typed reply for each schema (a plan, a review, a critique…) that a test can replace and echoes the prose calls, and fake MCP servers in the same process; the frontend's tests use a fake backend. The real ones refuse, so no test leaves the machine. Real keys in <code>.env</code> are stripped before any test runs.</p>
+        </div>
+        <div class="card">
+          <h3>What they cover</h3>
+          <p class="small mb0">Delegation, review, critique, follow-ups, streaming, error paths and resilience, guardrails, security limits, persistence through a restart of the API, the proposal's arithmetic, document conversions, extraction, look-ups, tracing and the launcher, among 30 backend test files.</p>
+        </div>
+        <div class="card">
+          <h3>Then live, against Azure OpenAI</h3>
+          <p class="small mb0">The steps were also checked live: 34 checks are recorded in the development plan, many in headless Chrome, light, dark and at phone width. The live runs found what fakes could not (a planner assigning too few specialists, figures that did not add up) and each fix came with a test.</p>
+        </div>
+      </div>
+      <div>
+        <h4>From the live-verification ledger: what the live runs found</h4>
+        <table class="tight">
+          <thead><tr><th style="width:1.35in">Step</th><th style="width:3.1in">The live check</th><th>What it found, and what changed</th></tr></thead>
+          <tbody>
+            <tr><td><strong>4 · Delegation</strong></td><td>"Identify risks in our go-to-market plan."</td><td>As first merged, the planner assigned a single specialist in 3 of 6 first requests; now Risk and Marketing, and no call for the others</td></tr>
+            <tr><td><strong>7 · Critique</strong></td><td>premium pricing on a small budget</td><td>No conflict was flagged in 10 runs; now clashes such as a $15k–$30k pilot against an $8k one are settled and revised</td></tr>
+            <tr><td><strong>8 · Follow-ups</strong></td><td>"Refine the pricing strategy…", same session</td><td>A follow-up could cost more than the first request; now Finance and Marketing rerun: 13 calls against 21</td></tr>
+            <tr><td><strong>26 · Guardrails</strong></td><td>a brief saying "Ignore all previous instructions…"</td><td>Azure's filter refused the fenced attempt and ended the run; now the sentence is cut out first: the run finished, "HACKED" nowhere</td></tr>
+            <tr><td><strong>35 · Langfuse</strong></td><td>a real evaluation, then the experiments</td><td>22 prompts registered; one trace of 20 model calls, each linked to its prompt's version; the founder's email masked</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="small muted mb0">Both suites were run for this document on 22 October 2026: backend <code>uv run pytest --cov</code>, frontend <code>npm run test:coverage</code>.</p>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 8.7 Performance ============ -->
+<section class="page wide" id="performance">
+  <div class="body">
+    <p class="kicker"><span class="num">8.7</span>Production readiness</p>
+    <h2 class="title">Performance: fewer calls, parallel work, and reasoning spent where it decides</h2>
+    <div class="content cols c-6-6" style="gap:0.32in">
+      <div>
+        <h4>Optimisations, measured before and after</h4>
+        <table class="tight">
+          <thead><tr><th>Scenario</th><th>Request</th><th class="num">Model calls</th><th class="num">Tokens</th></tr></thead>
+          <tbody>
+            <tr><td>Go-to-market risks</td><td>first</td><td class="num">34.5 → 21 <span class="c-good">−39%</span></td><td class="num">−42%</td></tr>
+            <tr><td>Healthcare scheduling</td><td>first</td><td class="num">28 → 19 <span class="c-good">−32%</span></td><td class="num">−27%</td></tr>
+            <tr><td>Healthcare scheduling</td><td>follow-up</td><td class="num">30.5 → 11 <span class="c-good">−64%</span></td><td class="num">−69%</td></tr>
+            <tr><td>Premium on a budget</td><td>first</td><td class="num">31 → 20 <span class="c-good">−35%</span></td><td class="num">−45%</td></tr>
+            <tr><td>Premium on a budget</td><td>follow-up</td><td class="num">26.5 → 11 <span class="c-good">−58%</span></td><td class="num">−63%</td></tr>
+          </tbody>
+        </table>
+        <p class="small muted">From <span class="t-src">docs/performance.md</span>, 16 October 2026, two runs each: no critique after the last allowed round, one resolve call a round, follow-ups critiqued by the reassigned specialists only, shorter tasks. Then Step 12 ran reviews and critiques in parallel, reused one client and capped the reports, cutting the time of a first request by 41 to 59%.</p>
+        <h4 class="mt">Choosing the Chief of Staff's effort: three scenarios at once</h4>
+        <table class="tight">
+          <thead><tr><th>Version</th><th class="num">First request</th><th class="num">Follow-up</th></tr></thead>
+          <tbody>
+            <tr><td>Old prompts, everything at minimal</td><td class="num">50–56 s</td><td class="num">45–62 s</td></tr>
+            <tr><td>New prompts, Chief of Staff at medium <strong>(chosen)</strong></td><td class="num">89–130 s</td><td class="num">113–149 s</td></tr>
+            <tr><td>New prompts, Chief of Staff at high</td><td class="num">299–573 s</td><td class="num">197–224 s</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h4>Reasoning effort on gpt-5-mini: one pricing question</h4>
+        <table class="tight">
+          <thead><tr><th>Effort</th><th class="num">Reasoning tokens</th><th class="num">Seconds</th></tr></thead>
+          <tbody>
+            <tr><td>minimal</td><td class="num">0</td><td class="num">3.5–4.1</td></tr>
+            <tr><td>low</td><td class="num">256–448</td><td class="num">5.1–6.4</td></tr>
+            <tr><td>medium</td><td class="num">640–960</td><td class="num">7.8–10.8</td></tr>
+            <tr><td>high</td><td class="num">3,136–3,648</td><td class="num">25.4–28.8</td></tr>
+            <tr><td>xhigh <span class="muted">(accepted, but no reasoning)</span></td><td class="num">0</td><td class="num">3.0–3.9</td></tr>
+          </tbody>
+        </table>
+        <div class="callout chief small mt"><strong>The choice:</strong> the specialists at minimal, since they make most of the calls, and the Chief of Staff at medium, since its few calls are the team's decisions: evaluations of 89 to 130 s against 5 to 10 minutes with the Chief at high. The sliders let a founder trade time for depth per request; calls at high get a 300-second timeout.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

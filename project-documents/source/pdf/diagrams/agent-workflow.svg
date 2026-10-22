@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 640" role="img" aria-label="The agent workflow: a LangGraph state machine. The Chief of Staff plans; official figures are looked up and, when asked, deep research runs; the assigned specialists work in parallel; the Chief of Staff reviews and sends weak reports back once; the specialists cross-critique; the Chief of Staff resolves conflicts and may send one revision round; then the strategy is written.">
+  <defs>
+    <marker id="aw-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#7c786d"/>
+    </marker>
+    <marker id="aw-arrow-chief" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#4a3aa7"/>
+    </marker>
+  </defs>
+
+  <!-- start -->
+  <g class="n">
+    <rect x="6" y="290" width="84" height="48" rx="24" fill="#e4ebf5" stroke="#163c6b" stroke-width="1.4"/>
+    <text class="t-strong" x="48" y="320" text-anchor="middle">start</text>
+  </g>
+  <path class="wire" d="M90 314 H106" marker-end="url(#aw-arrow)"/>
+
+  <!-- plan -->
+  <g class="n">
+    <rect x="110" y="258" width="150" height="112" rx="12" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.6"/>
+    <icon name="chief" x="126" y="274" s="20" c="#4a3aa7"/>
+    <text class="t-title" x="154" y="290">plan</text>
+    <text class="t-small" x="126" y="318">Chief of Staff</text>
+    <text class="t-body" x="126" y="342">objective, and</text>
+    <text class="t-body" x="126" y="361">a task each</text>
+  </g>
+
+  <!-- lookup and research -->
+  <g class="n">
+    <rect x="300" y="118" width="170" height="104" rx="12" fill="#e5e8ec" stroke="#6b7889" stroke-width="1.4"/>
+    <icon name="server" x="316" y="134" s="20" c="#48525f"/>
+    <text class="t-title" x="344" y="150">lookup</text>
+    <text class="t-body" x="316" y="178">official figures:</text>
+    <text class="t-body" x="316" y="198">FRED, via MCP</text>
+  </g>
+  <g class="n">
+    <rect x="300" y="410" width="170" height="104" rx="12" fill="#e5e8ec" stroke="#6b7889" stroke-width="1.4" stroke-dasharray="6 5"/>
+    <icon name="globe" x="316" y="426" s="20" c="#48525f"/>
+    <text class="t-title" x="344" y="442">research</text>
+    <text class="t-body" x="316" y="470">deep research,</text>
+    <text class="t-body" x="316" y="490">when asked</text>
+  </g>
+  <path class="wire dash" d="M260 286 C 282 286, 280 170, 296 170" marker-end="url(#aw-arrow)"/>
+  <path class="wire dash" d="M260 342 C 282 342, 280 462, 296 462" marker-end="url(#aw-arrow)"/>
+  <path class="wire dash" d="M260 314 H486"/>
+  <text class="t-small" x="380" y="304" text-anchor="middle">or straight on</text>
+
+  <!-- bus into the specialists -->
+  <path class="wire dash" d="M470 170 H486 V462 H470"/>
+  <path class="wire" d="M486 183 H496" marker-end="url(#aw-arrow)"/>
+  <path class="wire" d="M486 265 H496" marker-end="url(#aw-arrow)"/>
+  <path class="wire" d="M486 347 H496" marker-end="url(#aw-arrow)"/>
+  <path class="wire" d="M486 429 H496" marker-end="url(#aw-arrow)"/>
+
+  <!-- the specialists -->
+  <g class="n">
+    <rect x="500" y="150" width="160" height="66" rx="12" fill="#fbe3d8" stroke="#eb6834" stroke-width="1.4"/>
+    <circle cx="524" cy="183" r="15" fill="#fdfcf9" stroke="#eb6834" stroke-width="1.4"/>
+    <icon name="megaphone" x="515" y="174" s="18" c="#eb6834"/>
+    <text class="t-strong" x="548" y="178">Marketing</text>
+    <text class="t-small" x="548" y="198">go-to-market</text>
+  </g>
+  <g class="n">
+    <rect x="500" y="232" width="160" height="66" rx="12" fill="#d9f1e7" stroke="#1baf7a" stroke-width="1.4"/>
+    <circle cx="524" cy="265" r="15" fill="#fdfcf9" stroke="#1baf7a" stroke-width="1.4"/>
+    <icon name="chart" x="515" y="256" s="18" c="#1baf7a"/>
+    <text class="t-strong" x="548" y="260">Finance</text>
+    <text class="t-small" x="548" y="280">price and budget</text>
+  </g>
+  <g class="n">
+    <rect x="500" y="314" width="160" height="66" rx="12" fill="#dce9f8" stroke="#2a78d6" stroke-width="1.4"/>
+    <circle cx="524" cy="347" r="15" fill="#fdfcf9" stroke="#2a78d6" stroke-width="1.4"/>
+    <icon name="chip" x="515" y="338" s="18" c="#2a78d6"/>
+    <text class="t-strong" x="548" y="342">Technical</text>
+    <text class="t-small" x="548" y="362">build and tools</text>
+  </g>
+  <g class="n">
+    <rect x="500" y="396" width="160" height="66" rx="12" fill="#fbe5ee" stroke="#e87ba4" stroke-width="1.4"/>
+    <circle cx="524" cy="429" r="15" fill="#fdfcf9" stroke="#e87ba4" stroke-width="1.4"/>
+    <icon name="shield" x="515" y="420" s="18" c="#e87ba4"/>
+    <text class="t-strong" x="548" y="424">Risk</text>
+    <text class="t-small" x="548" y="444">law and safety</text>
+  </g>
+  <text class="t-label" x="500" y="490">IN PARALLEL</text>
+
+  <!-- bus out of the specialists -->
+  <path class="wire" d="M660 183 H674 M660 265 H674 M660 347 H674 M660 429 H674"/>
+  <path class="wire" d="M674 183 V429"/>
+  <path class="wire" d="M674 314 H716" marker-end="url(#aw-arrow)"/>
+
+  <!-- review -->
+  <g class="n">
+    <rect x="720" y="258" width="140" height="112" rx="12" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.6"/>
+    <icon name="scale" x="736" y="274" s="20" c="#4a3aa7"/>
+    <text class="t-title" x="764" y="290">review</text>
+    <text class="t-small" x="736" y="318">Chief of Staff</text>
+    <text class="t-body" x="736" y="342">scores 1 to 5;</text>
+    <text class="t-body" x="736" y="361">4 or more pass</text>
+  </g>
+  <path class="wire dash" d="M860 314 H896" marker-end="url(#aw-arrow)"/>
+
+  <!-- critique -->
+  <g class="n">
+    <rect x="900" y="258" width="140" height="112" rx="12" fill="#fdfcf9" stroke="#7c786d" stroke-width="1.4"/>
+    <icon name="swap" x="916" y="274" s="20" c="#4b4840"/>
+    <text class="t-title" x="944" y="290">critique</text>
+    <text class="t-small" x="916" y="318">the specialists</text>
+    <text class="t-body" x="916" y="342">up to two</text>
+    <text class="t-body" x="916" y="361">conflicts each</text>
+  </g>
+  <path class="wire" d="M1040 314 H1076" marker-end="url(#aw-arrow)"/>
+
+  <!-- resolve -->
+  <g class="n">
+    <rect x="1080" y="258" width="140" height="112" rx="12" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.6"/>
+    <icon name="gavel" x="1096" y="274" s="20" c="#4a3aa7"/>
+    <text class="t-title" x="1124" y="290">resolve</text>
+    <text class="t-small" x="1096" y="318">Chief of Staff</text>
+    <text class="t-body" x="1096" y="342">settles all of</text>
+    <text class="t-body" x="1096" y="361">them in one call</text>
+  </g>
+  <path class="wire dash" d="M1220 314 H1252" marker-end="url(#aw-arrow)"/>
+
+  <!-- synthesis -->
+  <g class="n">
+    <rect x="1256" y="258" width="140" height="112" rx="12" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.6"/>
+    <icon name="document" x="1272" y="274" s="20" c="#4a3aa7"/>
+    <text class="t-title" x="1300" y="290">synthesis</text>
+    <text class="t-small" x="1272" y="318">Chief of Staff</text>
+    <text class="t-body" x="1272" y="342">the launch</text>
+    <text class="t-body" x="1272" y="361">strategy memo</text>
+  </g>
+  <path class="wire" d="M1326 370 V422" marker-end="url(#aw-arrow)"/>
+  <g class="n">
+    <rect x="1284" y="426" width="84" height="48" rx="24" fill="#e4ebf5" stroke="#163c6b" stroke-width="1.4"/>
+    <text class="t-strong" x="1326" y="456" text-anchor="middle">end</text>
+  </g>
+
+  <!-- Loop 1: review sends weak reports back once -->
+  <path d="M790 258 V96 H632 V142" fill="none" stroke="#4a3aa7" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aw-arrow-chief)"/>
+  <text class="t-edge" x="711" y="84" text-anchor="middle" style="fill:#3b2e8a">under 4: back once to revise</text>
+  <text class="t-small" x="711" y="62" text-anchor="middle">MAX_ITERATIONS = 1</text>
+
+  <!-- One report: no one to critique against -->
+  <path d="M830 258 C 830 190, 1326 190, 1326 254" fill="none" stroke="#7c786d" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aw-arrow)"/>
+  <text class="t-edge" x="1078" y="198" text-anchor="middle">one report: no critique</text>
+
+  <!-- Loop 2: a decision changes a report -->
+  <path d="M1150 370 V566 H632 V470" fill="none" stroke="#4a3aa7" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#aw-arrow-chief)"/>
+  <text class="t-edge" x="891" y="556" text-anchor="middle" style="fill:#3b2e8a">a decision changes a report: it is revised, then goes on to synthesis</text>
+  <text class="t-small" x="891" y="590" text-anchor="middle">MAX_CRITIQUE_ROUNDS = 1</text>
+
+  <!-- Legend -->
+  <path d="M8 616 H48" stroke="#7c786d" stroke-width="2"/>
+  <text class="t-small" x="56" y="621">always</text>
+  <path d="M120 616 H160" stroke="#7c786d" stroke-width="2" stroke-dasharray="6 5"/>
+  <text class="t-small" x="168" y="621">a route the state chooses</text>
+  <rect x="356" y="608" width="16" height="16" rx="4" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.4"/>
+  <text class="t-small" x="380" y="621">Chief of Staff</text>
+  <rect x="484" y="608" width="16" height="16" rx="4" fill="#e5e8ec" stroke="#6b7889" stroke-width="1.4"/>
+  <text class="t-small" x="508" y="621">tools</text>
+  <text class="t-small" x="566" y="621">· every step reads and writes one shared state; a checkpointer keeps it per session</text>
+</svg>

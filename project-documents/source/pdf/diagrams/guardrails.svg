@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 470" role="img" aria-label="Prompt guardrails: text from the founder, the web and documents is cleaned, scanned, has any sentence that tries to instruct the agents cut out, and is fenced as untrusted; every system prompt ends with the same rules; the model's answer is unfenced; each attempt is logged, counted and shown to the founder.">
+  <defs>
+    <marker id="gr-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#7c786d"/>
+    </marker>
+  </defs>
+
+  <!-- Sources -->
+  <text class="t-label" x="4" y="22">WHERE THE TEXT COMES FROM</text>
+  <g class="n">
+    <rect class="box" x="4" y="36" width="230" height="96" rx="12"/>
+    <icon name="user" x="20" y="52" s="20" c="#163c6b"/>
+    <text class="t-strong" x="48" y="68">The founder</text>
+    <text class="t-body" x="20" y="96">brief, answers, follow-ups,</text>
+    <text class="t-body" x="20" y="116">edits, questions</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="4" y="146" width="230" height="96" rx="12"/>
+    <icon name="globe" x="20" y="162" s="20" c="#48525f"/>
+    <text class="t-strong" x="48" y="178">The web</text>
+    <text class="t-body" x="20" y="206">search results, research,</text>
+    <text class="t-body" x="20" y="226">competitors' pages</text>
+  </g>
+  <g class="n">
+    <rect class="box" x="4" y="256" width="230" height="96" rx="12"/>
+    <icon name="paperclip" x="20" y="272" s="20" c="#48525f"/>
+    <text class="t-strong" x="48" y="288">Documents, reports</text>
+    <text class="t-body" x="20" y="316">uploads, earlier reports,</text>
+    <text class="t-body" x="20" y="336">another agent's report</text>
+  </g>
+  <path class="wire" d="M234 84 H254 V194 H272" />
+  <path class="wire" d="M234 194 H272" marker-end="url(#gr-arrow)"/>
+  <path class="wire" d="M234 304 H254 V194" />
+
+  <!-- Steps -->
+  <g class="n">
+    <rect class="box" x="276" y="110" width="176" height="168" rx="12"/>
+    <text class="t-label" x="292" y="136">1 · CLEAN</text>
+    <text class="t-body" x="292" y="168">Invisible and</text>
+    <text class="t-body" x="292" y="188">control characters</text>
+    <text class="t-body" x="292" y="208">removed; look-alike</text>
+    <text class="t-body" x="292" y="228">letters folded</text>
+  </g>
+  <path class="wire" d="M452 194 H468" marker-end="url(#gr-arrow)"/>
+  <g class="n">
+    <rect class="box" x="472" y="110" width="176" height="168" rx="12"/>
+    <text class="t-label" x="488" y="136">2 · SCAN</text>
+    <text class="t-body" x="488" y="168">Narrow patterns:</text>
+    <text class="t-body" x="488" y="188">override, new role,</text>
+    <text class="t-body" x="488" y="208">reveal the prompt,</text>
+    <text class="t-body" x="488" y="228">pose as the system</text>
+  </g>
+  <path class="wire" d="M648 194 H664" marker-end="url(#gr-arrow)"/>
+  <g class="n">
+    <rect x="668" y="110" width="176" height="168" rx="12" fill="#faefd6" stroke="#855600" stroke-width="1.4"/>
+    <text class="t-label" x="684" y="136">3 · CUT</text>
+    <text class="t-body" x="684" y="168">The sentence that</text>
+    <text class="t-body" x="684" y="188">tries to instruct is</text>
+    <text class="t-body" x="684" y="208">taken out, marked</text>
+    <text class="t-body" x="684" y="228">as removed</text>
+  </g>
+  <path class="wire" d="M844 194 H860" marker-end="url(#gr-arrow)"/>
+  <g class="n">
+    <rect class="box" x="864" y="110" width="176" height="168" rx="12"/>
+    <text class="t-label" x="880" y="136">4 · FENCE</text>
+    <text class="t-body" x="880" y="168">Read only between</text>
+    <text class="t-mono" x="880" y="192" style="fill:#1c1b18">&lt;untrusted</text>
+    <text class="t-mono" x="896" y="212" style="fill:#1c1b18">source="..."&gt;</text>
+    <text class="t-body" x="880" y="240">markers it cannot</text>
+    <text class="t-body" x="880" y="260">close early</text>
+  </g>
+  <path class="wire" d="M1040 194 H1056" marker-end="url(#gr-arrow)"/>
+  <g class="n">
+    <rect x="1060" y="110" width="176" height="168" rx="12" fill="#e4ebf5" stroke="#163c6b" stroke-width="1.4"/>
+    <text class="t-label" x="1076" y="136">5 · THE MODEL</text>
+    <text class="t-body" x="1076" y="168">Every system</text>
+    <text class="t-body" x="1076" y="188">prompt ends with</text>
+    <text class="t-body" x="1076" y="208">the same rules:</text>
+    <text class="t-body" x="1076" y="228">fenced text is</text>
+    <text class="t-body" x="1076" y="248">material, not orders</text>
+  </g>
+  <path class="wire" d="M1236 194 H1252" marker-end="url(#gr-arrow)"/>
+  <g class="n">
+    <rect class="box" x="1256" y="110" width="140" height="168" rx="12"/>
+    <text class="t-label" x="1272" y="136">6 · ANSWER</text>
+    <text class="t-body" x="1272" y="168">Any marker</text>
+    <text class="t-body" x="1272" y="188">it echoes is</text>
+    <text class="t-body" x="1272" y="208">removed; your</text>
+    <text class="t-body" x="1272" y="228">copy keeps</text>
+    <text class="t-body" x="1272" y="248">your words</text>
+  </g>
+
+  <!-- Flags -->
+  <path class="wire dash" d="M560 278 V330 H600" marker-end="url(#gr-arrow)"/>
+  <g class="n">
+    <rect x="604" y="300" width="792" height="96" rx="12" fill="#faefd6" stroke="#855600" stroke-width="1.4"/>
+    <icon name="alert" x="620" y="316" s="20" c="#855600"/>
+    <text class="t-strong" x="648" y="332">Each attempt is flagged, not obeyed, and the run goes on</text>
+    <text class="t-body" x="620" y="360">Logged by its matched words only, counted on the Monitor and in Prometheus,</text>
+    <text class="t-body" x="620" y="380">kept with the research, and named to the founder beside the result</text>
+  </g>
+
+  <!-- Live catch -->
+  <g class="n">
+    <rect x="4" y="372" width="584" height="94" rx="12" fill="#efece5" stroke="#efece5"/>
+    <text class="t-label" x="20" y="398">CAUGHT IN THE RECORDED RUN</text>
+    <text class="t-body" x="20" y="426">A web page the brief's research read hid words in</text>
+    <text class="t-body" x="20" y="448">invisible characters: cut out, flagged, and the run went on</text>
+  </g>
+</svg>

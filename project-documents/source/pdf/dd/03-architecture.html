@@ -1,0 +1,129 @@
+<!-- ============ 3.1 System architecture ============ -->
+<section class="page wide" id="architecture">
+  <div class="body">
+    <p class="kicker"><span class="num">3.1</span>Architecture and technology</p>
+    <h2 class="title">From the founder's browser to the models and the data</h2>
+    <div class="content fill" style="display:flex;flex-direction:column;justify-content:space-between">
+      <div class="diagram" style="height:4.3in;display:flex;justify-content:center"><div style="height:100%;aspect-ratio:1400/720"><!-- include: diagrams/system-architecture.svg --></div></div>
+      <div class="cols c-3 small">
+        <p class="mb0"><strong>Three tiers.</strong> The browser talks only to the Next.js app. Its server forwards each call to the FastAPI service with the API's key, which never reaches a browser.</p>
+        <p class="mb0"><strong>Guarded twice.</strong> Every request passes the guard before a route; every piece of text a model reads from the founder, the web or a document passes the prompt guardrails.</p>
+        <p class="mb0"><strong>Degrades gracefully.</strong> Without a database, sessions live in memory; without a key, its research, look-up or tracing is skipped and the rest still runs.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 3.2 The technologies the brief named ============ -->
+<section class="page wide" id="stack-brief">
+  <div class="body">
+    <p class="kicker"><span class="num">3.2</span>Architecture and technology</p>
+    <h2 class="title">The technologies the brief named, and what each does here</h2>
+    <div class="content">
+      <table class="tight roomy">
+        <thead><tr><th style="width:1.45in">The brief named</th><th style="width:1.6in">Used here</th><th>What it does in the project</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Python</strong></td><td>3.12, managed by uv</td><td>The API, the agents, the tools and the MCP server. Dependencies are locked in <span class="t-src">uv.lock</span>; one command, <code>uv sync</code>, installs them.</td></tr>
+          <tr><td><strong>LangGraph</strong></td><td>langgraph 1.2.15</td><td>The state machine: 11 nodes, conditional routes chosen from the state, parallel fan-out to the specialists, a checkpointer per session (PostgreSQL's <code>AsyncPostgresSaver</code>, or memory), and streaming of each step as it starts and finishes (<code>astream</code> in <code>tasks</code> mode).</td></tr>
+          <tr><td><strong>langchain</strong></td><td>langchain-core 1.6.10, langchain-openai 1.7.1</td><td>Messages and the chat-model client (<code>AzureChatOpenAI</code>); <code>with_structured_output</code> for typed replies; callbacks, through which Langfuse sees every call; and a thread pool that copies the request's context into each parallel call.</td></tr>
+          <tr><td><strong>openai / anthropic</strong></td><td>Azure OpenAI, gpt-5-mini; openai SDK 3.29.0</td><td>Every model call, with a reasoning effort per role (specialists minimal, Chief of Staff medium, chosen from measurements); the Responses API's web search for research. OpenAI itself is the alternative, picked by which credentials are set. Anthropic was not needed.</td></tr>
+          <tr><td><strong>pydantic</strong></td><td>2.14.1</td><td>Every request and response body, with enforced limits; every structured model reply; the workflow's state models; the investment proposal's parts; the report and its settings.</td></tr>
+          <tr><td><strong>fastapi</strong> <span class="muted">(optional in the brief)</span></td><td>0.143.0</td><td>The API: 29 routes, a server-sent event stream for live progress, request and security middleware, interactive documentation at <code>/docs</code>.</td></tr>
+          <tr><td><strong>uvicorn</strong></td><td>0.54.0</td><td>The server. One worker, since the Monitor's statistics and the rate limits live in its process; in Docker it gives running requests 30 seconds to finish when it stops.</td></tr>
+          <tr><td><strong>dotenv</strong></td><td>python-dotenv 1.2.4</td><td>Settings from <code>.env</code>, with every variable explained in <span class="t-src">.env.example</span>, which holds no secrets.</td></tr>
+          <tr><td><strong>The four variables</strong></td><td>all supported</td><td><code>DEBUG_MODE</code> turns on DEBUG logs and LangGraph's step-by-step traces; <code>OPENAI_API_KEY</code> with <code>MODEL_NAME</code> selects OpenAI when no Azure key is set; <code>ANTHROPIC_API_KEY</code> is not read.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 3.3 Added beyond the brief: intelligence and data ============ -->
+<section class="page wide" id="stack-added-1">
+  <div class="body">
+    <p class="kicker"><span class="num">3.3</span>Architecture and technology</p>
+    <h2 class="title">Added beyond the brief: where the team's facts come from</h2>
+    <div class="content">
+      <table class="tight">
+        <thead><tr><th style="width:2.05in">Added</th><th style="width:3.9in">What it does</th><th>Why it is here</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Azure OpenAI web search</strong><br><span class="muted">Responses API, Bing</span></td><td>The default for research: searches for a brief, research reports for each specialist's area, and competitor profiles as strict JSON</td><td>Grounds the team in current facts with no extra account; billed to Azure per search</td></tr>
+          <tr><td><strong>Tavily</strong><br><span class="muted">Search, Research and hosted MCP</span></td><td>The alternative for demanding research, chosen in the sidebar; its MCP server finds and reads each competitor's own pricing page</td><td>Deeper research when it is worth the credits</td></tr>
+          <tr><td><strong>Model Context Protocol</strong><br><span class="muted">mcp 2.3.0</span></td><td>The app's own MCP server for FRED (<span class="t-src">fred_server.py</span>, over stdio), and Tavily's hosted one (streamable HTTP)</td><td>Tool use through a standard interface, as planned look-ups whose cost stays predictable</td></tr>
+          <tr><td><strong>FRED</strong><br><span class="muted">St. Louis Fed</span></td><td>Official figures the plan turns on, such as wages, prices and demand, plus the 10-year Treasury yield and consumer prices; the latest value and the change over the year are worked out in code</td><td>Exact, citable numbers instead of the model's guesses</td></tr>
+          <tr><td><strong>European Central Bank</strong></td><td>Today's reference rates for converting a document's currency, fetched at most every six hours; 22 currencies</td><td>Exact conversions without looking the rate up</td></tr>
+          <tr><td><strong>Document readers</strong><br><span class="muted">pypdf, python-docx, openpyxl, python-pptx, striprtf, defusedxml</span></td><td>Read uploads: PDF, Word, PowerPoint, Excel, OpenDocument, CSV, RTF, HTML, Markdown and text, into passages that say where they are</td><td>The team works from the founder's own material</td></tr>
+          <tr><td><strong>BM25 retrieval</strong><br><span class="muted">in-house, library.py</span></td><td>Ranks the founder's passages against each agent's own task within a fixed budget, each document getting a fair share</td><td>Each agent reads what bears on its work, within its context window</td></tr>
+          <tr><td><strong>fpdf2 and markdown-it-py</strong><br><span class="muted">with the DejaVu Sans font</span></td><td>The investment proposal as a PDF: charts drawn from the figures, every section labelled with the agent that wrote it</td><td>A document the founder can share, rendered on the server</td></tr>
+          <tr><td><strong>An LLM judge and experiments</strong><br><span class="muted">judge.py, experiments.py</span></td><td>Scores a strategy on constraints, consistency, actionability and grounding; runs the scenarios as a Langfuse experiment</td><td>Measures quality when prompts or reasoning efforts change</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 3.4 Added beyond the brief: product and operations ============ -->
+<section class="page wide" id="stack-added-2">
+  <div class="body">
+    <p class="kicker"><span class="num">3.4</span>Architecture and technology</p>
+    <h2 class="title">Added beyond the brief: the product, and running it in production</h2>
+    <div class="content">
+      <table class="tight">
+        <thead><tr><th style="width:2.05in">Added</th><th style="width:3.9in">What it does</th><th>Why it is here</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Next.js 16, React 19, TypeScript</strong><br><span class="muted">Tailwind CSS 4</span></td><td>The UI: Evaluate, Reports and How it works; a server-side proxy that adds the API key; a content security policy</td><td>A product a founder can use, not a script</td></tr>
+          <tr><td><strong>Server-sent events</strong></td><td>Stream each step of the graph to the page as it starts and finishes</td><td>A two-minute wait shows real progress</td></tr>
+          <tr><td><strong>Mermaid 12</strong></td><td>Draws the real graph, the data flow and the decision routes, and the live graph lit up as the team works</td><td>Workflow clarity, one of the brief's criteria</td></tr>
+          <tr><td><strong>react-markdown, remark-gfm</strong></td><td>Render the agents' Markdown, with each citation turned into a tag that names its source; raw HTML is not rendered</td><td>Readable, safe output</td></tr>
+          <tr><td><strong>PostgreSQL</strong><br><span class="muted">psycopg 3.3.6, langgraph-checkpoint-postgres 3.2.0</span></td><td>Sessions, reports and their last 30 versions, uploads, the Monitor's history; numbered migrations under an advisory lock</td><td>Nothing is lost on a restart; saves are safe with several workers</td></tr>
+          <tr><td><strong>Langfuse 5</strong><br><span class="muted">Cloud, EU region</span></td><td>Every model call traced and masked; the 22 prompts versioned; scores from the team, the founder and the judge; experiments</td><td>See what each agent was asked and answered, at what cost, and how good it was</td></tr>
+          <tr><td><strong>Prometheus client</strong></td><td>Counters and histograms at <code>/metrics</code>: requests, evaluations, steps, model calls and tokens, retries, guardrail flags</td><td>Metrics to alert on</td></tr>
+          <tr><td><strong>Docker and Compose</strong><br><span class="muted">start.sh</span></td><td>Images for the API and the web app, run as users without privileges; Compose with PostgreSQL; one launcher, locally or in containers</td><td>One command to run the whole app</td></tr>
+          <tr><td><strong>GitLab CI</strong></td><td>Backend tests with a PostgreSQL service, frontend lint, types, tests and build, on every push; the images on the default branch</td><td>The same checks for every change</td></tr>
+          <tr><td><strong>pytest, Vitest, Testing Library</strong></td><td>578 tests with fake models and a fake backend: no credentials, no model calls; coverage gates at 80%</td><td>Confidence to change the code</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 3.5 The codebase ============ -->
+<section class="page wide" id="codebase">
+  <div class="body">
+    <p class="kicker"><span class="num">3.5</span>Architecture and technology</p>
+    <h2 class="title">A modular codebase: each module owns one job</h2>
+    <p class="lede">About 10,200 lines of Python and 12,800 of TypeScript and CSS, with 10,600 lines of tests. Every module is named for what it does, and its docstring says why.</p>
+    <div class="content cols c-3">
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-chief"><i class="icon" data-icon="state"></i></span><div><div class="name">The team and its workflow</div><div class="role">2,013 lines</div></div></div>
+        <p class="small mb0"><span class="t-src">graph.py</span> the state machine · <span class="t-src">state.py</span> the state and its typed models · <span class="t-src">agents/</span> the Chief of Staff, the specialists' node, their roles, the proposal writer · <span class="t-src">llm.py</span> the model client · <span class="t-src">metrics.py</span> · <span class="t-src">progress.py</span></p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-research"><i class="icon" data-icon="globe"></i></span><div><div class="name">Grounding</div><div class="role">2,225 lines</div></div></div>
+        <p class="small mb0"><span class="t-src">brief.py</span> and <span class="t-src">templates/</span> · <span class="t-src">providers.py</span>, <span class="t-src">azure_web.py</span>, <span class="t-src">search.py</span> · <span class="t-src">deep_research.py</span> · <span class="t-src">lookups.py</span> and <span class="t-src">fred_server.py</span> · <span class="t-src">extract.py</span> and <span class="t-src">library.py</span></p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-primary"><i class="icon" data-icon="server"></i></span><div><div class="name">API and platform</div><div class="role">2,067 lines</div></div></div>
+        <p class="small mb0"><span class="t-src">main.py</span> the routes · <span class="t-src">security.py</span> the guard · <span class="t-src">observability.py</span> request IDs and logs · <span class="t-src">persistence.py</span> PostgreSQL or memory · <span class="t-src">config.py</span></p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-finance"><i class="icon" data-icon="document"></i></span><div><div class="name">Documents</div><div class="role">2,585 lines</div></div></div>
+        <p class="small mb0"><span class="t-src">reports.py</span> reports and versions · <span class="t-src">proposal.py</span> its parts and metrics · <span class="t-src">document.py</span> exact changes · <span class="t-src">currency.py</span>, <span class="t-src">units.py</span>, <span class="t-src">rates.py</span> · <span class="t-src">report_pdf.py</span>, <span class="t-src">report_charts.py</span></p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-risk"><i class="icon" data-icon="shield"></i></span><div><div class="name">Safety and quality</div><div class="role">1,197 lines</div></div></div>
+        <p class="small mb0"><span class="t-src">guardrails.py</span> fences and flags · <span class="t-src">tracing.py</span> Langfuse and masking · <span class="t-src">prompt_library.py</span> · <span class="t-src">judge.py</span> · <span class="t-src">experiments.py</span> · <span class="t-src">monitor.py</span> the Monitor and metrics</p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-technical"><i class="icon" data-icon="window"></i></span><div><div class="name">The web app</div><div class="role">12,803 lines in 62 files</div></div></div>
+        <p class="small mb0"><span class="t-src">app/</span> three pages and the API proxy · <span class="t-src">components/</span> evaluate, reports, how it works, a shared UI kit · <span class="t-src">lib/</span> the typed API client, agents, theme · <span class="t-src">globals.css</span> the design tokens</p>
+      </div>
+    </div>
+    <p class="small muted mt">Also: <span class="t-src">tests/</span>, 30 test files and their fakes (6,403 lines); 25 frontend test files and their fakes (4,201 lines); <span class="t-src">scenarios/</span>, <span class="t-src">demo.py</span>, <span class="t-src">start.sh</span>, the Dockerfiles, Compose and CI. Line counts from the main branch on 22 October 2026.</p>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

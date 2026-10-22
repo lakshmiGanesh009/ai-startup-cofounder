@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>The AI Startup Co-Founder Team: Deep Dive</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  /* Deep-dive pages: 16:9, like slides, with more to read on each. */
+  .page.wide .body { display: flex; flex-direction: column; }
+  .page.wide .body > .content { flex: 0 1 auto; min-height: 0; }
+  .page.wide .body > .content.fill { flex: 1 1 auto; }
+  .foot .nav { display: flex; gap: 0.12in; align-items: baseline; }
+  .foot .nav .sep { color: var(--rule-strong); }
+
+  .lede { margin-bottom: 0.18in; }
+  .cols { display: grid; gap: 0.32in; }
+  .c-7-5 { grid-template-columns: 7fr 5fr; }
+  .c-5-7 { grid-template-columns: 5fr 7fr; }
+  .c-6-6 { grid-template-columns: 1fr 1fr; }
+  .c-8-4 { grid-template-columns: 8fr 4fr; }
+  .c-4-8 { grid-template-columns: 4fr 8fr; }
+  .c-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .c-4 { grid-template-columns: repeat(4, 1fr); }
+  .c-5 { grid-template-columns: repeat(5, 1fr); }
+  .cols > table, .cols > figure { align-self: start; }
+  table.roomy { font-size: 9.6pt; line-height: 1.42; }
+  table.roomy td { padding-top: 0.075in; padding-bottom: 0.075in; }
+  .roomy-text .small, .roomy-text.small { font-size: 9.8pt; line-height: 1.48; }
+  table.audit { font-size: 8.1pt; line-height: 1.32; }
+  table.audit td { padding-top: 0.04in; padding-bottom: 0.04in; }
+  .compact-stats .stat { padding: 0.07in 0.14in; }
+  .compact-stats .stat .value { font-size: 15pt; margin: 0.02in 0 0.01in; }
+
+  .body-text { font-size: 10.6pt; line-height: 1.5; color: var(--ink); }
+  .body-text p { margin-bottom: 0.1in; }
+  .k-list { list-style: none; padding: 0; margin: 0; }
+  .k-list li { display: grid; grid-template-columns: 1.55in 1fr; gap: 0.14in; padding: 0.07in 0; border-bottom: 1px solid var(--rule); margin: 0; }
+  .k-list li:last-child { border-bottom: none; }
+  .k-list .k { font-weight: 600; color: var(--ink); }
+  .k-list .v { color: var(--ink-2); }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .stat-grid .stat { border-bottom: 1px solid var(--rule); }
+  .stat-grid .stat:nth-child(odd) { border-right: 1px solid var(--rule); }
+  .stat-grid .stat:nth-last-child(-n+2) { border-bottom: none; }
+  .stat-row { display: grid; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); overflow: hidden; }
+  .stat-row .stat + .stat { border-left: 1px solid var(--rule); }
+
+  .callout { border-radius: 8px; padding: 0.12in 0.16in; font-size: 9.8pt; line-height: 1.45; }
+  .callout h3 { margin-bottom: 0.04in; }
+  .callout.primary { background: var(--primary-soft); }
+  .callout.good { background: var(--good-soft); }
+  .callout.warn { background: var(--warn-soft); }
+  .callout.bad { background: var(--bad-soft); }
+  .callout.chief { background: var(--chief-soft); }
+
+  .agent-card { border-radius: 10px; padding: 0.14in 0.15in; border: 1px solid transparent; }
+  .agent-card .who { margin-bottom: 0.1in; }
+  .agent-card p { font-size: 9.2pt; line-height: 1.42; color: var(--ink); margin-bottom: 0.06in; }
+  .agent-card .meta { font-size: 8pt; color: var(--ink-3); margin-top: 0.06in; }
+  .agent-card ul { font-size: 8.9pt; line-height: 1.4; padding-left: 1em; margin-bottom: 0.04in; }
+
+  .shot-frame { position: relative; }
+  .shot-frame .shot { width: 100%; }
+  .shot-frame figcaption { margin-top: 0.05in; }
+  .shot.h-cap { height: 100%; object-fit: cover; object-position: top left; }
+
+  .t-src { font-family: var(--mono); font-size: 7.8pt; color: var(--ink-3); white-space: nowrap; }
+  td .t-src { white-space: normal; }
+  .yes { color: var(--good); font-weight: 600; }
+  .part { color: var(--warn); font-weight: 600; }
+  .no { color: var(--bad); font-weight: 600; }
+  .tag { display: inline-block; font-size: 7.4pt; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; padding: 0.01in 0.06in; border-radius: 4px; }
+  .tag.s { background: var(--good-soft); color: var(--good); }
+  .tag.f { background: var(--warn-soft); color: var(--warn); }
+  .tag.w { background: var(--research-soft); color: var(--research-deep); }
+
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 0; }
+  .steps > li { counter-increment: s; position: relative; padding: 0 0 0.09in 0.34in; margin: 0; }
+  .steps > li::before { content: counter(s); position: absolute; left: 0; top: 0.01in; width: 0.22in; height: 0.22in; border-radius: 50%; background: var(--primary); color: #fff; font-size: 7.8pt; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+  .steps > li b { font-weight: 600; }
+
+  .quote { font-family: var(--serif); font-size: 12pt; line-height: 1.45; color: var(--ink); border-left: 2px solid var(--rule-strong); padding: 0.02in 0 0.02in 0.16in; }
+  .divider-num { font-family: var(--serif); font-size: 64pt; line-height: 1; color: #9fb2cc; }
+
+  /* A timeline of one run: a bar per step, in its agent's colour. */
+  .gantt .axis { position: relative; height: 0.2in; margin-left: 1.05in; font-size: 7.6pt; color: var(--ink-3); }
+  .gantt .axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .gantt .axis span:first-child { transform: none; }
+  .gantt .axis span:last-child { transform: translateX(-100%); }
+  .gantt .row { display: flex; align-items: center; height: 0.335in; }
+  .gantt .lab { width: 1.05in; flex: 0 0 auto; font-size: 8.8pt; color: var(--ink); }
+  .gantt .track { position: relative; flex: 1; height: 100%; border-top: 1px solid var(--rule);
+    background-image: repeating-linear-gradient(to right, var(--rule) 0 1px, transparent 1px 20%); }
+  .gantt .row:last-child .track { border-bottom: 1px solid var(--rule); }
+  .gantt .b { position: absolute; top: 24%; height: 52%; border-radius: 3px; }
+  .gantt .b.chief { background: var(--chief); }
+  .gantt .b.research { background: var(--research); }
+  .gantt .b.marketing { background: var(--marketing); }
+  .gantt .b.finance { background: var(--finance); }
+  .gantt .b.technical { background: var(--technical); }
+  .gantt .b.risk { background: var(--risk); }
+  .gantt .b.team { background: linear-gradient(90deg, var(--marketing) 0 25%, var(--finance) 25% 50%, var(--technical) 50% 75%, var(--risk) 75%); }
+
+  /* The cover. */
+  .cover .content { display: flex; flex-direction: column; }
+  .cover h1 { font-family: var(--serif); font-weight: 500; font-size: 46pt; line-height: 1.04; letter-spacing: -0.015em; color: #fff; margin: 0.55in 0 0.16in; }
+  .cover .sub { font-family: var(--serif); font-style: italic; font-size: 18pt; line-height: 1.35; color: #dfe6f1; max-width: 9.4in; margin: 0; }
+  .cover .team { display: flex; gap: 0.3in; margin-top: auto; padding-top: 0.2in; border-top: 1px solid rgba(255,255,255,.16); }
+  .cover .team .who .name { color: #fff; }
+  .cover .team .who .role { color: #9fb2cc; }
+  .cover .meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3in; margin-top: 0.22in; font-size: 9pt; color: #c9d3e1; }
+  .cover .meta .k { display: block; font-size: 7.4pt; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: #8fa3bf; margin-bottom: 0.03in; }
+</style>
+</head>
+<body>
+<!-- include: dd/01-front.html -->
+<!-- include: dd/02-brief.html -->
+<!-- include: dd/03-architecture.html -->
+<!-- include: dd/04-team.html -->
+<!-- include: dd/05-grounding.html -->
+<!-- include: dd/06-safety.html -->
+<!-- include: dd/07-product.html -->
+<!-- include: dd/08-production.html -->
+<!-- include: dd/09-reflection.html -->
+</body>
+</html>

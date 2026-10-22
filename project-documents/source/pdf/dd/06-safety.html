@@ -1,0 +1,169 @@
+<!-- ============ 6.1 Type safety with Pydantic ============ -->
+<section class="page wide" id="pydantic">
+  <div class="body">
+    <p class="kicker"><span class="num">6.1</span>Correctness and safety</p>
+    <h2 class="title">Typed at every boundary: what comes in, and every decision that comes out</h2>
+    <div class="content" style="display:flex;flex-direction:column;gap:0.16in">
+      <div class="diagram" style="height:3.72in;display:flex;justify-content:center"><div style="height:100%;aspect-ratio:1400/520"><!-- include: diagrams/structured-outputs.svg --></div></div>
+      <div class="cols c-3" style="gap:0.2in">
+        <div class="callout primary small"><h3>Requests in: constrained</h3>Every body that starts model work is a Pydantic model with enforced limits: a prompt of 1 to 8,000 characters, context fields up to 4,000, at most 10 answers, 20 facts and 50 sources, each an http(s) address; session ids by pattern; reasoning efforts from a fixed list; a conversion rate above 0 and below 1,000,000. Anything else is answered 422, naming the field.</div>
+        <div class="callout good small"><h3>Checked on the wire</h3>Captured offline for this audit, with the real client and a stand-in server: a <code>DelegationPlan</code> call is sent with <code>response_format</code> <code>json_schema</code>, <code>strict: true</code> and the four names as an enum. A reply naming a fifth specialist, "sales", is rejected by Pydantic: "Input should be 'marketing', 'finance', 'technical' or 'risk'".</div>
+        <div class="callout chief small"><h3>Typed in storage</h3>The checkpointer's serialiser lists the 13 state models a session may hold. Reports, their settings and the proposal are Pydantic models too, and old saves still load: money fields renamed since are read through aliases.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 6.2 The audit, call by call (1) ============ -->
+<section class="page wide" id="audit-1">
+  <div class="body">
+    <p class="kicker"><span class="num">6.2</span>Correctness and safety · the audit</p>
+    <h2 class="title">Every model call, audited: the team, its look-ups and the brief</h2>
+    <div class="content">
+      <table class="tight audit">
+        <thead><tr><th style="width:1.75in">Call (prompt name)</th><th style="width:0.65in">Reply</th><th style="width:1.75in">Pydantic schema</th><th style="width:2.25in">Enforced by the schema</th><th>Checked in code after parsing</th></tr></thead>
+        <tbody>
+          <tr><td colspan="5" class="small muted" style="padding-top:0.02in"><strong>The team, in the graph</strong></td></tr>
+          <tr><td><code>chief/plan</code></td><td><span class="tag s">typed</span></td><td><code>DelegationPlan</code>, <code>Task</code></td><td>specialist is one of four names; every field present; no others</td><td>tasks for one specialist joined; an empty plan assigns all four</td></tr>
+          <tr><td><code>specialists/…</code> ×4</td><td><span class="tag f">prose</span></td><td>none: the report is Markdown</td><td class="muted">—</td><td>a 250-word target in the prompt; fence markers removed; then scored by <code>chief/review</code>; a failed call becomes a named gap</td></tr>
+          <tr><td><code>chief/review</code></td><td><span class="tag s">typed</span></td><td><code>ReviewResult</code></td><td>approved is a bool, score an int, feedback a string</td><td>approval decided from the score (4 or more); feedback cleared when approved. <span class="part">The 1 to 5 range is not enforced.</span></td></tr>
+          <tr><td><code>specialists/critique</code></td><td><span class="tag s">typed</span></td><td><code>SpecialistCritique</code>, <code>Conflict</code></td><td>raised_by and about are each one of four names</td><td><span class="part">"At most two" is asked by the prompt, not enforced.</span></td></tr>
+          <tr><td><code>chief/resolve</code></td><td><span class="tag s">typed</span></td><td><code>Resolutions</code>, <code>Resolution</code></td><td>the specialist to revise is one of four names, or none</td><td>only a specialist assigned to the request is sent back</td></tr>
+          <tr><td><code>chief/synthesis</code></td><td><span class="tag f">prose</span></td><td>none: the strategy is Markdown</td><td class="muted">—</td><td>a 500-word target in the prompt; fence markers removed; scored by the judge when it is on</td></tr>
+          <tr><td colspan="5" class="small muted"><strong>Look-ups and research</strong></td></tr>
+          <tr><td><code>lookups/fred-searches</code></td><td><span class="tag s">typed</span></td><td><code>FredSearches</code></td><td>a list of strings</td><td>blanks dropped; at most four searches of 120 characters</td></tr>
+          <tr><td><code>lookups/fred-picks</code></td><td><span class="tag s">typed</span></td><td><code>FredPicks</code>, <code>FredPick</code></td><td>each pick has an id and a reason</td><td>ids the Chief of Staff was not offered are dropped; at most four</td></tr>
+          <tr><td><code>research/competitors</code></td><td><span class="tag s">typed</span></td><td><code>Competitors</code>, <code>Competitor</code></td><td>each has a name and what it sells</td><td>at most three are profiled</td></tr>
+          <tr><td colspan="5" class="small muted"><strong>Preparing the brief</strong></td></tr>
+          <tr><td><code>brief/search</code></td><td><span class="tag s">typed</span></td><td><code>SearchPlan</code></td><td>a list of strings</td><td>blanks and repeats dropped; at most four</td></tr>
+          <tr><td><code>brief/review</code></td><td><span class="tag s">typed</span></td><td><code>BriefReview</code>, <code>Finding</code>, <code>Question</code></td><td>each fact cites results by number; each question has a reason and suggestions</td><td>a fact must cite a real result, at most eight kept; sources renumbered; at most three questions</td></tr>
+        </tbody>
+      </table>
+      <p class="small muted mt">Every structured call goes through one function, <code>structured_invoke</code> (<span class="t-src">agents/chief_of_staff.py</span>): <code>with_structured_output(schema, include_raw=True)</code>, the token count recorded from the raw reply, the call linked to its prompt's version in Langfuse, and an unusable reply retried once.</p>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 6.2 The audit, call by call (2) ============ -->
+<section class="page wide" id="audit-2">
+  <div class="body">
+    <p class="kicker"><span class="num">6.2</span>Correctness and safety · the audit, continued</p>
+    <h2 class="title">Every model call, audited: the proposal, questions, the judge and the web</h2>
+    <div class="content">
+      <table class="tight audit">
+        <thead><tr><th style="width:1.75in">Call (prompt name)</th><th style="width:0.65in">Reply</th><th style="width:1.75in">Pydantic schema</th><th style="width:2.25in">Enforced by the schema</th><th>Checked in code after parsing</th></tr></thead>
+        <tbody>
+          <tr><td colspan="5" class="small muted" style="padding-top:0.02in"><strong>The investment proposal</strong></td></tr>
+          <tr><td><code>proposal/market</code>, <code>technical</code>, <code>risk</code>, <code>financial</code>, <code>executive</code></td><td><span class="tag s">typed</span></td><td><code>MarketPlan</code>, <code>TechnicalPlan</code>, <code>RiskPlan</code>, <code>FinancialPlan</code>, <code>ExecutivePlan</code></td><td>numbers as numbers; six enums: competitor kind, risk category, probability, impact, KPI category, and the verdict (Go, Go with conditions, Not yet)</td><td>revenue, operating costs, NPV, IRR, payback and break-even worked out in code from Finance's drivers; failing figure checks send Finance back once</td></tr>
+          <tr><td><code>proposal/rewrite</code></td><td><span class="tag s">typed</span></td><td><code>Rewritten</code></td><td>one text field</td><td>spliced back by code into the one field or passage asked for, and returned as a draft</td></tr>
+          <tr><td colspan="5" class="small muted"><strong>Questions and evaluation</strong></td></tr>
+          <tr><td><code>documents/answer</code></td><td><span class="tag s">typed</span></td><td><code>Answer</code></td><td>the answer, and the marks it cites</td><td>each mark matched to a real passage; marks the model made up are dropped</td></tr>
+          <tr><td><code>judge/strategy</code></td><td><span class="tag s">typed</span></td><td><code>Judgement</code></td><td>four integer scores and a comment</td><td>each score clamped to 1 to 5 before it is sent to Langfuse</td></tr>
+          <tr><td colspan="5" class="small muted"><strong>Web research: calls outside the 22 prompts</strong></td></tr>
+          <tr><td>Azure OpenAI web search</td><td><span class="tag w">data</span></td><td>the SDK's own typed response</td><td class="muted">—</td><td>each page kept once; addresses cleaned of tracking; snippets cut to length</td></tr>
+          <tr><td>Azure OpenAI research report</td><td><span class="tag f">prose</span></td><td>none</td><td class="muted">—</td><td>a 350-word target; closing chat removed; citations renumbered</td></tr>
+          <tr><td>Azure OpenAI competitor profile</td><td><span class="tag s">typed</span></td><td>a strict JSON Schema, then <code>CompanyProfile</code></td><td>the provider enforces every field, and no others</td><td>parsed as JSON, each field's citations renumbered, then built into the <code>CompanyProfile</code> model</td></tr>
+          <tr><td>Tavily research</td><td><span class="tag w">mixed</span></td><td>Tavily's output schema, then <code>CompanyProfile</code></td><td class="muted">Tavily's own</td><td>the closing reference list removed; a profile built into <code>CompanyProfile</code></td></tr>
+          <tr><td colspan="5" class="small muted"><strong>Requests that start model work</strong></td></tr>
+          <tr><td>evaluate, brief, ask, proposal and revise routes</td><td><span class="tag s">typed</span></td><td>a request model each, such as <code>EvaluateRequest</code></td><td>lengths, patterns, enums and ranges</td><td>a violation is answered 422, naming the field; nothing reaches a model</td></tr>
+        </tbody>
+      </table>
+      <div class="stat-row compact-stats mt" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat"><div class="label">Structured, Pydantic-validated</div><div class="value">17 of 22 prompts</div><div class="sub">every decision among them</div></div>
+        <div class="stat"><div class="label">Prose by design</div><div class="value">5 of 22 prompts</div><div class="sub">the four reports and the strategy</div></div>
+        <div class="stat"><div class="label">Requests constrained</div><div class="value">All</div><div class="sub">bodies, paths and queries</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 6.3 What Pydantic does not cover yet ============ -->
+<section class="page wide" id="gaps">
+  <div class="body">
+    <p class="kicker"><span class="num">6.3</span>Correctness and safety · the audit's findings</p>
+    <h2 class="title">So: Pydantic everywhere a decision is made, with two gaps worth closing</h2>
+    <p class="lede">The answer to "is every model call type-safe and constrained?" is: every decision is typed and every request constrained, but not every call. These are the exceptions, how far they matter, and the fix for each.</p>
+    <div class="content cols c-6-6" style="gap:0.24in">
+      <div class="card">
+        <div class="who"><span class="agent-dot sm" style="color:var(--warn);background:var(--warn-soft)"><i class="icon" data-icon="sliders"></i></span><div><div class="name">1 · Ranges and counts live in descriptions</div><div class="role">gap · low risk today</div></div></div>
+        <p class="small">"Score 1 to 5", "at most two conflicts" and "two to four searches" are written in the fields' descriptions, not as constraints. The model is guided by them, and code enforces most of them afterwards (the caps, the judge's clamp, approval from the score), but a review scored 9 would be accepted, and counted as approved.</p>
+        <p class="small mb0"><strong>Fix:</strong> add validators that clamp or reject out-of-range values (<code>AfterValidator</code>, or <code>Field(ge=1, le=5)</code> once the deployment's strict mode is shown to accept those keywords), with a test for each.</p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm" style="color:var(--warn);background:var(--warn-soft)"><i class="icon" data-icon="alert"></i></span><div><div class="name">2 · A schema violation is not retried</div><div class="role">gap · rare in practice</div></div></div>
+        <p class="small"><code>structured_invoke</code> retries a reply that does not parse and one the content filter withheld. A reply that breaks the schema is rejected inside the SDK's own parsing, as a Pydantic <code>ValidationError</code>, which is neither retried nor among the errors a review or critique is skipped for, so it would end the request with a 500. Strict decoding makes such a reply practically unreachable on Azure.</p>
+        <p class="small mb0"><strong>Fix:</strong> catch <code>ValidationError</code> in <code>structured_invoke</code>, retry once, then raise <code>LLMReplyError</code>, so it is handled like any unusable reply.</p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm" style="color:var(--ink-2);background:var(--sunken)"><i class="icon" data-icon="document"></i></span><div><div class="name">3 · Five prose outputs, by design</div><div class="role">a choice, with its own safeguards</div></div></div>
+        <p class="small mb0">The four reports and the strategy are for people to read, so they are Markdown: shaped by their prompts, cleaned of fence markers, scored by the review (the reports) and optionally the judge (the strategy), and a failed report becomes a named gap. A schema for them (a recommendation, points, assumptions) would buy structure at the cost of natural prose and more tokens.</p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm" style="color:var(--ink-2);background:var(--sunken)"><i class="icon" data-icon="globe"></i></span><div><div class="name">4 · Research JSON is typed at the edge</div><div class="role">a choice · low risk</div></div></div>
+        <p class="small mb0">A competitor profile is enforced by the provider's schema, parsed as JSON, and every field turned into a string before it becomes a <code>CompanyProfile</code>. That model is the first Pydantic check, and since every field is a string, a malformed value would be shown as text rather than rejected. <strong>Fix:</strong> validate the raw profile against a Pydantic model before it is cited.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 6.4 Prompt guardrails ============ -->
+<section class="page wide" id="guardrails">
+  <div class="body">
+    <p class="kicker"><span class="num">6.4</span>Correctness and safety</p>
+    <h2 class="title">Prompt guardrails: the founder's and the web's text is material, never orders</h2>
+    <div class="content" style="display:flex;flex-direction:column;gap:0.18in">
+      <div class="diagram"><!-- include: diagrams/guardrails.svg --></div>
+      <div class="cols c-3 small" style="gap:0.24in">
+        <p class="mb0"><strong>Neutralise, don't refuse.</strong> A founder whose brief merely sounds like an instruction is not turned away, and one hostile web page cannot fail a run. The fences and rules do not depend on the scan catching everything.</p>
+        <p class="mb0"><strong>Narrow on purpose.</strong> A founder asking whether to ignore a regulation, or describing an app for jailbroken phones, is not flagged; only the marks of an attempt to instruct the agents are.</p>
+        <p class="mb0"><strong>Azure's own filter</strong> refuses a prompt it reads as harmful or as a jailbreak. Cutting the attempt out first keeps the run going; if Azure refuses something the scan missed, the founder is told which part to take out.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 6.5 Keeping the agents bounded ============ -->
+<section class="page wide" id="runaway">
+  <div class="body">
+    <p class="kicker"><span class="num">6.5</span>Correctness and safety</p>
+    <h2 class="title">No runaway agents: every loop, call and caller has a limit</h2>
+    <div class="content cols c-6-6" style="gap:0.3in">
+      <div>
+        <h4>Limits, and where they are set</h4>
+        <table class="tight">
+          <thead><tr><th>Limit</th><th class="num">Default</th><th>What it stops</th></tr></thead>
+          <tbody>
+            <tr><td><code>MAX_ITERATIONS</code></td><td class="num">1</td><td>a report revised over and over after review</td></tr>
+            <tr><td><code>MAX_CRITIQUE_ROUNDS</code></td><td class="num">1</td><td>critique and resolve repeating without end</td></tr>
+            <tr><td><code>LLM_TIMEOUT</code> / <code>_HIGH</code></td><td class="num">120 s / 300 s</td><td>a model call that stalls (Azure sometimes does)</td></tr>
+            <tr><td><code>LLM_MAX_RETRIES</code></td><td class="num">2</td><td>retrying a failing call indefinitely</td></tr>
+            <tr><td><code>SEARCH_TIMEOUT</code>, <code>RESEARCH_TIMEOUT</code></td><td class="num">20 s, 300 s</td><td>a search or a research task that hangs</td></tr>
+            <tr><td><code>LOOKUP_TIMEOUT</code></td><td class="num">30 s</td><td>an MCP look-up that hangs</td></tr>
+            <tr><td><code>RUNS_PER_HOUR</code></td><td class="num">30</td><td>one caller starting runs without pause</td></tr>
+            <tr><td><code>MAX_CONCURRENT_RUNS</code></td><td class="num">4</td><td>the model deployment being exhausted</td></tr>
+            <tr><td><code>REQUESTS_PER_MINUTE</code></td><td class="num">300</td><td>a caller flooding the API</td></tr>
+          </tbody>
+        </table>
+        <p class="small muted mt">Caps in code as well: two conflicts a specialist (asked), three competitors, four searches, four FRED picks, eight facts, three questions, a 9,000-character document budget per agent.</p>
+      </div>
+      <div class="stack">
+        <h4>When something fails</h4>
+        <ul class="ticks small">
+          <li><strong>A specialist fails:</strong> its report becomes a named gap (<code>[unavailable]</code>); review and critique skip it; the strategy says so.</li>
+          <li><strong>A review, critique or resolve fails:</strong> it is skipped and logged, since it refines reports that already exist.</li>
+          <li><strong>The plan or the strategy fails:</strong> the request ends with 502 and the reason; missing credentials give 503.</li>
+          <li><strong>A look-up or research task fails:</strong> it is left out with a note; the run goes on.</li>
+          <li><strong>Anything unexpected:</strong> logged with its traceback, answered 500 with the request's ID, and the evaluation recorded as failed.</li>
+          <li><strong>The browser leaves mid-run:</strong> logged as 499, not an error; the run's slot is released.</li>
+        </ul>
+        <div class="callout chief small">Every decision is bounded by design: the review and critique loops each run at most once more, and a router sends a revised report straight on once its rounds are used, so a run always reaches the strategy.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

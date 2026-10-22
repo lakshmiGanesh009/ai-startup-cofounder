@@ -1,0 +1,226 @@
+<!-- ============ 4.1 The founding team ============ -->
+<section class="page wide" id="team">
+  <div class="body">
+    <p class="kicker"><span class="num">4.1</span>The agent team and its workflow</p>
+    <h2 class="title">A founding team of five agents, each with its own colour and craft</h2>
+    <div class="content" style="display:flex;flex-direction:column;gap:0.16in">
+      <div class="cols c-5" style="gap:0.14in">
+        <div class="agent-card tint-chief">
+          <div class="who"><span class="agent-dot c-chief"><i class="icon" data-icon="chief"></i></span><div><div class="name">Chief of Staff</div><div class="role">the manager</div></div></div>
+          <p>Holds no area of its own. Turns the brief into the decision at stake, delegates, reviews, settles conflicts and writes the strategy.</p>
+          <ul><li>the plan and each task</li><li>a score and feedback on every report</li><li>a decision on every conflict</li><li>the strategy and the proposal's summary</li></ul>
+          <div class="meta">Reasoning: medium · its calls are the team's decisions</div>
+        </div>
+        <div class="agent-card tint-marketing">
+          <div class="who"><span class="agent-dot c-marketing"><i class="icon" data-icon="megaphone"></i></span><div><div class="name">Marketing Strategy</div><div class="role">a go-to-market lead</div></div></div>
+          <p>Has launched products on small budgets. Judges customer niches, positioning, demand and the go-to-market.</p>
+          <ul><li>one beachhead niche, and who buys now</li><li>positioning against what buyers use</li><li>one or two affordable channels</li><li>the cheapest test of demand, with its threshold</li></ul>
+          <div class="meta">Reasoning: minimal · reads competitor profiles</div>
+        </div>
+        <div class="agent-card tint-finance">
+          <div class="who"><span class="agent-dot c-finance"><i class="icon" data-icon="chart"></i></span><div><div class="name">Financial Planning</div><div class="role">a startup CFO</div></div></div>
+          <p>Builds lean launch budgets. Judges start-up costs, pricing, unit economics and an affordable start.</p>
+          <ul><li>one pricing model and price point</li><li>a first-phase budget, line by line</li><li>gross margin per customer</li><li>customers to break even, and runway</li></ul>
+          <div class="meta">Reasoning: minimal · reads competitor profiles</div>
+        </div>
+        <div class="agent-card tint-technical">
+          <div class="who"><span class="agent-dot c-technical"><i class="icon" data-icon="chip"></i></span><div><div class="name">Technical Feasibility</div><div class="role">a pragmatic CTO</div></div></div>
+          <p>Ships first versions with very small teams. Judges what to build first, the tools it needs and the technical risk.</p>
+          <ul><li>the thinnest demo of the core value</li><li>build or buy, naming the services</li><li>the effort, in weeks</li><li>the riskiest assumption, and a cheap test</li></ul>
+          <div class="meta">Reasoning: minimal</div>
+        </div>
+        <div class="agent-card tint-risk">
+          <div class="who"><span class="agent-dot c-risk"><i class="icon" data-icon="shield"></i></span><div><div class="name">Risk &amp; Compliance</div><div class="role">a risk and compliance lead</div></div></div>
+          <p>Works with early-stage companies. Judges privacy, regulation, reliability, delivery and client-management risk.</p>
+          <ul><li>the risks that could stop the launch</li><li>how likely and how severe each is</li><li>a safeguard each, and v1's limits</li><li>what the law requires, apart from good practice</li></ul>
+          <div class="meta">Reasoning: minimal</div>
+        </div>
+      </div>
+      <div class="cols c-6-6" style="gap:0.2in">
+        <div class="callout primary small"><strong>One node, four roles.</strong> The specialists share one implementation and differ only in their role text (decision D4). Each is told to be specific to the venture, show the arithmetic behind any number, mark assumptions, cite research as [n], lead with its recommendation and keep to about 250 words; the model treats the length as a target, not a hard cap.</div>
+        <div class="callout small" style="background:var(--research-soft)"><strong>Web research is a tool, not an agent.</strong> It is drawn in slate grey: searches through Azure OpenAI's Bing or Tavily, deep research, and official figures from FRED. Each agent's colour follows it everywhere: progress, reviews, citations, the Monitor and the PDF.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 4.2 The state machine ============ -->
+<section class="page wide" id="state-machine">
+  <div class="body">
+    <p class="kicker"><span class="num">4.2</span>The agent team and its workflow</p>
+    <h2 class="title">Plan, act, check: a LangGraph state machine with bounded loops</h2>
+    <div class="content fill" style="display:flex;flex-direction:column;justify-content:space-between">
+      <div class="diagram" style="height:4.15in;display:flex;justify-content:center"><div style="height:100%;aspect-ratio:1400/640"><!-- include: diagrams/agent-workflow.svg --></div></div>
+      <div class="cols c-4 small" style="gap:0.24in">
+        <p class="mb0"><strong>11 nodes, 40 edges.</strong> Three edges always run (start to plan, critique to resolve, synthesis to end); the other 37 are routes the state chooses.</p>
+        <p class="mb0"><strong>Five routers.</strong> After the plan, the look-ups and research, the review, a specialist and the resolve, a function reads the state and names the next step or steps (<span class="t-src">graph.py</span>).</p>
+        <p class="mb0"><strong>Parallel by design.</strong> A router that returns several names starts those steps at once: the assigned specialists, or the look-ups beside deep research.</p>
+        <p class="mb0"><strong>Always ends.</strong> One revision after review and one critique round, both settings; a revised report then goes straight on.</p>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 4.3 The shared state ============ -->
+<section class="page wide" id="state">
+  <div class="body">
+    <p class="kicker"><span class="num">4.3</span>The agent team and its workflow</p>
+    <h2 class="title">One shared, typed state that every step reads and writes</h2>
+    <div class="content cols c-8-4">
+      <table class="tight">
+        <thead><tr><th style="width:1.35in">Part</th><th style="width:2.9in">Fields (<span class="t-src">WorkflowState</span>, state.py)</th><th>How a step writes it</th></tr></thead>
+        <tbody>
+          <tr><td><strong>The request</strong></td><td><code>request</code>, <code>venture</code>, <code>context</code> (a <code>RequestContext</code>)</td><td>Set by the API; <code>venture</code> keeps the session's first request so a follow-up knows what it refines</td></tr>
+          <tr><td><strong>The plan</strong></td><td><code>plan</code> (a <code>DelegationPlan</code>), <code>assignments</code></td><td>Replaced by the plan step, one task per specialist</td></tr>
+          <tr><td><strong>The work</strong></td><td><code>analyses</code>: the reports, by specialist</td><td><strong>Merged</strong> by a reducer, so four specialists running at once can each add theirs</td></tr>
+          <tr><td><strong>Review</strong></td><td><code>reviews</code>, <code>revisions</code>, <code>iteration</code>, <code>review_history</code></td><td>The history is <strong>appended</strong> round by round; the rest replaced</td></tr>
+          <tr><td><strong>Critique</strong></td><td><code>conflicts</code>, <code>resolutions</code>, <code>critique_revisions</code>, <code>critique_round</code></td><td>Resolutions are <strong>appended</strong>; the conflicts of a round replaced</td></tr>
+          <tr><td><strong>Evidence</strong></td><td><code>deep</code>, <code>research_provider</code>, <code>deep_research</code>, <code>economic</code></td><td>Kept for the session, so a follow-up reuses the research and the figures</td></tr>
+          <tr><td><strong>Cost</strong></td><td><code>metrics</code>: calls, seconds and tokens per node</td><td><strong>Summed</strong> by a reducer as each node reports</td></tr>
+          <tr><td><strong>The result</strong></td><td><code>final_strategy</code></td><td>Written by synthesis</td></tr>
+        </tbody>
+      </table>
+      <div class="stack">
+        <div class="callout chief small"><h3>Fresh for each request</h3>The plan step resets the loop counters, and replaces the history, resolutions and metrics with LangGraph's <code>Overwrite</code>, so a follow-up reports only its own reviews and cost.</div>
+        <div class="callout primary small"><h3>Kept between requests</h3>The graph is compiled with a checkpointer keyed by the session: LangGraph's PostgreSQL saver, or memory without a database. A follow-up after a restart starts from the session's state.</div>
+        <div class="callout small" style="background:var(--sunken)"><h3>Typed in storage too</h3>The checkpointer's serialiser is given the 13 state models it may restore, from <code>RequestContext</code> to <code>Figure</code>. LangGraph warns about any other type, and will block such types in a future version.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 4.4 Delegation ============ -->
+<section class="page wide" id="delegation">
+  <div class="body">
+    <p class="kicker"><span class="num">4.4</span>The agent team and its workflow</p>
+    <h2 class="title">Delegation: the Chief of Staff states the decision, then assigns only who it needs</h2>
+    <div class="content cols c-5-7">
+      <div class="stack">
+        <div class="body-text small">
+          <p><strong>The decision first.</strong> Before delegating, the Chief of Staff works out what the founder needs: the decision at stake, the constraints that bind it (budget, timeline, team, regulation, competition) and what is uncertain. The objective is that decision, in one sentence.</p>
+          <p><strong>Only the specialists it needs.</strong> A whole idea goes to all four. A narrower request goes to the specialist whose area it asks about, plus the one who owns the plan it refers to: risks in a go-to-market plan go to Risk and Marketing. Each task is one or two sentences: the question for this venture and the constraint the answer must respect.</p>
+          <p><strong>Typed, then routed.</strong> The reply is a <code>DelegationPlan</code> whose specialist field can only be one of the four names; repeats for one specialist are joined, and an empty plan assigns all four, so a request is never dropped. A router then starts only the assigned specialists; the rest make no call at all.</p>
+          <p><strong>Follow-ups reassign.</strong> Shown the original request, the follow-up and who already reported, the Chief of Staff reassigns only the specialists who own what changes; the others keep their reports.</p>
+        </div>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.2in;object-fit:cover;object-position:top left" src="../assets/screenshots/result-plan-c.jpg" alt="The Plan tab of a recorded run: the Chief of Staff's objective and the task given to each of the four specialists">
+        <figcaption><strong>The recorded run's plan.</strong> The objective restates the brief as a decision ("Decide whether this solo-founder, low-budget premium studio can acquire enterprise clients…"), with a task for each specialist. Its follow-up, "Refine the pricing strategy after financial review", was reassigned to Finance and Marketing only.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 4.5 Plan, act, check ============ -->
+<section class="page wide" id="pac">
+  <div class="body">
+    <p class="kicker"><span class="num">4.5</span>The agent team and its workflow</p>
+    <h2 class="title">Check, then cross-check: weak reports go back, and conflicts are settled</h2>
+    <div class="content cols c-3">
+      <div class="card">
+        <div class="who"><span class="agent-dot sm c-chief"><i class="icon" data-icon="scale"></i></span><div><div class="name">Review</div><div class="role">Plan–Act–Check, by the Chief of Staff</div></div></div>
+        <table class="compact small">
+          <tbody>
+            <tr><td class="num"><strong>5</strong></td><td>ready to use as it is</td></tr>
+            <tr><td class="num"><strong>4</strong></td><td>useful and specific, minor gaps</td></tr>
+            <tr><td class="num"><strong>3</strong></td><td>misses something the task asked for, or its figures contradict</td></tr>
+            <tr><td class="num"><strong>2</strong></td><td>largely generic or off-task</td></tr>
+            <tr><td class="num"><strong>1</strong></td><td>wrong or unusable</td></tr>
+          </tbody>
+        </table>
+        <p class="small mt">A score of <strong>4 or more passes</strong>, and the code decides that from the score: a model once scored a report 4 and still rejected it. Below 4, the report goes back with one to three sentences of feedback and is rewritten whole, once. Only rejected reports cost another call; a round's reviews run at the same time.</p>
+      </div>
+      <div class="card">
+        <div class="who"><span class="agent-dot sm" style="color:var(--ink-2);background:var(--sunken)"><i class="icon" data-icon="swap"></i></span><div><div class="name">Critique</div><div class="role">the specialists check each other</div></div></div>
+        <p class="small">Each assigned specialist reads the others' reports and flags a clash only where another recommends something that contradicts its own recommendation, inside its own area, so the founder could not follow both: a price, a budget, a timeline, the first offer's scope, a channel, a safeguard.</p>
+        <p class="small">At most two each, the most consequential first; differences of emphasis or wording do not count. A lone report has nothing to be checked against, so the critique is skipped.</p>
+        <div class="who mt"><span class="agent-dot sm c-chief"><i class="icon" data-icon="gavel"></i></span><div><div class="name">Resolve</div><div class="role">the Chief of Staff decides</div></div></div>
+        <p class="small mb0">All of a round's conflicts in one call, a clash raised from both sides counted once. It weighs the founder's hard constraints first, then the evidence, then which option keeps the most choices open; law and safety outrank speed and revenue. Each decision names the one specialist who must revise.</p>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:3.55in;object-fit:cover;object-position:top left" src="../assets/screenshots/result-conflicts-c.jpg" alt="The Conflicts tab: Marketing questioned Finance's flagship offer, and the Chief of Staff decided on a $4,000 paid pilot">
+        <figcaption><strong>From the recorded run.</strong> Marketing's $45k–$65k flagship clashed with Finance's $25k sprint; the Chief of Staff chose a $4,000 paid pilot with a $12,500 follow-on, and Finance revised. Eight conflicts were settled in one 25-second call.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 4.6 Synthesis ============ -->
+<section class="page wide" id="synthesis">
+  <div class="body">
+    <p class="kicker"><span class="num">4.6</span>The agent team and its workflow</p>
+    <h2 class="title">Synthesis: one strategy the founder can act on, built only from the team's work</h2>
+    <div class="content cols c-5-7">
+      <div class="body-text small">
+        <p>The Chief of Staff merges the reports, and its own decisions on their conflicts, into one launch strategy, in this order:</p>
+        <ol class="steps">
+          <li><b>The recommendation</b>: go, go with conditions, or not yet, with the main reason.</li>
+          <li><b>The few facts</b> from the reports that drive it.</li>
+          <li><b>How each disagreement was settled</b>, following its own decisions.</li>
+          <li><b>The key risks</b>, and how the plan contains them.</li>
+          <li><b>Next steps</b>, each with the area that owns it and a timeframe.</li>
+          <li><b>Early metrics</b> that show whether it is working.</li>
+        </ol>
+        <p>The budget, prices, scope and timeline must agree wherever they appear. It adds nothing the specialists did not report, keeps the citation on any figure that has one, and names any report that could not be produced. It aims at 500 words.</p>
+        <div class="callout warn small mt"><strong>Free text, by design.</strong> The strategy is Markdown for a person to read, so it is the one Chief of Staff output without a schema. Its structure comes from the prompt; the optional LLM judge scores its constraints, consistency, actionability and grounding.</div>
+      </div>
+      <figure class="shot-frame">
+        <img class="shot" style="height:4.25in;object-fit:cover;object-position:top left" src="../assets/screenshots/result-strategy-c.jpg" alt="The launch strategy from the recorded run: 'Go with conditions', with the agents' reviews beside it">
+        <figcaption><strong>The recorded run's strategy</strong> opens with "Recommendation: Go with conditions"; each claim is tagged with the agent it came from, and the reviews sit beside it, colour by colour.</figcaption>
+      </figure>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>
+
+<!-- ============ 4.7 A recorded run ============ -->
+<section class="page wide" id="recorded-run">
+  <div class="body">
+    <p class="kicker"><span class="num">4.7</span>The agent team and its workflow</p>
+    <h2 class="title">A recorded run, end to end: 2 minutes 30 seconds, 24 model calls</h2>
+    <p class="lede">The premium AI brand studio example, on 22 October 2026, on Azure OpenAI gpt-5-mini at the default reasoning, after a 57-second brief check. Times are from the API's Monitor, in seconds from the start.</p>
+    <div class="content cols c-8-4">
+      <div>
+        <div class="gantt">
+          <div class="axis"><span style="left:0%">0</span><span style="left:20%">30</span><span style="left:40%">60</span><span style="left:60%">90</span><span style="left:80%">120</span><span style="left:100%">150 s</span></div>
+          <div class="row"><span class="lab">Plan</span><div class="track"><i class="b chief" style="left:0%;width:10.7%"></i></div></div>
+          <div class="row"><span class="lab">Look-ups</span><div class="track"><i class="b research" style="left:10.7%;width:13.8%"></i></div></div>
+          <div class="row"><span class="lab">Marketing</span><div class="track"><i class="b marketing" style="left:24.5%;width:6.3%"></i><i class="b marketing" style="left:39.3%;width:4.7%"></i><i class="b marketing" style="left:77.1%;width:8.8%"></i></div></div>
+          <div class="row"><span class="lab">Finance</span><div class="track"><i class="b finance" style="left:24.5%;width:5.4%"></i><i class="b finance" style="left:77.1%;width:7.3%"></i></div></div>
+          <div class="row"><span class="lab">Technical</span><div class="track"><i class="b technical" style="left:24.5%;width:6.8%"></i><i class="b technical" style="left:39.3%;width:8.2%"></i><i class="b technical" style="left:77.1%;width:8.2%"></i></div></div>
+          <div class="row"><span class="lab">Risk</span><div class="track"><i class="b risk" style="left:24.5%;width:5.3%"></i></div></div>
+          <div class="row"><span class="lab">Review</span><div class="track"><i class="b chief" style="left:31.3%;width:8.1%"></i><i class="b chief" style="left:47.5%;width:8.8%"></i></div></div>
+          <div class="row"><span class="lab">Cross-check</span><div class="track"><i class="b team" style="left:56.3%;width:4.3%"></i></div></div>
+          <div class="row"><span class="lab">Resolve</span><div class="track"><i class="b chief" style="left:60.6%;width:16.5%"></i></div></div>
+          <div class="row"><span class="lab">Strategy</span><div class="track"><i class="b chief" style="left:85.9%;width:14.2%"></i></div></div>
+        </div>
+        <p class="small muted" style="margin-top:0.08in">The four specialists start together at 37 s. Review sends Marketing and Technical back (47–59 s); the second review still finds Technical short, with no revision left. The cross-check raises 8 conflicts; the decisions send Finance, Marketing and Technical back to revise, then the strategy is written.</p>
+      </div>
+      <div class="stack">
+        <table class="compact tight">
+          <thead><tr><th>Step</th><th class="num">Calls</th><th class="num">Tokens</th><th class="num">Secs</th></tr></thead>
+          <tbody>
+            <tr><td>Plan</td><td class="num">1</td><td class="num">3,482</td><td class="num">16.1</td></tr>
+            <tr><td>Look-ups</td><td class="num">2</td><td class="num">4,663</td><td class="num">20.6</td></tr>
+            <tr><td>Marketing</td><td class="num">3</td><td class="num">10,955</td><td class="num">29.7</td></tr>
+            <tr><td>Finance</td><td class="num">2</td><td class="num">7,146</td><td class="num">18.9</td></tr>
+            <tr><td>Technical</td><td class="num">3</td><td class="num">12,486</td><td class="num">34.7</td></tr>
+            <tr><td>Risk</td><td class="num">1</td><td class="num">2,800</td><td class="num">7.9</td></tr>
+            <tr><td>Review</td><td class="num">6</td><td class="num">22,190</td><td class="num">25.2</td></tr>
+            <tr><td>Cross-check</td><td class="num">4</td><td class="num">18,062</td><td class="num">6.4</td></tr>
+            <tr><td>Resolve</td><td class="num">1</td><td class="num">9,446</td><td class="num">24.7</td></tr>
+            <tr><td>Strategy</td><td class="num">1</td><td class="num">9,859</td><td class="num">21.3</td></tr>
+            <tr><td><strong>Total</strong></td><td class="num"><strong>24</strong></td><td class="num"><strong>101,089</strong></td><td class="num"><strong>150.7</strong></td></tr>
+          </tbody>
+        </table>
+        <div class="callout primary small"><strong>The follow-up</strong> ("Refine the pricing strategy after financial review.") took 91.6 s, 11 calls and 54,702 tokens: Finance and Marketing only, while Technical and Risk kept their reports.</div>
+      </div>
+    </div>
+  </div>
+  <div class="foot"><span>The AI Startup Co-Founder Team · Deep dive</span><span class="nav"><a href="#contents">Contents</a><span class="sep">·</span><span><span class="pn"></span> / <span class="pt"></span></span></span></div>
+</section>

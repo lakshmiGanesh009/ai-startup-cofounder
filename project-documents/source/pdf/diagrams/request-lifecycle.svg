@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 640" role="img" aria-label="One evaluation, end to end: the browser posts to the app's proxy, which adds the key; the API's guard admits it; the graph streams each step back as server-sent events while the team calls Azure OpenAI and FRED and checkpoints to PostgreSQL; the report is saved; the trace goes to Langfuse.">
+  <defs>
+    <marker id="rl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#4b4840"/>
+    </marker>
+    <marker id="rl-arrow-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10z" fill="#163c6b"/>
+    </marker>
+  </defs>
+  <style>
+    .life { stroke: #cfc8b8; stroke-width: 1.4; stroke-dasharray: 4 5; }
+    .msg { stroke: #4b4840; stroke-width: 1.8; fill: none; }
+    .back { stroke: #163c6b; stroke-width: 1.8; fill: none; stroke-dasharray: 6 5; }
+  </style>
+
+  <!-- Lifelines -->
+  <g class="n"><rect class="box" x="10" y="20" width="140" height="52" rx="10"/><icon name="user" x="24" y="36" s="20" c="#163c6b"/><text class="t-strong" x="50" y="52">Browser</text></g>
+  <g class="n"><rect class="box" x="180" y="20" width="140" height="52" rx="10"/><icon name="server" x="194" y="36" s="20" c="#163c6b"/><text class="t-strong" x="220" y="52">Next.js</text></g>
+  <g class="n"><rect class="box" x="350" y="20" width="140" height="52" rx="10"/><icon name="shield" x="364" y="36" s="20" c="#163c6b"/><text class="t-strong" x="390" y="52">FastAPI</text></g>
+  <g class="n"><rect x="520" y="20" width="160" height="52" rx="10" fill="#f3f1fa" stroke="#4a3aa7" stroke-width="1.4"/><icon name="state" x="534" y="36" s="20" c="#4a3aa7"/><text class="t-strong" x="560" y="52">LangGraph</text></g>
+  <g class="n"><rect class="box" x="710" y="20" width="160" height="52" rx="10"/><icon name="spark" x="724" y="36" s="20" c="#163c6b"/><text class="t-strong" x="750" y="52">Azure OpenAI</text></g>
+  <g class="n"><rect class="box" x="900" y="20" width="140" height="52" rx="10"/><icon name="server" x="914" y="36" s="20" c="#48525f"/><text class="t-strong" x="940" y="52">FRED MCP</text></g>
+  <g class="n"><rect class="box" x="1070" y="20" width="150" height="52" rx="10"/><icon name="server" x="1084" y="36" s="20" c="#163c6b"/><text class="t-strong" x="1110" y="52">PostgreSQL</text></g>
+  <g class="n"><rect class="box" x="1250" y="20" width="146" height="52" rx="10"/><icon name="flow" x="1264" y="36" s="20" c="#48525f"/><text class="t-strong" x="1290" y="52">Langfuse</text></g>
+
+  <path class="life" d="M80 72 V630 M250 72 V630 M420 72 V630 M600 72 V630 M790 72 V630 M970 72 V630 M1145 72 V630 M1323 72 V630"/>
+
+  <!-- 1 -->
+  <path class="msg" d="M80 108 H244" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="88" y="100">POST evaluate/stream</text>
+  <!-- 2 -->
+  <path class="msg" d="M250 146 H414" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="258" y="138">+ the API key</text>
+  <!-- 3 guard -->
+  <g class="n"><rect x="424" y="164" width="164" height="50" rx="8" fill="#e4ebf5" stroke="#163c6b" stroke-width="1.2"/><text class="t-small" x="434" y="184" style="fill:#163c6b">guard: key, size,</text><text class="t-small" x="434" y="203" style="fill:#163c6b">rates, a run slot</text></g>
+  <!-- 4 -->
+  <path class="msg" d="M420 244 H594" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="428" y="236">graph.astream</text>
+  <!-- 5 plan -->
+  <path class="msg" d="M600 280 H784" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="608" y="272">plan: DelegationPlan</text>
+  <!-- 6 checkpoint -->
+  <path class="msg" d="M600 314 H1139" marker-end="url(#rl-arrow)" stroke-dasharray="3 4"/>
+  <text class="t-small" x="1000" y="306">checkpoint, after each step</text>
+  <!-- 7 SSE -->
+  <path class="back" d="M420 350 H86" marker-end="url(#rl-arrow-p)"/>
+  <text class="t-edge" x="96" y="342" style="fill:#163c6b">event: plan done</text>
+  <!-- 8 look-ups -->
+  <path class="msg" d="M600 388 H964" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="808" y="380">look-ups, MCP over stdio</text>
+  <!-- 9 specialists -->
+  <path class="msg" d="M600 426 H784" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="608" y="418">four reports at once</text>
+  <!-- 10 review etc -->
+  <path class="msg" d="M600 464 H784" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="608" y="456">review, critique, resolve</text>
+  <!-- 11 synthesis -->
+  <path class="msg" d="M600 502 H784" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="608" y="494">synthesis: the strategy</text>
+  <path class="back" d="M420 520 H86" marker-end="url(#rl-arrow-p)"/>
+  <text class="t-edge" x="96" y="512" style="fill:#163c6b">an event per step</text>
+  <!-- 12 report -->
+  <path class="msg" d="M420 556 H1139" marker-end="url(#rl-arrow)"/>
+  <text class="t-edge" x="808" y="548">the report saved, version 1</text>
+  <!-- 13 result -->
+  <path class="back" d="M420 590 H86" marker-end="url(#rl-arrow-p)"/>
+  <text class="t-edge" x="96" y="582" style="fill:#163c6b">event: result</text>
+  <!-- 14 trace -->
+  <path class="msg" d="M420 622 H1317" marker-end="url(#rl-arrow)" stroke-dasharray="3 4"/>
+  <text class="t-small" x="1000" y="614">trace and scores, masked</text>
+</svg>
