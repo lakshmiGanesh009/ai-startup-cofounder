@@ -328,11 +328,6 @@ No failed LLM call produces a 500. Each failure is handled where it happens:
 
 - **Every call** has a timeout (`LLM_TIMEOUT`), and the client retries API
   errors (`LLM_MAX_RETRIES`).
-- **A provider that is down** is stood in for: with `GROQ_API_KEY` set beside
-  Azure OpenAI, a call Azure cannot serve (unreachable, the key refused, no such
-  deployment, rate-limited, failing) goes to Groq (`llm.WithBackup`), and so do
-  the calls after it for five minutes. A refusal (a 400, the content filter)
-  is not sent on. Dictation falls back the same way, to Groq's Whisper.
 - **A structured reply that does not parse** is retried once. API errors are not
   retried again on top of the client's retries.
 - **A failed specialist** becomes a named gap (`[unavailable]`): review and
@@ -425,8 +420,15 @@ Four things let an operator follow what the API did, and why.
   histograms in a registry of its own, served at `GET /metrics`: requests by
   route and status and their time, evaluations by outcome and their time, those
   in progress, each step's time, model calls and tokens, model retries, warnings
-  and errors, reviews, conflicts, research cost, briefs and proposals
+  and errors, reviews, conflicts, research cost, briefs and proposals, and each
+  provider's calls (by service and outcome), tokens and credits
   (`cofounder_*`), with the process's own figures (on Linux) and Python's.
+- **Providers.** Each call to a provider is counted where it is made
+  (`monitor.calling`): the team's model calls (`llm.Counted`), Azure's and
+  Tavily's web search and research, the look-ups (FRED,
+  Tavily's competitor pages) and dictation. `GET /monitoring` adds to each
+  provider whether it is set up, what it is for and how it stands, for the
+  Monitor's Providers.
   Routes are labelled by their template, so a session ID never becomes a label.
   Prometheus keeps their history; they start from zero with the API.
 

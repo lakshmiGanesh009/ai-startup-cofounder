@@ -2,7 +2,8 @@
 
 // The Monitor: what the API has done since it started (GET /monitoring),
 // refreshed every few seconds while it is open: whether anything went wrong
-// lately, the totals and error rates, how long an evaluation and each of its
+// lately, which providers it calls (Azure OpenAI, Tavily, FRED) and how
+// each stands and is used, the totals and error rates, how long an evaluation and each of its
 // steps take (the median and the 95th percentile), the latest evaluations, and
 // a log of each step, run, brief, proposal, file and question, with the warnings and errors.
 // It asks one request at a time; when the API stops answering it keeps showing
@@ -15,7 +16,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { AlertIcon, ArrowRightIcon, CheckIcon, PulseIcon, RefreshIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
-import { getMonitoring, type MonitorEvent, type MonitorHealth, type Monitoring } from "@/lib/api";
+import {
+  getMonitoring,
+  type MonitorEvent,
+  type MonitorHealth,
+  type Monitoring,
+  type ProviderKey,
+  type ProviderUse,
+  type ServiceUse,
+} from "@/lib/api";
 import { agentFill, agentOf, agentsOf, agentsOfSource } from "@/lib/agents";
 import { formatSeconds, stepName } from "@/lib/team";
 
@@ -108,6 +117,131 @@ function HealthStrip({ health, running, onShow }: { health: MonitorHealth; runni
         {running ? `${plural(running, "evaluation")} running now` : "Nothing running now"}
       </span>
     </div>
+  );
+}
+
+// ---- The providers ----
+
+const PROVIDER_NAMES: Record<ProviderKey, string> = {
+  azure: "Azure OpenAI",
+  openai: "OpenAI",
+  tavily: "Tavily",
+  fred: "FRED",
+};
+
+const SERVICE_NAMES: Record<ServiceUse["service"], string> = {
+  model: "Model",
+  "web search": "Web search",
+  research: "Research",
+  speech: "Dictation",
+  figures: "Figures",
+  "competitor pages": "Pricing pages",
+};
+
+// What to set to turn a provider on.
+const SET_UP_WITH: Record<ProviderKey, string> = {
+  azure: "Set AZURE_OPENAI_API_KEY, with its endpoint and deployment.",
+  openai: "Set OPENAI_API_KEY.",
+  tavily: "Set TAVILY_API_KEY to research on Tavily.",
+  fred: "Set FRED_API_KEY for official economic figures.",
+};
+
+type Standing = { label: string; tone: "good" | "warn" | "bad" | "neutral"; dot: string };
+
+function standingOf(provider: ProviderUse, calls: number): Standing {
+  switch (provider.status) {
+    case "answering":
+      return { label: "Answering", tone: "good", dot: "bg-good" };
+    case "failing":
+      return { label: "Failing", tone: "bad", dot: "bg-bad" };
+    case "ready":
+      return calls ? { label: "In use", tone: "good", dot: "bg-good" } : { label: "Ready", tone: "neutral", dot: "bg-ink-3" };
+    default:
+      return { label: "Not set up", tone: "neutral", dot: "bg-rule-strong" };
+  }
+}
+
+function ServiceLine({ use }: { use: ServiceUse }) {
+  const details = [
+    use.tokens_in || use.tokens_out ? `${compact(use.tokens_in)} in · ${compact(use.tokens_out)} out` : "",
+    use.credits ? plural(use.credits, "credit") : "",
+    use.last_at ? `last at ${clock(use.last_at)}` : "",
+  ].filter(Boolean);
+  return (
+    <li className="py-2 first:pt-0 last:pb-0">
+      <p className="flex items-baseline justify-between gap-3 text-sm">
+        <span className="text-ink">{SERVICE_NAMES[use.service]}</span>
+        <span className="text-ink-2 tabular">
+          {plural(use.calls, "call")}
+          {use.failed > 0 && <span className="text-bad"> · {use.failed} failed</span>}
+        </span>
+      </p>
+      {details.length > 0 && <p className="mt-0.5 text-xs text-ink-3 tabular">{details.join(" · ")}</p>}
+    </li>
+  );
+}
+
+function ProviderCard({ provider }: { provider: ProviderUse }) {
+  const name = PROVIDER_NAMES[provider.provider];
+  const calls = provider.services.reduce((sum, use) => sum + use.calls, 0);
+  const standing = standingOf(provider, calls);
+  const failure = provider.services
+    .filter((use) => use.last_failure && use.last_failure_at)
+    .sort((a, b) => (b.last_failure_at ?? "").localeCompare(a.last_failure_at ?? ""))[0];
+  const role = provider.role.charAt(0).toUpperCase() + provider.role.slice(1);
+  return (
+    <article
+      aria-label={name}
+      className={`flex flex-col rounded-lg border bg-surface p-4 ${standing.tone === "bad" ? "border-bad/40" : "border-rule"} ${
+        provider.set_up || calls ? "" : "opacity-75"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <h4 className="min-w-0 font-medium text-ink">{name}</h4>
+        <span className="shrink-0 whitespace-nowrap">
+          <Badge tone={standing.tone}>
+            <span aria-hidden className={`mr-1.5 size-1.5 rounded-full ${standing.dot}`} />
+            {standing.label}
+          </Badge>
+        </span>
+      </div>
+      <p className="mt-0.5 text-xs leading-relaxed text-ink-3">{role}</p>
+      {provider.services.length > 0 ? (
+        <ul aria-label={`What ${name} was called for`} className="mt-3 divide-y divide-rule border-t border-rule pt-2.5">
+          {provider.services.map((use) => (
+            <ServiceLine key={use.service} use={use} />
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3 border-t border-rule pt-2.5 text-[13px] text-ink-3">
+          {provider.set_up ? "Not called since the API started." : SET_UP_WITH[provider.provider]}
+        </p>
+      )}
+      {failure && (
+        <div title={failure.last_failure ?? undefined} className="mt-3 rounded-md bg-bad-soft px-3 py-2 text-xs text-bad">
+          <p className="line-clamp-4 leading-relaxed">
+            <span className="font-medium">Last failure at {clock(failure.last_failure_at ?? "")}:</span>{" "}
+            {failure.last_failure}
+          </p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function Providers({ providers }: { providers: ProviderUse[] }) {
+  return (
+    <section aria-labelledby="providers-heading">
+      <h3 id="providers-heading" className="kicker">
+        Providers
+      </h3>
+      <p className="mt-1 text-sm text-ink-2">Who the API calls, how each stands now, and what each did since it started.</p>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {providers.map((provider) => (
+          <ProviderCard key={provider.provider} provider={provider} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -512,6 +646,7 @@ export function MonitorView({ active }: { active: boolean }) {
           data && <HealthStrip health={data.health} running={data.running} onShow={showProblems} />
         )}
       </div>
+      {data?.providers && data.providers.length > 0 && <Providers providers={data.providers} />}
       {quiet && (
         <div className="rounded-lg border border-rule bg-surface p-6">
           <p className="font-serif text-xl">Nothing has run since the API started.</p>

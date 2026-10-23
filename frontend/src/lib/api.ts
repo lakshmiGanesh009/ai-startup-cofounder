@@ -142,9 +142,6 @@ export const RESEARCH_PROVIDERS = ["azure", "tavily"] as const;
 export type ResearchProvider = (typeof RESEARCH_PROVIDERS)[number];
 export const PROVIDER_NAMES: Record<ResearchProvider, string> = { azure: "Azure OpenAI", tavily: "Tavily" };
 
-export type LlmProvider = "azure" | "openai" | "groq";
-export const LLM_NAMES: Record<LlmProvider, string> = { azure: "Azure OpenAI", openai: "OpenAI", groq: "Groq" };
-
 export type Health = {
   status: string;
   service: string;
@@ -157,11 +154,8 @@ export type Health = {
   lookups?: { fred: boolean; competitor_pages: boolean };
   // Model calls traced in Langfuse, and how many of the app's prompts are registered there.
   tracing?: { langfuse: boolean; prompts: number };
-  // Whether dictation can run: Azure OpenAI's Whisper, or Groq's.
+  // Whether dictation can run: Azure OpenAI, for its Whisper deployment.
   voice?: { dictation: boolean };
-  // Where the team's model calls go: the main provider, the backup standing by
-  // (Groq), and whether the backup answers now because the main one failed lately.
-  llm?: { main: LlmProvider | null; backup: LlmProvider | null; standing_in: boolean };
 };
 
 export type Scenario = {
@@ -494,8 +488,38 @@ export type Monitoring = {
   // How long the latest finished evaluations took, in seconds.
   evaluation_seconds: { p50: number; p95: number; max: number; samples: number } | null;
   nodes: NodeStats[];
+  // The providers the API calls, how each stands, and what it asked of each (an older API leaves them out).
+  providers?: ProviderUse[];
   runs: MonitorRun[];
   events: MonitorEvent[];
+};
+
+export type ProviderKey = "azure" | "openai" | "tavily" | "fred";
+
+// What the API asked of one provider's service since it started.
+export type ServiceUse = {
+  service: "model" | "web search" | "research" | "speech" | "figures" | "competitor pages";
+  calls: number;
+  failed: number;
+  tokens_in: number;
+  tokens_out: number;
+  // Time in its calls.
+  seconds: number;
+  // Credits spent (Tavily's).
+  credits: number;
+  last_at: string | null;
+  last_failure: string | null;
+  last_failure_at: string | null;
+};
+
+export type ProviderUse = {
+  provider: ProviderKey;
+  set_up: boolean;
+  // What the app uses it for: "the team's model, web search and dictation".
+  role: string;
+  // "failing" when its latest call failed.
+  status: "answering" | "ready" | "failing" | "not set up";
+  services: ServiceUse[];
 };
 
 export function getPipeline(): Promise<Pipeline> {

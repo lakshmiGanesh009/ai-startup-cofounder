@@ -56,15 +56,13 @@ from llm import (
     LLMNotConfigured,
     failure,
     default_effort,
-    backup_provider,
     main_provider,
     reasoning,
     reasoning_effort,
-    standing_in,
     takes_reasoning_effort,
 )
 from metrics import track
-from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, Run, monitor
+from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, ProviderUse, Run, monitor
 from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session, configure_logging
 from persistence import open_storage
 from guardrails import log_flags, scan, scan_context
@@ -256,7 +254,6 @@ async def health():
         # Model calls traced in Langfuse, with the prompts registered there (tracing.py).
         "tracing": {"langfuse": tracing.enabled(), "prompts": len(tracing.versions())},
         "voice": {"dictation": voice.available()},
-        "llm": {"main": main_provider(), "backup": backup_provider(), "standing_in": standing_in()},
     }
 
 
@@ -352,12 +349,48 @@ async def pipeline():
     }
 
 
+def _listed(parts: list[str]) -> str:
+    """"a, b and c"."""
+    return ", ".join(parts[:-1]) + f" and {parts[-1]}" if len(parts) > 1 else "".join(parts)
+
+
+def _providers(used: list[ProviderUse]) -> list[ProviderUse]:
+    """Each provider the API can call (OpenAI only when it is set up or was
+    used): whether it is set up, what the app uses it for, how it stands now
+    (answering, or ready for a provider called on demand; failing when its
+    latest call failed), and what each of its services did since the API started."""
+    main = main_provider()
+    found = {use.provider: use for use in used}
+    azure_for = [what for what, on in (("the team's model", main == "azure"), ("web search", providers.available()["azure"]),
+                                       ("dictation", voice.available() and main == "azure")) if on]
+    tavily_for = ["web research"] + (["competitors' pricing pages"] if lookups.tavily_configured() else [])
+    rows = [
+        ("azure", main == "azure", _listed(azure_for) or "the team's model", "answering"),
+        ("openai", main == "openai", "the team's model", "answering"),
+        ("tavily", providers.available()["tavily"], _listed(tavily_for), "ready"),
+        ("fred", lookups.fred_configured(), "official economic figures", "ready"),
+    ]
+    listed = []
+    for provider, on, role, standing in rows:
+        use = found.get(provider)
+        if provider == "openai" and not on and not use:
+            continue
+        latest = max((service for service in use.services if service.last_at), key=lambda service: service.last_at,
+                     default=None) if use else None
+        failing = latest is not None and latest.last_failure_at == latest.last_at
+        status = "not set up" if not on else "failing" if failing else standing
+        listed.append((use or ProviderUse(provider=provider)).model_copy(update={"set_up": on, "role": role, "status": status}))
+    return listed
+
+
 @app.get("/monitoring", response_model=Monitoring)
 async def monitoring():
     """What the API has done since it started: evaluations, briefs and proposals,
-    the time, calls and tokens of each step of the graph, and a log of recent
-    events, warnings and errors. Kept in memory, so a restart empties it."""
-    return monitor.snapshot()
+    the time, calls and tokens of each step of the graph, each provider's use
+    and how it stands, and a log of recent events, warnings and errors. Kept in
+    memory, so a restart empties it."""
+    snapshot = monitor.snapshot()
+    return snapshot.model_copy(update={"providers": _providers(snapshot.providers)})
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -890,7 +923,7 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         except ProposalNotWritten as error:
             monitor.count("proposals", ok=False)
             monitor.event("error", "proposal", f"{doing} the proposal failed: {error}", report.session_id)
-            raise HTTPException(status_code=502, detail=f"{error} Try again." if error.retry else str(error)) from error
+            raise HTTPException(status_code=502, detail=f"{error} Try again.") from error
     if report.proposal and len(failed) == len(parts_to_write(report.proposal, part)):
         monitor.count("proposals", ok=False)
         monitor.event("error", "proposal", "Nothing could be revised: every LLM call failed.", report.session_id)
@@ -1152,11 +1185,10 @@ class Transcript(BaseModel):
 async def transcribe(request: Request):
     """The founder's dictation, written down in English: the recording as the
     body (WebM, Ogg, MP4 or M4A, MP3, WAV or FLAC, as its Content-Type says), up
-    to 10 MB, sent to Whisper, which translates speech in any language into
-    English text (Azure OpenAI's deployment, else Groq's standing by), and not
-    kept. 503 without Azure OpenAI or Groq, 415 for a format it does not take,
-    422 for an empty recording, 502 when the call fails, with what each
-    provider answered."""
+    to 10 MB, sent to Azure OpenAI's Whisper deployment, which translates speech
+    in any language into English text, and not kept. 503 without Azure OpenAI,
+    415 for a format it does not take, 422 for an empty recording, 502 when the
+    call fails, with what Azure answered."""
     audio = await request.body()
     if not audio:
         raise HTTPException(status_code=422, detail="The recording is empty.")
@@ -1170,9 +1202,9 @@ async def transcribe(request: Request):
         raise HTTPException(status_code=503, detail=str(error)) from error
     except voice.UnsupportedAudio as error:
         raise HTTPException(status_code=415, detail=str(error)) from error
-    except voice.VoiceFailed as error:
+    except LLM_ERRORS as error:
         monitor.event("error", "voice", f"Dictation failed: {error}"[:500])
-        raise HTTPException(status_code=502, detail=f"The speech-to-text call failed: {error}") from error
+        raise HTTPException(status_code=502, detail=f"The speech-to-text call failed: {voice.why(error)}") from error
     monitor.event("run", "voice", f"Wrote down {len(text.split())} words from {len(audio):,} bytes of audio.")
     return Transcript(text=text)
 

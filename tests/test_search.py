@@ -109,3 +109,18 @@ def test_one_failed_search_is_skipped_but_all_failing_says_why(monkeypatch):
     hits, note = search_all(["one", "two"])
     assert hits == []
     assert note == "The web search failed: the Tavily plan's monthly limit is used up."
+
+
+def test_the_monitor_counts_tavilys_searches_and_the_credits_they_spend(monkeypatch):
+    from monitor import monitor
+
+    _tavily(monkeypatch, lambda request: _results("https://a.example"))
+    search.search("clinic scheduling")
+    _tavily(monkeypatch, lambda request: httpx.Response(401, json={"detail": {"error": "Unauthorized"}}))
+    with pytest.raises(SearchFailed):
+        search.search("clinic scheduling")
+
+    (tavily,) = monitor.usage()
+    used = tavily.services[0]
+    assert (tavily.provider, used.service, used.calls, used.failed, used.credits) == ("tavily", "web search", 2, 1, 1)
+    assert "API key" in used.last_failure

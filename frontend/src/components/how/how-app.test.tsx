@@ -237,6 +237,31 @@ describe("the Monitor", () => {
     expect(within(log).getByText("Financial Planning")).toBeTruthy();
   });
 
+  test("says which providers the API calls, how each stands, and what it did", async () => {
+    fakeBackend();
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("tab", { name: "Monitor" }));
+    const panel = screen.getByRole("tabpanel", { name: "Monitor" });
+    const providers = await within(panel).findByRole("region", { name: "Providers" });
+    const cards = within(providers).getAllByRole("article");
+    expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual(["Azure OpenAI", "Tavily", "FRED"]);
+
+    // Azure failing, and why.
+    const azure = within(providers).getByRole("article", { name: "Azure OpenAI" });
+    expect(azure.textContent).toContain("Failing");
+    expect(azure.textContent).toContain("The team's model, web search and dictation");
+    const lines = within(within(azure).getByRole("list", { name: "What Azure OpenAI was called for" })).getAllByRole("listitem");
+    expect(lines[0].textContent).toMatch(/^Model3 calls · 3 failedlast at [\d:]+$/);
+    expect(azure.textContent).toMatch(/Last failure at [\d:]+: 401: Access denied due to invalid subscription key\./);
+
+    // Tavily not set up, and how to set it up; FRED in use.
+    const tavily = within(providers).getByRole("article", { name: "Tavily" });
+    expect(tavily.textContent).toContain("Not set up");
+    expect(tavily.textContent).toContain("Set TAVILY_API_KEY to research on Tavily.");
+    expect(within(providers).getByRole("article", { name: "FRED" }).textContent).toContain("In use");
+  });
+
   test("refreshes while it is shown, until paused", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { fetch } = fakeBackend();

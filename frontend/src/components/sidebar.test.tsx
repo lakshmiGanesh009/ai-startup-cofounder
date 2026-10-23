@@ -18,17 +18,6 @@ function renderSidebar() {
 }
 
 describe("the sidebar", () => {
-  test("says which provider answers, and when the backup stands in for it", async () => {
-    fakeBackend({ "GET /health": { body: { ...HEALTH, llm: { main: "azure", backup: "groq", standing_in: false } } } });
-    const first = renderSidebar();
-    expect(await screen.findByText("Azure OpenAI, with Groq on standby")).toBeTruthy();
-    first.unmount();
-
-    fakeBackend({ "GET /health": { body: { ...HEALTH, llm: { main: "azure", backup: "groq", standing_in: true } } } });
-    renderSidebar();
-    expect(await screen.findByText("Groq is answering: Azure OpenAI failed in the last few minutes.")).toBeTruthy();
-  });
-
   test("shows the pages, the connection and the configured efforts", async () => {
     fakeBackend();
     renderSidebar();

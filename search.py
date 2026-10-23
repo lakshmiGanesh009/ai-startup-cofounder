@@ -16,6 +16,7 @@ import httpx
 from langchain_core.runnables.config import ContextThreadPoolExecutor
 
 from config import RESEARCH_TIMEOUT, SEARCH_TIMEOUT
+from monitor import monitor
 
 logger = logging.getLogger(__name__)
 
@@ -72,8 +73,16 @@ def _refusal(response: httpx.Response) -> str:
 
 
 def search(query: str) -> list[Hit]:
-    """The top results for `query`. Raises SearchFailed when there is no key,
-    Tavily cannot be reached in time, or it refuses the request."""
+    """The top results for `query`, counted on the Monitor (a basic search
+    costs one credit). Raises SearchFailed when there is no key, Tavily cannot
+    be reached in time, or it refuses the request."""
+    with monitor.calling("tavily", "web search") as call:
+        hits = _search(query)
+        call.used(credits=1)
+        return hits
+
+
+def _search(query: str) -> list[Hit]:
     body = {"query": query, "search_depth": "basic", "max_results": RESULTS_PER_SEARCH, "topic": "general"}
     try:
         with httpx.Client(transport=_transport, timeout=SEARCH_TIMEOUT) as client:
@@ -151,11 +160,19 @@ _REFERENCES = re.compile(
 
 
 def research(task: str, schema: dict | None = None) -> Report:
-    """Run one Tavily research task and wait for its report.
+    """Run one Tavily research task and wait for its report, counted on the
+    Monitor with the credits it spent.
 
     Raises SearchFailed when there is no key, Tavily refuses the task or cannot
     be reached, the task fails, or it takes longer than RESEARCH_TIMEOUT.
     """
+    with monitor.calling("tavily", "research") as call:
+        report = _research(task, schema)
+        call.used(credits=report.credits)
+        return report
+
+
+def _research(task: str, schema: dict | None) -> Report:
     body: dict = {"input": task, "model": RESEARCH_MODEL, "citation_format": "numbered", "output_length": "short"}
     if schema:
         body["output_schema"] = schema

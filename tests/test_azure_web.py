@@ -241,3 +241,21 @@ def test_a_report_ends_as_a_report(azure):
     assert report.content == "Tools cost $50 a month [1].\n\nPilots convert at 40%."
     assert "no offer of further help" in azure["requests"][0]["input"]
     assert azure_web._finished("Would you like more?") == "Would you like more?"  # a report that is only a question stays
+
+
+def test_the_monitor_counts_azures_searches_and_research_with_their_tokens(azure):
+    from monitor import monitor
+
+    def reply(**kwargs):
+        found = answer("A [report](https://a.example/r).", notes=[{"url": "https://a.example/r", "title": "R"}])
+        found.usage = SimpleNamespace(input_tokens=300, output_tokens=40)
+        return found
+
+    azure["replies"] = reply
+    azure_web.search("prices")
+    azure_web.research("A question")
+
+    (provider,) = monitor.usage()
+    searched, researched = provider.services
+    assert (searched.service, searched.calls, searched.tokens_in) == ("web search", 1, 300)
+    assert (researched.service, researched.calls, researched.tokens_out) == ("research", 1, 40)

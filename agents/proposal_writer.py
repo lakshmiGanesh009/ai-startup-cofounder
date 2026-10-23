@@ -30,7 +30,7 @@ from agents.chief_of_staff import structured_invoke
 from agents.roles import ROLES
 from document import label, text_at
 from guardrails import RULES, fence, unfenced
-from llm import CHIEF, LLM_ERRORS, SPECIALIST, groq_answers, too_large
+from llm import CHIEF, LLM_ERRORS, SPECIALIST
 from metrics import track
 from proposal import (
     OWNERS,
@@ -60,13 +60,7 @@ INPUTS = {
 
 
 class ProposalNotWritten(Exception):
-    """A part of a new proposal could not be written, so there is no proposal.
-    `retry` says whether trying again may help: not when the part is too large
-    for the provider's plan."""
-
-    def __init__(self, message: str, retry: bool = True):
-        super().__init__(message)
-        self.retry = retry
+    """A part of a new proposal could not be written, so there is no proposal."""
 
 
 _STYLE = (
@@ -247,30 +241,13 @@ def prompts() -> dict[str, str]:
     return templates
 
 
-# On Groq, the free backup, which takes only so many tokens at once, each
-# section of the team's report is cut to its opening: the strategy to the first
-# words, the others to fewer (llm.groq_answers). On the main provider, whole.
-COMPACT_STRATEGY_WORDS = 450
-COMPACT_SECTION_WORDS = 200
-
-
-def _opening(text: str, words: int) -> str:
-    kept = text.split()
-    return text if len(kept) <= words else " ".join(kept[:words]) + " …"
-
-
-def _background(report: Report, compact: bool = False) -> str:
+def _background(report: Report) -> str:
     """The venture and the team's report, as every writer sees them: fenced, as
-    the founder wrote or edited them (guardrails.py); `compact`, each section
-    cut to its opening, for Groq."""
+    the founder wrote or edited them (guardrails.py)."""
     text = f"Startup request:\n{fence(report.title, 'founder')}\n\nObjective: {report.objective}"
     if report.context:
         text += f"\n\n{fence(report.context, 'founder')}"
-    sections = "\n\n".join(
-        f"## {s.title}\n"
-        + (_opening(s.body, COMPACT_STRATEGY_WORDS if s.key == "strategy" else COMPACT_SECTION_WORDS) if compact else s.body)
-        for s in report.sections
-    )
+    sections = "\n\n".join(f"## {s.title}\n{s.body}" for s in report.sections)
     return f"{text}\n\nThe team's report:\n\n{fence(sections, 'the team report')}"
 
 
@@ -345,15 +322,13 @@ def _costs_to_cover(parts: dict) -> str:
 
 
 def _prompt(part: str, background: str, parts: dict, own, instruction: str,
-            changed: list[str], issues: list[str] = (), compact: bool = False) -> list:
-    """The messages for writing `part`; `own` is its current version, if any.
-    `compact`, the parts as JSON without indentation, for Groq."""
+            changed: list[str], issues: list[str] = ()) -> list:
+    """The messages for writing `part`; `own` is its current version, if any."""
     human = background
-    indent = None if compact else 1
     inputs = [key for key in INPUTS.get(part, ()) if key in parts]
     if inputs:
         written = "\n\n".join(
-            f"## {TITLES[key]}\n{parts[key].model_dump_json(indent=indent)}" for key in inputs
+            f"## {TITLES[key]}\n{parts[key].model_dump_json(indent=1)}" for key in inputs
         )
         human += f"\n\nThe proposal parts the specialists wrote:\n\n{written}"
     if part == "financial":
@@ -361,7 +336,7 @@ def _prompt(part: str, background: str, parts: dict, own, instruction: str,
     if part == "executive" and "financial" in parts:
         human += f"\n\n{metrics_text(parts['financial'], parts.get('market'))}"
     if own:
-        human += f"\n\nYour part as it stands:\n{own.model_dump_json(indent=indent)}"
+        human += f"\n\nYour part as it stands:\n{own.model_dump_json(indent=1)}"
     if instruction:
         human += (f"\n\nThe founder asks for this change:\n{fence(instruction, 'founder')}\n\nApply it "
                   "wherever it concerns your part, and keep the rest as it stands.")
@@ -376,16 +351,13 @@ def _prompt(part: str, background: str, parts: dict, own, instruction: str,
     return [SystemMessage(_system(part)), HumanMessage(human)]
 
 
-def _ask(key: str, messages: list, tracker, why: dict[str, str] | None = None):
-    """One structured call for a part; None, logged, if it fails, with why in
-    `why` when it can never fit the provider's plan."""
+def _ask(key: str, messages: list, tracker):
+    """One structured call for a part; None, logged, if it fails."""
     role = CHIEF if key == "executive" else SPECIALIST
     try:
         return structured_invoke(SCHEMAS[key], messages, tracker, role, f"proposal/{key}")
     except LLM_ERRORS as error:
         logger.warning("Proposal part %s failed: %s", key, error)
-        if why is not None and (reason := too_large(error)):
-            why[key] = reason
         return None
 
 
@@ -420,11 +392,9 @@ def write_proposal(report: Report, instruction: str = "",
 def _write_proposal(report: Report, instruction: str, part: str | None) -> tuple[Proposal, list[str]]:
     current = report.proposal
     redo = parts_to_write(current, part)
-    # Whole for the main provider; cut to fit for Groq, should it be answering by the time a part is written.
-    backgrounds = {compact: _background(report, compact) for compact in (False, True)}
+    background = _background(report)
     parts = {key: getattr(current, key) for key in SCHEMAS} if current else {}
     failed: list[str] = []
-    why: dict[str, str] = {}
 
     metrics: dict = {}
     with track("proposal", metrics) as tracker:
@@ -437,9 +407,7 @@ def _write_proposal(report: Report, instruction: str, part: str | None) -> tuple
                 told = instruction if (part is None or key == part) else ""
                 changed = [k for k in INPUTS.get(key, ()) if k in redo] if current else []
                 own = getattr(current, key) if current else None
-                compact = groq_answers()
-                return _ask(key, _prompt(key, backgrounds[compact], parts, own, told, changed, compact=compact),
-                            tracker, why)
+                return _ask(key, _prompt(key, background, parts, own, told, changed), tracker)
 
             with ContextThreadPoolExecutor(max_workers=len(keys)) as pool:
                 written = dict(zip(keys, pool.map(write, keys)))
@@ -447,8 +415,6 @@ def _write_proposal(report: Report, instruction: str, part: str | None) -> tuple
                 if value is not None:
                     parts[key] = value
                 elif current is None:
-                    if key in why:
-                        raise ProposalNotWritten(f"The {TITLES[key]} part could not be written: {why[key]}", retry=False)
                     raise ProposalNotWritten(f"The {TITLES[key]} part could not be written.")
                 else:
                     failed.append(TITLES[key])
@@ -457,9 +423,8 @@ def _write_proposal(report: Report, instruction: str, part: str | None) -> tuple
                 issues = figure_checks(parts["market"], parts["financial"])
                 if issues:
                     logger.info("Financial figures fail checks, asking for a correction: %s", issues)
-                    compact = groq_answers()
-                    messages = _prompt("financial", backgrounds[compact], parts, parts["financial"], "", [],
-                                       issues, compact=compact)
+                    messages = _prompt("financial", background, parts, parts["financial"], "", [],
+                                       issues)
                     parts["financial"] = _ask("financial", messages, tracker) or parts["financial"]
 
     metric = metrics["proposal"]
@@ -499,7 +464,7 @@ def revise_text(report: Report, path: str, instruction: str, passage: str | None
         document = "investment proposal" if path.startswith("proposal") else "report"
         system = _rewrite_system(role, document, _currency_rule())
         where = label(report, path)
-        human = f"{_background(report, groq_answers())}\n\nThe part to revise is {where}. It reads:\n{fence(current, 'the team report')}"
+        human = f"{_background(report)}\n\nThe part to revise is {where}. It reads:\n{fence(current, 'the team report')}"
         if passage:
             human += (f"\n\nRewrite only this passage of it, and return just the passage rewritten:\n"
                       f"{fence(passage, 'the team report')}")

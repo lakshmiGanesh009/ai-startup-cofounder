@@ -112,7 +112,8 @@ graph TD
 | 35 | Langfuse: every model call traced, the prompts versioned, the team's and the founder's scores, experiments with an LLM judge | LLM observability and evaluation: what each agent was asked and answered, at what cost, and how good it was | Built |
 | 36 | A report picker that shows what each report is: a pop-up of every report, searchable, with a preview, a brief, key figures, the founder's choices and what changed between versions; reports deleted from it | Navigating the deliverables: the right report found and opened at a glance, and the rest cleared away | Built |
 | 37 | Dictation: a mic in the input boxes, written down in English by Azure OpenAI's Whisper, in a signature style | Usability: the brief, the answers and the questions spoken rather than typed | Built |
-| 38 | Groq on standby: a backup model provider for every call, and for dictation | Reliability: the team keeps working when Azure OpenAI is down or refuses the key | Built |
+| 38 | Groq on standby: a backup model provider for every call, and for dictation | Reliability: the team keeps working when Azure OpenAI is down or refuses the key | Removed (Step 39): Groq's free tier was exhausted |
+| 39 | The Monitor's providers: which of Azure OpenAI, Tavily and FRED is used, for what, and how each stands; Groq removed | Observability: which provider answers or fails, and why, at a glance | Built |
 
 ## Live verification
 
@@ -157,6 +158,7 @@ Run on 2026-10-16 against Azure OpenAI `gpt-5-mini` (reasoning effort `minimal`)
 | 36 | The Reports page against the API and the scratch database with seven saved reports (three proposals in USD, EUR and GBP, four team reports, every verdict, edited and outdated ones), in headless Chrome | Pass after fixes. The API listed each with its verdict, figures and team; the picker opened with the search box focused and every report listed; the preview of a proposal showed its recommendation, NPV -€48.9k, IRR, payback and break-even, its newer results, team, currency and last change; the filters, search and Enter worked, and on a phone a tap opened a report, nothing wider than the screen. No console errors. Fixes: the verdict pattern read the "go" of "go-to-market"; it now reads only after "Recommendation:" or "Verdict:". The team followed the sections' order; it is in the team's order. The pop-up's own button took the focus from the search box; the box takes it after the pop-up opens. Long names were cut short on a phone beside the verdict, which moves below them there; the button's line lost its date, which it keeps now without the version. Then deleting, on the same reports: the preview's Delete asked first, with Keep it focused, and the report left the list and the API (404); the page said what went; More actions asked the same for the open report, and deleting it opened the newest left, the picker counting one fewer. No console errors. Then the brief and key figures, on six saved reports, the team reports with full strategies: the API gave each a brief and four figures; a team report's preview showed its strategy's opening with every amount picked out and its figures as tiles (Price $99/month per practice, Launch budget $40,000, Gross margin 82%, CAC $450), a proposal's its case and its plan, light and dark; an edit made through the API showed on reopening the picker. Fixes: the first figures found were weak ("Payment 50%", "Setup fee $0"); amounts now come first and nil ones are left out. A dangling "Key facts driving this" closed a brief; such a line now goes when its points do not fit. "$99 per practice per month" was cut at the first "per", and "$14,000," kept its comma. "$2,400/sprint" spilled out of its tile at 1100px; the unit is now set smaller beside the number. The brief restated the verdict beside it; it now starts with the decision. No console errors. Then the versions, made through the API as the app makes them (on a team report an edit, a currency conversion and a find-and-replace; on a proposal a conversion and a settings change): the API gave each version its count and areas (v4 1 change in Launch Strategy, v3 6 changes, v1 the first version) and the conversion's changes matched its draft's; in the preview the timeline listed v4 to v1, the edit opened with $99 struck and $119 added, the conversion with each amount before and after, the proposal's 32 changes in full after Show all ($216,000,000 → £162,000,000), light and dark, nothing wider than the preview at 1100px. No console errors. Fix: long unchanged text was cut inside a word ("so one … ots,"); it is cut at a word now. Then the founder's choices, on the seeded reports, one with every choice: the preview showed the brief, its details, two answers, four of five facts with links to their sources, the document and how the team ran, with every figure in the founder's words picked out ($99 a month, $40k, 6 months, 8-10%, $150-$200, $300+ a month), light and dark, and nothing wider than the preview at 1100px; an older report showed its brief and said what is not known. No console errors. Fix: a range was picked out as its last number ("10%" of "8-10%"), "$150-$200" as two figures, and "$300+ a month" without its "+ a month"; each is one figure now. A real evaluation to see the choices recorded live could not run: Azure OpenAI refused the key in `.env` (401); the recording is covered by the automated test. Then the title bar: Open this report and Delete at the top of the preview, still in view with the body scrolled to its end; Delete's confirmation in the bar with Keep it focused, and Keep it bringing the actions back; both fitting at 1100px; Open this report opening the report; light and dark. No console errors. |
 | 37 | The Evaluate and Reports pages against the API, the API against a stand-in for Azure OpenAI's speech-to-text route that records each request (Azure refused the key in `.env`), headless Chrome with its fake microphone | Pass after fixes. `/health` said dictation was set up; each input box had its mic; recording, the five bars followed the voice and the focus stayed in the box; stopped, the words went in after those typed ("A text-message reminder service for dental practices. Launch a paid pilot with five clinics at $149 a month."); the SDK's request was Whisper's translation route (`/openai/deployments/whisper/audio/translations`) with `api-version=2024-10-21`, the key, a `dictation.webm` of `audio/webm` and the model, with no deployment set; Escape sent nothing; a 401 said "The speech-to-text call failed: Azure OpenAI answered 401: Access denied due to invalid subscription key." under the box, and a missing deployment what to deploy; light, dark and a phone, nothing wider than it; the picker's search and Ask about it had theirs. No console errors but the failure made on purpose. Fixes: the app's `Permissions-Policy` refused the microphone; it allows it for the app's own pages now. In a box of several lines the mic sat on the resize grip; it sits clear of it. The search box's magnifier went under the mic's wrapper; it is inside it now. The failure read as the SDK's raw error; it says what Azure answered. |
 | 38 | The API against Azure OpenAI (still refusing the key, 401) with Groq standing by (free tier), the scratch database, Tavily off, Langfuse on; headless Chrome | Pass after fixes, but for one limit of Groq's free tier. A call through the client went to Groq (2.6 s, `openai/gpt-oss-120b`); `/health` named Azure first and Groq standing by, then standing in. A brief prepared (Azure's web search failing, the questions from Groq), a team run streamed in 223 s with every specialist reporting and reviewed, a verdict, the report and the founder's choices kept, traced in Langfuse; Ask about it answered from the report; dictation in English and in Spanish, written in English, on Groq's Whisper (Azure has no Whisper deployment); the Monitor logged the failover; the sidebar named the backup. Fixes: Groq's tool calling skipped the tool (`tool_use_failed`) for the brief and Ask, so its structured replies come through a JSON schema, and such a refusal is asked for again once; the team's parallel calls hit Groq's 8,000 tokens a minute (29 answers of 429; the technical specialist and a review lost), so Groq's calls take turns and wait out each limit (then 18 answers of 429, all waited out, none lost). The proposal's financial plan then needed 9,353 tokens in one call, over the free tier's 8,000 a minute (a 413), so Groq's calls now also wait for room in the minute's tokens and the proposal is written from a compact report on Groq: written again from a seeded team report, every part came back in 202 s, two 429s waited out, no request too large, no prompt cut, the figures computed with no check failing. Azure's own calls are unchanged. |
+| 39 | The Monitor page against the API on the real providers (Azure OpenAI refusing its key, Tavily and FRED set up), a brief prepared and a dictation, in headless Chrome, before Groq was removed | Pass after fixes. Before any call the Monitor named each provider ready or answering, with what it is for; after them Azure failing (its model and its web searches, 401 and why), Tavily and FRED not called; the cards light and dark, nothing wider than a phone, no console errors. Fixes: a long status badge wrapped the card's title, now one word; a long reason showed part of a fifth line, now clamped inside its box. Then Groq was removed (its free tier's 200,000 tokens a day were spent), and the statuses became answering, ready, failing and not set up: checked by the automated tests. |
 
 ### Fixed during live verification
 
@@ -984,7 +986,9 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - The founder can speak into any input box and have the words written in where they were typing.
 
-### Step 38 - Groq on standby (Built)
+### Step 38 - Groq on standby (Built, then removed in Step 39)
+
+**Removed** on 2026-10-23, at the founder's word: Groq's free tier was exhausted (its 200,000 tokens a day spent), so there was no point keeping it. Step 39 took out the backup, its pacing, the compact prompts and Groq's dictation; Azure OpenAI works as it did before Step 38. What follows is the record of what was built.
 
 **Goal:** keep working when Azure OpenAI does not. Azure refused the key (401), and the founder asked for a secondary API on standby, Groq, with its key in `.env`.
 
@@ -1004,12 +1008,32 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - With Azure OpenAI down, an evaluation, a proposal and dictation still work, on Groq, and the sidebar says so.
 
+### Step 39 - The Monitor's providers, and Groq removed (Built)
+
+**Goal:** see on the Monitor page whether Azure OpenAI or Tavily (or FRED) is being used, for what, and how each stands. The founder asked for it after Azure failed and Groq stood in; then, Groq's free tier exhausted, asked for everything Groq to go.
+
+**Built:**
+
+- `monitor.calling(provider, service)` counts each call to a provider where it is made: its time, whether it failed and why (the status and message the provider answered), and what it used (tokens in and out, credits). The team's model calls through `llm.Counted` (every model `get_llm` returns), Azure's web search and research (with their tokens), Tavily's searches (a basic search, a credit) and research (the credits it reports), the look-ups (FRED's figures, Tavily's competitor pages through its MCP server), and dictation. Prometheus gets `cofounder_provider_calls_total` (by provider, service and outcome), `_tokens_total` and `_credits_total`.
+- `GET /monitoring` returns the `providers`: Azure OpenAI, Tavily and FRED, and OpenAI once it is set up or used, each with whether it is set up, what the app uses it for ("the team's model, web search and dictation"), how it stands now (answering, or ready for a provider called on demand; failing when its latest call failed; not set up) and what each of its services did.
+- The Monitor page's **Providers**, under the health: a card each, its status as a badge, a line for each service (calls and failures, tokens in and out, credits, the last call), the last failure's reason (four lines, the whole on hover), and for one not set up the setting that turns it on. Shown before anything has run too.
+- Groq removed (Step 38 undone): the model client, dictation, the proposal writer and the Chief of Staff's structured calls are as they were in Step 37; `/health` no longer has `llm`, nor the sidebar its standby line; the Groq settings are gone from `.env.example` and the docs.
+
+**Check:**
+
+- Automated: the counts, failures and reasons, credits, and their Prometheus counters; each call point (the model through `Counted`, Tavily's searches and credits, Azure's searches and research with tokens, FRED's look-ups, dictation); `/monitoring`'s providers, set up or not, answering, then failing, then answering again; the page's cards, statuses, service lines, failure and hint.
+- Live: the Monitor against the real providers (see the live verification table).
+
+**Done when:**
+
+- The Monitor says at a glance which provider answers, which fails and why, and what each costs; and nothing of Groq is left.
+
 ## Target layout
 
 ```
 main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-26
 progress.py                Step summaries for the stream      Step 18
-monitor.py                 What the API has done              Steps 22-24
+monitor.py                 What the API has done              Steps 22-24, 39
 observability.py           Request IDs, logs, access log      Step 23
 persistence.py             PostgreSQL or memory storage       Step 24
 security.py                The API key and the limits         Step 25
@@ -1024,7 +1048,7 @@ deep_research.py           Deep research for the specialists  Step 20
 providers.py               Where web research runs            Step 21
 azure_web.py               Azure OpenAI's web search          Step 21
 config.py                  Environment settings               Step 0
-llm.py                     Chat model client, Groq on standby Steps 1, 38
+llm.py                     Chat model client                  Steps 1, 39
 state.py                   Shared workflow state              Step 2 onward
 graph.py                   LangGraph state machine            Step 2 onward
 metrics.py                 Per-node run metrics               Step 10
@@ -1038,7 +1062,7 @@ extract.py                 The text of an uploaded file       Step 30
 library.py                 The founder's documents            Step 30
 lookups.py                 Look-ups through MCP servers       Step 31
 rates.py                   Today's exchange rates (ECB)       Step 34
-voice.py                   Dictation: speech-to-text          Steps 37-38
+voice.py                   Dictation: speech-to-text          Steps 37, 39
 tracing.py                 Tracing, prompts, scores: Langfuse Step 35
 prompt_library.py          The prompts, named for Langfuse    Step 35
 judge.py                   An LLM judge of a strategy         Step 35
@@ -1052,5 +1076,5 @@ scenarios/                 Startup scenarios                  Step 9
 templates/                 Decision templates                 Step 19
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-frontend/                  Next.js frontend                   Steps 13-14, 18, 32-37
+frontend/                  Next.js frontend                   Steps 13-14, 18, 32-39
 ```

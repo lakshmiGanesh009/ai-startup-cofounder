@@ -244,3 +244,62 @@ def test_the_api_logs_its_start_and_where_it_keeps_sessions():
     assert [(event["kind"], event["message"]) for event in seen["events"]] == [
         ("system", "The API started, keeping sessions and reports in memory; open to anyone who can reach it (no API_KEY)."),
     ]
+
+
+# ---- The providers ----
+
+def test_each_providers_calls_are_counted_with_what_they_used_and_why_one_failed():
+    import httpx
+    import openai
+
+    watch = Monitor()
+    with watch.calling("azure", "model") as call:
+        call.used(1_200, 300)
+    refused = openai.AuthenticationError(
+        "Error code: 401", response=httpx.Response(401, request=httpx.Request("POST", "https://azure.example")),
+        body={"error": {"code": "401", "message": "Access denied due to invalid subscription key."}})
+    with pytest.raises(openai.AuthenticationError):
+        with watch.calling("azure", "model"):
+            raise refused
+    with watch.calling("tavily", "web search") as call:
+        call.used(credits=1)
+
+    providers = watch.snapshot().providers
+    assert [provider.provider for provider in providers] == ["azure", "tavily"]
+    model = providers[0].services[0]
+    assert (model.service, model.calls, model.failed, model.tokens_in, model.tokens_out) == ("model", 2, 1, 1_200, 300)
+    assert model.last_failure == "401: Access denied due to invalid subscription key."
+    assert providers[1].services[0].credits == 1
+    sample = watch.metrics.registry.get_sample_value
+    assert sample("cofounder_provider_calls_total", {"provider": "azure", "service": "model", "outcome": "failed"}) == 1
+    assert sample("cofounder_provider_tokens_total", {"provider": "azure", "direction": "in"}) == 1_200
+    assert sample("cofounder_provider_credits_total", {"provider": "tavily"}) == 1
+
+
+def test_the_monitor_says_which_providers_are_set_up_and_how_each_stands(monkeypatch):
+    import openai
+    from monitor import monitor
+
+    rows = {row["provider"]: row for row in client.get("/monitoring").json()["providers"]}
+    assert list(rows) == ["azure", "tavily", "fred"]  # OpenAI only once it is set up or used
+    assert {row["status"] for row in rows.values()} == {"not set up"}
+
+    for name, value in (("AZURE_OPENAI_API_KEY", "key"), ("AZURE_OPENAI_ENDPOINT", "https://azure.example"),
+                        ("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5-mini"), ("TAVILY_API_KEY", "tvly"), ("FRED_API_KEY", "fred")):
+        monkeypatch.setenv(name, value)
+    with monitor.calling("azure", "model") as call:
+        call.used(500, 50)
+    rows = {row["provider"]: row for row in client.get("/monitoring").json()["providers"]}
+    assert (rows["azure"]["status"], rows["azure"]["role"]) == ("answering", "the team's model, web search and dictation")
+    assert rows["azure"]["services"][0]["calls"] == 1 and rows["azure"]["services"][0]["tokens_in"] == 500
+    assert (rows["tavily"]["status"], rows["tavily"]["role"]) == ("ready", "web research and competitors' pricing pages")
+    assert (rows["fred"]["status"], rows["fred"]["role"]) == ("ready", "official economic figures")
+
+    # A provider whose latest call failed is failing, until one answers again.
+    with pytest.raises(openai.APIConnectionError):
+        with monitor.calling("azure", "web search"):
+            raise _provider_error()
+    assert {row["provider"]: row for row in client.get("/monitoring").json()["providers"]}["azure"]["status"] == "failing"
+    with monitor.calling("azure", "model"):
+        pass
+    assert {row["provider"]: row for row in client.get("/monitoring").json()["providers"]}["azure"]["status"] == "answering"

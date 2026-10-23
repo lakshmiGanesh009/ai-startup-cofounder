@@ -1,7 +1,8 @@
 """What the API has been doing, for the How it works page's monitor and for
 Prometheus: the evaluations it ran, what each step took and cost, the briefs
-and proposals it prepared, the requests it answered, and a log of recent
-events, warnings and errors.
+and proposals it prepared, the requests it answered, which providers it called
+for what (Azure OpenAI, Tavily, FRED: their calls, failures, tokens and
+credits), and a log of recent events, warnings and errors.
 
 The endpoints record into one `Monitor`; a logging handler adds the app's
 warnings and errors, and the model client's retries, which show where Azure
@@ -14,8 +15,10 @@ kept there too, and read back when the API starts.
 import logging
 import math
 import threading
+import time
 from collections import deque
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
@@ -161,6 +164,61 @@ class Totals(BaseModel):
     errors: int = 0
 
 
+Provider = Literal["azure", "openai", "tavily", "fred"]
+Service = Literal["model", "web search", "research", "speech", "figures", "competitor pages"]
+PROVIDER_ORDER: tuple[str, ...] = ("azure", "openai", "tavily", "fred")
+SERVICE_ORDER: tuple[str, ...] = ("model", "web search", "research", "speech", "figures", "competitor pages")
+
+
+class ServiceUse(BaseModel):
+    """What the API asked of one provider's service since it started."""
+
+    service: Service
+    calls: int = 0
+    failed: int = 0
+    tokens_in: int = 0
+    tokens_out: int = 0
+    seconds: float = Field(0, description="Time in its calls.")
+    credits: int = Field(0, description="Credits its calls spent (Tavily's).")
+    last_at: datetime | None = None
+    last_failure: str | None = Field(None, description="Why its last failed call failed.")
+    last_failure_at: datetime | None = None
+
+
+class ProviderUse(BaseModel):
+    """One provider: whether it is set up, what the app uses it for, how it
+    stands now, and what each of its services did."""
+
+    provider: Provider
+    set_up: bool = True
+    role: str = ""
+    status: Literal["answering", "ready", "failing", "not set up"] = "ready"
+    services: list[ServiceUse] = Field(default_factory=list)
+
+
+class Call:
+    """What a call to a provider used, for its caller to say."""
+
+    def __init__(self):
+        self.tokens_in = self.tokens_out = self.credits = 0
+
+    def used(self, tokens_in: int = 0, tokens_out: int = 0, credits: int = 0) -> None:
+        self.tokens_in += tokens_in
+        self.tokens_out += tokens_out
+        self.credits += credits
+
+
+def failure_reason(error: BaseException) -> str:
+    """A failed call in a line: the status and message a provider answered, else the error."""
+    status = getattr(error, "status_code", None)
+    body = getattr(error, "body", None)
+    said = (body.get("error") if isinstance(body, dict) and isinstance(body.get("error"), dict) else body) if body else None
+    message = said.get("message") if isinstance(said, dict) else None
+    if status and message:
+        return f"{status}: {message}"[:300]
+    return (f"{type(error).__name__}: {error}" if str(error) else type(error).__name__)[:300]
+
+
 class Monitoring(BaseModel):
     started_at: datetime
     kept_in: Literal["memory", "postgres"] = Field(
@@ -173,6 +231,9 @@ class Monitoring(BaseModel):
         None, description="How long the evaluations finished since the API started took; none until one has."
     )
     nodes: list[NodeStats]
+    providers: list[ProviderUse] = Field(
+        default_factory=list, description="The providers the API calls, how each stands, and what it used them for."
+    )
     runs: list[Run] = Field(description="The latest evaluations, newest first.")
     events: list[Event] = Field(description="The latest events, newest first.")
 
@@ -218,6 +279,11 @@ class Metrics:
                                ["reason"])
         self.flagged = counter("guardrail_flags", "Text that tried to instruct the agents, cut out of what they read.",
                                ["origin", "kind"])
+        self.provider_calls = counter("provider_calls", "Calls to a provider's service, by outcome.",
+                                      ["provider", "service", "outcome"])
+        self.provider_tokens = counter("provider_tokens", "Tokens a provider's models read and wrote.",
+                                       ["provider", "direction"])
+        self.provider_credits = counter("provider_credits", "Credits a provider's calls spent.", ["provider"])
 
 
 class Monitor:
@@ -239,6 +305,7 @@ class Monitor:
             self._totals = Totals()
             self._nodes: dict[str, NodeStats] = {}
             self._samples: dict[str, deque[float]] = {}
+            self._usage: dict[tuple[str, str], ServiceUse] = {}
             self._running = 0
             self.metrics = Metrics()
 
@@ -335,6 +402,52 @@ class Monitor:
                 metrics.model_calls.labels(node).inc(metric.calls)
                 metrics.tokens.labels(node).inc(metric.tokens)
 
+    @contextmanager
+    def calling(self, provider: Provider, service: Service) -> Iterator[Call]:
+        """Count a call to `provider`'s `service`: its time, and whether it
+        failed and why. The caller says what it used on the Call yielded."""
+        started = time.monotonic()
+        call = Call()
+        try:
+            yield call
+        except Exception as error:
+            self._used(provider, service, call, time.monotonic() - started, error)
+            raise
+        self._used(provider, service, call, time.monotonic() - started, None)
+
+    def _used(self, provider: str, service: str, call: Call, seconds: float, error: BaseException | None) -> None:
+        with self._lock:
+            use = self._usage.setdefault((provider, service), ServiceUse(service=service))
+            use.calls += 1
+            use.seconds = round(use.seconds + seconds, 2)
+            use.tokens_in += call.tokens_in
+            use.tokens_out += call.tokens_out
+            use.credits += call.credits
+            use.last_at = _now()
+            if error is not None:
+                use.failed += 1
+                use.last_failure = failure_reason(error)
+                use.last_failure_at = use.last_at
+            self.metrics.provider_calls.labels(provider, service, "failed" if error else "answered").inc()
+            if call.tokens_in or call.tokens_out:
+                self.metrics.provider_tokens.labels(provider, "in").inc(call.tokens_in)
+                self.metrics.provider_tokens.labels(provider, "out").inc(call.tokens_out)
+            if call.credits:
+                self.metrics.provider_credits.labels(provider).inc(call.credits)
+
+    def usage(self) -> list[ProviderUse]:
+        """What each provider was called for since the API started, in a steady order."""
+        with self._lock:
+            return self._providers()
+
+    def _providers(self) -> list[ProviderUse]:
+        providers: dict[str, ProviderUse] = {}
+        for (provider, service), use in sorted(
+            self._usage.items(), key=lambda item: (PROVIDER_ORDER.index(item[0][0]), SERVICE_ORDER.index(item[0][1]))
+        ):
+            providers.setdefault(provider, ProviderUse(provider=provider)).services.append(use.model_copy())
+        return list(providers.values())
+
     def count(self, what: Literal["briefs", "proposals"], ok: bool = True) -> None:
         """Count a brief or a proposal, prepared or failed."""
         with self._lock:
@@ -377,7 +490,7 @@ class Monitor:
                 ],
                 runs=list(reversed(self._runs)),
                 events=list(reversed(self._events)),
-            )
+            ).model_copy(update={"providers": self._providers()})
 
 
 class MonitorHandler(logging.Handler):

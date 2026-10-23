@@ -39,6 +39,7 @@ from config import LOOKUP_TIMEOUT, TAVILY_MCP_URL
 from guardrails import RULES, fence
 from llm import CHIEF, LLM_ERRORS
 from metrics import track
+from monitor import Provider, Service, monitor
 from state import EconomicData, Figure, RequestContext, WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -111,10 +112,11 @@ def _cause(error: BaseException) -> BaseException:
     return error
 
 
-def _run(work, what: str):
-    """Run a look-up from a graph node's thread, within its time."""
+def _run(work, what: str, provider: Provider, service: Service):
+    """Run a look-up from a graph node's thread, within its time, counted on the Monitor."""
     try:
-        return asyncio.run(asyncio.wait_for(work, LOOKUP_TIMEOUT * 3))
+        with monitor.calling(provider, service):
+            return asyncio.run(asyncio.wait_for(work, LOOKUP_TIMEOUT * 3))
     except Exception as error:
         cause = _cause(error)
         if isinstance(cause, LookupFailed):
@@ -256,7 +258,7 @@ def look_up_economy(searches: list[str], choose: Choose | None = None) -> Econom
     searches = [text.strip()[:120] for text in searches if text.strip()][:MAX_SEARCHES]
     missing: list[str] = []
     try:
-        found = _run(_search(searches), "FRED") if searches else {}
+        found = _run(_search(searches), "FRED", "fred", "figures") if searches else {}
         listed = {text: candidates(series or [], text) for text, series in found.items()}
         missing += [f"no series that fits \"{text}\"" for text, series in listed.items() if not series]
         picked = choose({text: series for text, series in listed.items() if series}) if choose and any(listed.values()) else None
@@ -268,7 +270,7 @@ def look_up_economy(searches: list[str], choose: Choose | None = None) -> Econom
                     picked[pick["id"]] = f"Found for \"{text}\"."
         offered = {series["id"] for series in sum(listed.values(), [])}
         picked = {key: why for key, why in picked.items() if key in offered and key not in CORE}
-        figures, unread = _run(_read({**CORE, **dict(list(picked.items())[:MAX_SEARCHES])}), "FRED")
+        figures, unread = _run(_read({**CORE, **dict(list(picked.items())[:MAX_SEARCHES])}), "FRED", "fred", "figures")
     except LookupFailed as error:
         logger.warning("Looking up FRED failed: %s", error)
         return EconomicData(searches=searches, note=str(error))
@@ -446,7 +448,7 @@ def read_competitor_pages(names: list[str]) -> Pages:
     if not names:
         return Pages({}, 0, 0)
     try:
-        return _run(_pages(names), "Tavily's MCP server")
+        return _run(_pages(names), "Tavily's MCP server", "tavily", "competitor pages")
     except LookupFailed as error:
         logger.warning("Reading the competitors' pages failed: %s", error)
         return Pages({}, 0, 0, str(error))

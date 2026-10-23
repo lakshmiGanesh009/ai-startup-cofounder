@@ -188,6 +188,12 @@ def test_when_fred_fails_the_look_up_says_why_and_the_run_goes_on(monkeypatch):
 
     monkeypatch.setitem(lookups.SERVERS, "fred", lambda: (_ for _ in ()).throw(OSError("no python")))
     assert look_up_economy([]).note == "FRED could not be reached (OSError)."
+    # The Monitor counts each look-up, and why the last one failed.
+    from monitor import monitor
+
+    (fred,) = monitor.usage()
+    figures = fred.services[0]
+    assert (fred.provider, figures.service) == ("fred", "figures") and figures.calls >= 2 and figures.failed >= 1
 
 
 # ---- The look-up step in the graph ----

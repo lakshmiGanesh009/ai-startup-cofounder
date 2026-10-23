@@ -1,16 +1,12 @@
 "use client";
 
 // Whether the browser can reach the API through this app's server, which
-// proves that BACKEND_URL and API_KEY are set up on that server; and, once it
-// can, which model provider the team's calls go to: the backup standing by, or
-// standing in because the main one failed lately.
+// proves that BACKEND_URL and API_KEY are set up on that server.
 
-import { LLM_NAMES } from "@/lib/api";
 import { useBackend } from "@/lib/backend";
 
 export function BackendStatus() {
-  const { status, error, health } = useBackend();
-  const llm = health?.llm;
+  const { status, error } = useBackend();
 
   return (
     <section aria-live="polite" className="text-xs leading-relaxed">
@@ -21,22 +17,10 @@ export function BackendStatus() {
         </p>
       )}
       {status === "up" && (
-        <>
-          <p className="flex items-center gap-2 text-ink-2">
-            <span aria-hidden className={`size-1.5 rounded-full ${llm?.standing_in ? "bg-warn" : "bg-good"}`} />
-            <span>API connected</span>
-          </p>
-          {llm?.main && llm.backup && llm.standing_in && (
-            <p className="mt-1 pl-3.5 text-warn">
-              {LLM_NAMES[llm.backup]} is answering: {LLM_NAMES[llm.main]} failed in the last few minutes.
-            </p>
-          )}
-          {llm?.main && llm.backup && !llm.standing_in && (
-            <p className="mt-1 pl-3.5 text-ink-3">
-              {LLM_NAMES[llm.main]}, with {LLM_NAMES[llm.backup]} on standby
-            </p>
-          )}
-        </>
+        <p className="flex items-center gap-2 text-ink-2">
+          <span aria-hidden className="size-1.5 rounded-full bg-good" />
+          <span>API connected</span>
+        </p>
       )}
       {status === "down" && (
         <div className="text-bad">

@@ -23,6 +23,7 @@ import openai
 from langchain_core.runnables.config import ContextThreadPoolExecutor
 
 from config import LLM_MAX_RETRIES, LLM_TIMEOUT
+from monitor import monitor
 from search import CONTENT_CHARS, Hit, Report, SearchFailed
 
 logger = logging.getLogger(__name__)
@@ -49,18 +50,23 @@ def _azure(endpoint: str, key: str) -> openai.OpenAI:
     )
 
 
-def _create(**kwargs):
-    """One Responses API call with web search; SearchFailed if it cannot be made."""
+def _create(service: str, **kwargs):
+    """One Responses API call with web search, counted on the Monitor under
+    `service` ("web search" or "research"); SearchFailed if it cannot be made."""
     if not available():
         raise SearchFailed("Azure OpenAI is not set up")
     client = _client or _azure(os.environ["AZURE_OPENAI_ENDPOINT"], os.environ["AZURE_OPENAI_API_KEY"])
     try:
-        return client.responses.create(
-            model=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
-            tools=[{"type": "web_search"}],
-            reasoning={"effort": EFFORT},
-            **kwargs,
-        )
+        with monitor.calling("azure", service) as call:
+            response = client.responses.create(
+                model=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
+                tools=[{"type": "web_search"}],
+                reasoning={"effort": EFFORT},
+                **kwargs,
+            )
+            usage = getattr(response, "usage", None)
+            call.used(getattr(usage, "input_tokens", 0) or 0, getattr(usage, "output_tokens", 0) or 0)
+            return response
     except openai.OpenAIError as error:
         raise SearchFailed(f"Azure OpenAI's web search failed ({type(error).__name__})") from error
 
@@ -100,7 +106,7 @@ def _message(response) -> tuple[str, list[dict]]:
 
 def search(query: str) -> list[Hit]:
     """The pages a web search for `query` found, with their snippets."""
-    response = _create(input=f"Search the web for: {query}", include=["web_search_call.results"])
+    response = _create("web search", input=f"Search the web for: {query}", include=["web_search_call.results"])
     hits: dict[str, Hit] = {}
     for item in response.output:
         if getattr(item, "type", "") != "web_search_call":
@@ -206,6 +212,7 @@ def research(task: str, schema: dict | None = None) -> Report:
             "specific figures, citing each source inline."
         )
         response = _create(
+            "research",
             input=prompt,
             text={"format": {"type": "json_schema", "name": "profile", "schema": _strict(schema), "strict": True}},
         )
@@ -216,7 +223,7 @@ def research(task: str, schema: dict | None = None) -> Report:
             "report: no list of sources at the end, no questions to the reader, and no offer of "
             "further help."
         )
-        response = _create(input=prompt)
+        response = _create("research", input=prompt)
     text, notes = _message(response)
     if not text.strip():
         raise SearchFailed("Azure OpenAI's research gave no answer")
