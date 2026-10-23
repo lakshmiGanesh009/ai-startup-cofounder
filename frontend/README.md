@@ -40,7 +40,7 @@ Or start both with `./start.sh local` from the repository root, which asks for o
 
 On a large screen the button beside the mark (**Collapse the sidebar**) folds the sidebar into a narrow rail of the pages' icons, each named on hover, so a page, the document's above all, takes nearly the whole window; **Expand the sidebar** opens it out. This browser remembers it (`src/lib/sidebar.ts`): like the theme, it is an attribute on `<html>` (`data-sidebar`) set by a small script before the page first paints, which the layout's CSS follows (the `rail` variant and `--sidebar-width`). On a phone the sidebar is a bar with a menu, as before.
 
-The sidebar shows whether the browser can reach the backend, checking again every 30 s while the page is shown, so it follows an outage and the recovery. If it can't, check that the backend is running and that `BACKEND_URL` and `API_KEY` in `.env.local` match it.
+The sidebar shows whether the browser can reach the backend, checking again every 30 s while the page is shown, so it follows an outage and the recovery. Under it, when a backup provider stands by (`llm` in `/health`), it says so ("Azure OpenAI, with Groq on standby"), and while the backup answers because the main provider failed in the last few minutes, says that instead, its dot turning amber. If it can't, check that the backend is running and that `BACKEND_URL` and `API_KEY` in `.env.local` match it.
 
 ## The Evaluate page
 

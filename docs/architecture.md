@@ -328,6 +328,11 @@ No failed LLM call produces a 500. Each failure is handled where it happens:
 
 - **Every call** has a timeout (`LLM_TIMEOUT`), and the client retries API
   errors (`LLM_MAX_RETRIES`).
+- **A provider that is down** is stood in for: with `GROQ_API_KEY` set beside
+  Azure OpenAI, a call Azure cannot serve (unreachable, the key refused, no such
+  deployment, rate-limited, failing) goes to Groq (`llm.WithBackup`), and so do
+  the calls after it for five minutes. A refusal (a 400, the content filter)
+  is not sent on. Dictation falls back the same way, to Groq's Whisper.
 - **A structured reply that does not parse** is retried once. API errors are not
   retried again on top of the client's retries.
 - **A failed specialist** becomes a named gap (`[unavailable]`): review and

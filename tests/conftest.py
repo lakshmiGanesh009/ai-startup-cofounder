@@ -55,6 +55,13 @@ PROVIDER_VARS = [
     "AZURE_OPENAI_CHIEF_REASONING_EFFORT",
     "OPENAI_API_KEY",
     "MODEL_NAME",
+    "GROQ_API_KEY",
+    "GROQ_MODEL",
+    "GROQ_WHISPER_MODEL",
+    "GROQ_MAX_CONCURRENT",
+    "GROQ_MAX_RETRIES",
+    "AZURE_OPENAI_TRANSCRIPTION_DEPLOYMENT",
+    "AZURE_OPENAI_TRANSCRIPTION_API_VERSION",
     "TAVILY_API_KEY",
     "FRED_API_KEY",
     "LANGFUSE_PUBLIC_KEY",
@@ -82,7 +89,9 @@ def strip_credentials(monkeypatch):
     Langfuse (tests/test_tracing.py sets up one of its own)."""
     for name in PROVIDER_VARS:
         monkeypatch.delenv(name, raising=False)
-    llm._model.cache_clear()
+    llm._models.cache_clear()
+    llm._groq_turns.cache_clear()
+    llm.reset_backup()
     tracing.reset()
 
 
@@ -134,6 +143,7 @@ class FakeModel:
         self.rewrite = "A sharper passage."
         self.rewrite_prompts: list[str] = []
         self.fail_parts: set[str] = set()
+        self.part_error = _provider_error
         self.search_plan = SearchPlan(queries=["clinic scheduling software market size", "clinic scheduling software prices"])
         self.brief_review = BriefReview(
             findings=[
@@ -227,7 +237,7 @@ class FakeModel:
         def produce(prompt: str):
             self.part_prompts.setdefault(key, []).append(prompt)
             if key in self.fail_parts:
-                raise _provider_error()
+                raise self.part_error()
             return getattr(self.proposal, key)
 
         return produce

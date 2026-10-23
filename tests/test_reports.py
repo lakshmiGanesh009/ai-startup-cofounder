@@ -363,6 +363,52 @@ def test_a_new_proposal_with_a_part_missing_is_not_saved(fake_llm):
     assert client.get(f"/reports/{session_id}").json()["proposal"] is None
 
 
+def test_on_groq_the_proposal_is_written_from_a_compact_report(fake_llm, monkeypatch):
+    session_id = _evaluate()
+    report = client.get(f"/reports/{session_id}").json()
+    _sections(report)["strategy"]["body"] = "Launch now. " + "Pilot clinics pay. " * 400
+    client.put(f"/reports/{session_id}", json=report)
+    version = client.get(f"/reports/{session_id}").json()["version"]
+
+    # On the main provider, the whole report and the parts as indented JSON.
+    assert _write(session_id)["failed"] == []
+    whole = fake_llm.part_prompts["financial"][-1]
+    assert "Pilot clinics pay. " * 400 in whole and '{\n "' in whole
+
+    # With Groq answering: each section cut to its opening, the parts as compact JSON.
+    monkeypatch.setattr("agents.proposal_writer.groq_answers", lambda: True)
+    session_id = _evaluate()
+    report = client.get(f"/reports/{session_id}").json()
+    _sections(report)["strategy"]["body"] = "Launch now. " + "Pilot clinics pay. " * 400
+    client.put(f"/reports/{session_id}", json=report)
+    assert _write(session_id)["failed"] == []
+    compact = fake_llm.part_prompts["financial"][-1]
+    assert "Launch now. Pilot clinics pay." in compact and "Pilot clinics pay. " * 400 not in compact
+    assert '{\n "' not in compact and '{"' in compact
+    assert len(compact) < len(whole) * 2 / 3
+
+
+def test_a_part_too_large_for_the_providers_plan_says_so_and_not_to_try_again(fake_llm):
+    import httpx
+    import openai
+
+    session_id = _evaluate()
+    request = httpx.Request("POST", "https://api.groq.com/openai/v1/chat/completions")
+    fake_llm.fail_parts = {"financial"}
+    fake_llm.part_error = lambda: openai.APIStatusError(
+        "Error code: 413 - Request too large for model `openai/gpt-oss-120b` on tokens per minute (TPM): "
+        "Limit 8000, Requested 9353, please reduce your message size and try again.",
+        response=httpx.Response(413, request=request), body=None)
+    version = client.get(f"/reports/{session_id}").json()["version"]
+
+    response = client.post(f"/reports/{session_id}/proposal", json={"version": version})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == (
+        "The Financial Plan & Projections part could not be written: Groq's plan allows 8,000 tokens a minute, "
+        "and this call needs 9,353: Groq's Dev tier, or the main provider working again, can make it.")
+
+
 def test_proposal_requests_are_checked_against_the_report(fake_llm):
     session_id = _evaluate()
     version = client.get(f"/reports/{session_id}").json()["version"]

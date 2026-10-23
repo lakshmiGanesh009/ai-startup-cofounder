@@ -142,6 +142,9 @@ export const RESEARCH_PROVIDERS = ["azure", "tavily"] as const;
 export type ResearchProvider = (typeof RESEARCH_PROVIDERS)[number];
 export const PROVIDER_NAMES: Record<ResearchProvider, string> = { azure: "Azure OpenAI", tavily: "Tavily" };
 
+export type LlmProvider = "azure" | "openai" | "groq";
+export const LLM_NAMES: Record<LlmProvider, string> = { azure: "Azure OpenAI", openai: "OpenAI", groq: "Groq" };
+
 export type Health = {
   status: string;
   service: string;
@@ -154,8 +157,11 @@ export type Health = {
   lookups?: { fred: boolean; competitor_pages: boolean };
   // Model calls traced in Langfuse, and how many of the app's prompts are registered there.
   tracing?: { langfuse: boolean; prompts: number };
-  // Whether dictation can run: Azure OpenAI, for its Whisper deployment.
+  // Whether dictation can run: Azure OpenAI's Whisper, or Groq's.
   voice?: { dictation: boolean };
+  // Where the team's model calls go: the main provider, the backup standing by
+  // (Groq), and whether the backup answers now because the main one failed lately.
+  llm?: { main: LlmProvider | null; backup: LlmProvider | null; standing_in: boolean };
 };
 
 export type Scenario = {

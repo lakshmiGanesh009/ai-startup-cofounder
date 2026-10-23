@@ -19,7 +19,7 @@ from agents.roles import SPECIALISTS
 from agents.specialist import GAP_PREFIX
 from config import MAX_CRITIQUE_ROUNDS, MAX_ITERATIONS
 from guardrails import RULES, context_for_prompt, fence, unfenced
-from llm import CHIEF, LLM_ERRORS, SPECIALIST, LLMReplyError, get_llm
+from llm import CHIEF, LLM_ERRORS, SPECIALIST, UNUSABLE_REPLY, LLMReplyError, get_llm
 from metrics import track
 from state import (
     DelegationPlan,
@@ -46,8 +46,9 @@ def structured_invoke(schema, messages, tracker, role=CHIEF, prompt: str | None 
     """Invoke `role`'s model for a structured `schema`, counting each call on `tracker`.
 
     A reply that does not parse into the schema is retried once, and so is one
-    the provider's content filter withheld, which is usually a false positive
-    that a second attempt clears. Other API errors are not retried here: the
+    the provider refused as not fitting it (Groq's UNUSABLE_REPLY), and one the
+    provider's content filter withheld, which is usually a false positive that a
+    second attempt clears. Other API errors are not retried here: the
     client has already retried them (LLM_MAX_RETRIES). In Langfuse each call is
     linked to the prompt called `prompt` (prompt_library.py).
     """
@@ -60,6 +61,13 @@ def structured_invoke(schema, messages, tracker, role=CHIEF, prompt: str | None 
             tracker.record(None)
             logger.warning("The content filter withheld a %s reply (%s).",
                            schema.__name__, _filtered(error))
+            problem = error
+            continue
+        except openai.BadRequestError as error:
+            if error.code not in UNUSABLE_REPLY:
+                raise
+            tracker.record(None)
+            logger.warning("The model's %s reply did not fit the schema (%s).", schema.__name__, error.code)
             problem = error
             continue
         tracker.record(reply["raw"])  # the raw reply carries the token usage

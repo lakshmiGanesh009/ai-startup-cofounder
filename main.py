@@ -56,8 +56,11 @@ from llm import (
     LLMNotConfigured,
     failure,
     default_effort,
+    backup_provider,
+    main_provider,
     reasoning,
     reasoning_effort,
+    standing_in,
     takes_reasoning_effort,
 )
 from metrics import track
@@ -253,6 +256,7 @@ async def health():
         # Model calls traced in Langfuse, with the prompts registered there (tracing.py).
         "tracing": {"langfuse": tracing.enabled(), "prompts": len(tracing.versions())},
         "voice": {"dictation": voice.available()},
+        "llm": {"main": main_provider(), "backup": backup_provider(), "standing_in": standing_in()},
     }
 
 
@@ -886,7 +890,7 @@ async def _write(report: Report, choice: Reasoning | None, instruction: str = ""
         except ProposalNotWritten as error:
             monitor.count("proposals", ok=False)
             monitor.event("error", "proposal", f"{doing} the proposal failed: {error}", report.session_id)
-            raise HTTPException(status_code=502, detail=f"{error} Try again.") from error
+            raise HTTPException(status_code=502, detail=f"{error} Try again." if error.retry else str(error)) from error
     if report.proposal and len(failed) == len(parts_to_write(report.proposal, part)):
         monitor.count("proposals", ok=False)
         monitor.event("error", "proposal", "Nothing could be revised: every LLM call failed.", report.session_id)
@@ -1148,10 +1152,11 @@ class Transcript(BaseModel):
 async def transcribe(request: Request):
     """The founder's dictation, written down in English: the recording as the
     body (WebM, Ogg, MP4 or M4A, MP3, WAV or FLAC, as its Content-Type says), up
-    to 10 MB, sent to Azure OpenAI's Whisper deployment, which translates speech
-    in any language into English text, and not kept. 503 without Azure OpenAI,
-    415 for a format it does not take, 422 for an empty recording, 502 when the
-    call fails, with what Azure answered."""
+    to 10 MB, sent to Whisper, which translates speech in any language into
+    English text (Azure OpenAI's deployment, else Groq's standing by), and not
+    kept. 503 without Azure OpenAI or Groq, 415 for a format it does not take,
+    422 for an empty recording, 502 when the call fails, with what each
+    provider answered."""
     audio = await request.body()
     if not audio:
         raise HTTPException(status_code=422, detail="The recording is empty.")
@@ -1165,9 +1170,9 @@ async def transcribe(request: Request):
         raise HTTPException(status_code=503, detail=str(error)) from error
     except voice.UnsupportedAudio as error:
         raise HTTPException(status_code=415, detail=str(error)) from error
-    except LLM_ERRORS as error:
+    except voice.VoiceFailed as error:
         monitor.event("error", "voice", f"Dictation failed: {error}"[:500])
-        raise HTTPException(status_code=502, detail=f"The speech-to-text call failed: {voice.why(error)}") from error
+        raise HTTPException(status_code=502, detail=f"The speech-to-text call failed: {error}") from error
     monitor.event("run", "voice", f"Wrote down {len(text.split())} words from {len(audio):,} bytes of audio.")
     return Transcript(text=text)
 
