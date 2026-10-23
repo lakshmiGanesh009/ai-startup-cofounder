@@ -11,7 +11,9 @@ spoken instead. The recording is sent and forgotten: nothing of it is kept.
 """
 
 import os
+import time
 
+import httpx
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AzureOpenAI, BadRequestError
 
 from monitor import monitor
@@ -21,6 +23,8 @@ DEFAULT_DEPLOYMENT = "whisper"
 # The audio routes' API version (GA); AZURE_OPENAI_TRANSCRIPTION_API_VERSION overrides it.
 API_VERSION = "2024-10-21"
 TIMEOUT = 60
+# How long a look at the resource's deployments is trusted, in seconds.
+DEPLOYMENTS_SEEN_FOR = 300
 # Words the founder is likely to say, so Whisper spells them as the team does (it reads an English prompt).
 PROMPT = "A founder describing a startup decision: pricing, budget, customers, pilots, CAC, NPV, IRR, churn, MRR."
 # The recordings a browser makes (MediaRecorder: WebM or Ogg with Opus, MP4 on
@@ -51,9 +55,41 @@ def deployment() -> str:
     return os.getenv(DEPLOYMENT) or DEFAULT_DEPLOYMENT
 
 
-def available() -> bool:
-    """Whether dictation can run: the Azure OpenAI key and endpoint the team's model uses."""
+def _set_up() -> bool:
     return all(os.getenv(name) for name in ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT"))
+
+
+def _listed() -> set[str] | None:
+    """The resource's deployments, by name; None when they cannot be listed."""
+    try:
+        answer = httpx.get(f"{os.environ['AZURE_OPENAI_ENDPOINT'].rstrip('/')}/openai/deployments",
+                           params={"api-version": "2022-12-01"}, headers={"api-key": os.environ["AZURE_OPENAI_API_KEY"]},
+                           timeout=5)
+        if answer.status_code != 200:
+            return None
+        return {deployment.get("id") for deployment in answer.json().get("data", [])}
+    except (httpx.HTTPError, ValueError, KeyError):
+        return None
+
+
+_seen: tuple[float, str, bool] | None = None
+
+
+def available() -> bool:
+    """Whether dictation can run: the Azure OpenAI key and endpoint the team's
+    model uses, and a Whisper deployment on the resource. Its deployments are
+    looked at once every DEPLOYMENTS_SEEN_FOR; when they cannot be listed, the
+    deployment is taken to be there."""
+    global _seen
+    if not _set_up():
+        return False
+    name = deployment()
+    if _seen and _seen[1] == name and time.monotonic() - _seen[0] < DEPLOYMENTS_SEEN_FOR:
+        return _seen[2]
+    listed = _listed()
+    there = listed is None or name in listed
+    _seen = (time.monotonic(), name, there)
+    return there
 
 
 def _client() -> AzureOpenAI:

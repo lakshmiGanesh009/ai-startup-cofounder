@@ -20,7 +20,6 @@ const SHORTEST_BYTES = 1_000;
 const BARS = ["chief", "marketing", "finance", "technical", "risk"] as const;
 // What to record in, the first a browser can: Opus in WebM (Chrome, Firefox, Edge), else MP4 (Safari).
 const RECORDINGS = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-const NOT_SET_UP = "Dictation is not set up: the API needs Azure OpenAI, with a Whisper deployment.";
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
 type Phase = "idle" | "starting" | "recording" | "writing" | "done";
@@ -56,7 +55,6 @@ function clock(seconds: number): string {
 }
 
 function Mic({ box, label }: { box: React.RefObject<HTMLSpanElement | null>; label: string }) {
-  const health = useHealth();
   const [phase, setPhase] = useState<Phase>("idle");
   const [seconds, setSeconds] = useState(0);
   const [note, setNote] = useState<string | null>(null);
@@ -136,10 +134,6 @@ function Mic({ box, label }: { box: React.RefObject<HTMLSpanElement | null>; lab
 
   async function start() {
     setNote(null);
-    if (health?.voice && !health.voice.dictation) {
-      setNote(NOT_SET_UP);
-      return;
-    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setNote("This browser cannot record here: dictation needs a browser with a microphone, on https or localhost.");
       return;
@@ -312,6 +306,11 @@ export function Voice({
   className?: string;
 }) {
   const box = useRef<HTMLSpanElement>(null);
+  const health = useHealth();
+  // No mic while the API says dictation cannot run (no Whisper deployment): the box as it is.
+  if (health?.voice && !health.voice.dictation) {
+    return <span className={`relative block ${className}`}>{children}</span>;
+  }
   return (
     <span ref={box} data-lines={multiline ? "many" : "one"} className={`voice-field relative block ${className}`}>
       {children}

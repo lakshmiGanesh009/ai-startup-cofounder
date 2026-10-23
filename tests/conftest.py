@@ -51,6 +51,8 @@ PROVIDER_VARS = [
     "AZURE_OPENAI_ENDPOINT",
     "AZURE_OPENAI_API_VERSION",
     "AZURE_OPENAI_DEPLOYMENT_NAME",
+    "AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME",
+    "AZURE_OPENAI_SEARCH_DEPLOYMENT_NAME",
     "AZURE_OPENAI_REASONING_EFFORT",
     "AZURE_OPENAI_CHIEF_REASONING_EFFORT",
     "OPENAI_API_KEY",
@@ -335,6 +337,11 @@ def no_network(monkeypatch):
     import lookups
     import rates
     import search
+    import voice
+
+    # Dictation does not list the resource's deployments: they are taken to be there.
+    monkeypatch.setattr(voice, "_listed", lambda: None)
+    monkeypatch.setattr(voice, "_seen", None)
 
     def refuse_server(name):
         def connect():

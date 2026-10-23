@@ -43,6 +43,12 @@ def available() -> bool:
     return all(os.getenv(name) for name in _VARIABLES)
 
 
+def search_deployment() -> str:
+    """The deployment the web search runs on: AZURE_OPENAI_SEARCH_DEPLOYMENT_NAME,
+    so its burst of searches can draw on a quota of its own, else the team's."""
+    return os.getenv("AZURE_OPENAI_SEARCH_DEPLOYMENT_NAME") or os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"]
+
+
 @cache
 def _azure(endpoint: str, key: str) -> openai.OpenAI:
     return openai.OpenAI(
@@ -59,7 +65,7 @@ def _create(service: str, **kwargs):
     try:
         with monitor.calling("azure", service) as call:
             response = client.responses.create(
-                model=os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
+                model=search_deployment(),
                 tools=[{"type": "web_search"}],
                 reasoning={"effort": EFFORT},
                 **kwargs,

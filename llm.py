@@ -4,14 +4,16 @@ The provider is chosen by which credentials are set in the environment:
 Azure OpenAI if the Azure variables are present, otherwise OpenAI. The model
 is created on first use, so the app and the tests start without credentials.
 
-Each call asks for the model of a role. On Azure each role has a reasoning
-effort: the Chief of Staff's (AZURE_OPENAI_CHIEF_REASONING_EFFORT) can be higher
+Each call asks for the model of a role. On Azure the Chief of Staff can run
+on a deployment of its own (AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME; else the
+team's, AZURE_OPENAI_DEPLOYMENT_NAME), and each role has a reasoning effort: the Chief of Staff's (AZURE_OPENAI_CHIEF_REASONING_EFFORT) can be higher
 than the specialists' (AZURE_OPENAI_REASONING_EFFORT), because its calls are the
 team's decisions while the specialists' are most of the volume. A request can
 set its own efforts with `reasoning(...)`, which is how the UI's sliders work.
 """
 
 import os
+import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import cache
@@ -99,7 +101,19 @@ def reasoning(**efforts: str | None):
         _chosen.reset(token)
 
 
-def _azure_llm(effort: str | None):
+def deployment(role: str) -> str | None:
+    """The Azure deployment `role`'s calls go to: the Chief of Staff's own, if
+    one is named, else the team's."""
+    if role == CHIEF and os.getenv("AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME"):
+        return os.environ["AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME"]
+    return os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+
+
+# The models after gpt-5 (gpt-5.1 on, such as gpt-5.6-luna) take "none" where gpt-5 took "minimal".
+_NONE_FOR_MINIMAL = re.compile(r"gpt-5\.\d")
+
+
+def _azure_llm(effort: str | None, name: str | None):
     from langchain_openai import AzureChatOpenAI
 
     missing = _missing(
@@ -108,16 +122,17 @@ def _azure_llm(effort: str | None):
     if missing:
         raise LLMNotConfigured(f"Azure OpenAI is missing: {', '.join(missing)}")
 
+    name = name or os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"]
     kwargs = {
         "api_key": os.environ["AZURE_OPENAI_API_KEY"],
         "azure_endpoint": os.environ["AZURE_OPENAI_ENDPOINT"],
-        "azure_deployment": os.environ["AZURE_OPENAI_DEPLOYMENT_NAME"],
+        "azure_deployment": name,
         "api_version": os.getenv("AZURE_OPENAI_API_VERSION", "2025-04-01-preview"),
         "timeout": LLM_TIMEOUT_HIGH if effort == "high" else LLM_TIMEOUT,
         "max_retries": LLM_MAX_RETRIES,
     }
     if effort:
-        kwargs["reasoning_effort"] = effort
+        kwargs["reasoning_effort"] = "none" if effort == "minimal" and _NONE_FOR_MINIMAL.search(name) else effort
     return AzureChatOpenAI(**kwargs)
 
 
@@ -171,9 +186,9 @@ class Counted:
 
 
 @cache
-def _model(effort: str | None):
+def _model(effort: str | None, name: str | None = None):
     if os.getenv("AZURE_OPENAI_API_KEY"):
-        return Counted(_azure_llm(effort), "azure")
+        return Counted(_azure_llm(effort, name), "azure")
     if os.getenv("OPENAI_API_KEY"):
         return Counted(_openai_llm(), "openai")
     raise LLMNotConfigured(
@@ -194,7 +209,8 @@ def get_llm(role: str = SPECIALIST):
     calls share one HTTP connection pool instead of opening a new connection. A
     failure is not cached, so the next call checks the environment again.
     """
-    return _model(reasoning_effort(role) if takes_reasoning_effort() else None)
+    effort = reasoning_effort(role) if takes_reasoning_effort() else None
+    return _model(effort, deployment(role) if os.getenv("AZURE_OPENAI_API_KEY") else None)
 
 
 if __name__ == "__main__":

@@ -259,3 +259,12 @@ def test_the_monitor_counts_azures_searches_and_research_with_their_tokens(azure
     searched, researched = provider.services
     assert (searched.service, searched.calls, searched.tokens_in) == ("web search", 1, 300)
     assert (researched.service, researched.calls, researched.tokens_out) == ("research", 1, 40)
+
+
+def test_the_web_search_can_run_on_a_deployment_of_its_own(azure, monkeypatch):
+    azure_web.search("prices")
+    assert azure["requests"][-1]["model"] == "deployment"
+    monkeypatch.setenv("AZURE_OPENAI_SEARCH_DEPLOYMENT_NAME", "gpt-5-mini")
+    azure_web.search("prices")
+    azure_web.research("A question")
+    assert [request["model"] for request in azure["requests"][-2:]] == ["gpt-5-mini", "gpt-5-mini"]

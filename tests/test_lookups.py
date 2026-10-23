@@ -16,8 +16,6 @@ import deep_research
 import fred_server
 import lookups
 from lookups import (
-    FredPick,
-    FredPicks,
     FredSearches,
     candidates,
     excerpt,

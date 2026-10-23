@@ -123,7 +123,7 @@ describe("dictation", () => {
     expect(await screen.findByText(/The microphone is blocked/)).toBeTruthy();
   });
 
-  test("says it is not set up when the API has no speech-to-text deployment", async () => {
+  test("offers no mic when the API has no Whisper deployment, and leaves the box as it is", async () => {
     const { fetch } = fakeBackend({ "GET /health": { body: { ...HEALTH, voice: { dictation: false } } } });
     render(
       <BackendProvider>
@@ -133,8 +133,8 @@ describe("dictation", () => {
     // Once the API has said what it has.
     await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/health"))).toBe(true));
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-    await userEvent.click(screen.getByRole("button", { name: "Dictate into the brief" }));
-    expect(await screen.findByText(/Dictation is not set up/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Dictate into the brief" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Brief" })).toBeTruthy();
     expect(getUserMedia).not.toHaveBeenCalled();
   });
 

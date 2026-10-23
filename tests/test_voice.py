@@ -127,6 +127,17 @@ def test_a_recording_may_be_as_large_as_an_upload(azure, monkeypatch):
     assert (recorded.status_code, too_large.status_code) == (200, 413)
 
 
+def test_without_a_whisper_deployment_dictation_is_not_offered(azure, monkeypatch):
+    monkeypatch.setattr(voice, "_listed", lambda: {"gpt-5-mini", "gpt-5.6-sol"})
+    assert client.get("/health").json()["voice"] == {"dictation": False}
+    unset = client.post("/transcribe", content=WEBM, headers={"Content-Type": "audio/webm"})
+    assert unset.status_code == 503 and "Whisper" in unset.json()["detail"]
+    # Deployed later, it is seen within DEPLOYMENTS_SEEN_FOR.
+    monkeypatch.setattr(voice, "_listed", lambda: {"gpt-5-mini", "whisper"})
+    monkeypatch.setattr(voice, "_seen", None)
+    assert client.get("/health").json()["voice"] == {"dictation": True}
+
+
 def test_health_says_whether_dictation_can_run(azure, monkeypatch):
     # Azure OpenAI is enough: the Whisper deployment goes by its default name.
     assert client.get("/health").json()["voice"] == {"dictation": True}

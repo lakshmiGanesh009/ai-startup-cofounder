@@ -1028,6 +1028,26 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - The Monitor says at a glance which provider answers, which fails and why, and what each costs; and nothing of Groq is left.
 
+### Step 40 - A model for each role, and dictation only where it can run (Built)
+
+**Goal:** on the new Azure OpenAI resource, run the Chief of Staff on gpt-5.6-luna and the specialists on gpt-5.6-terra, as the founder deployed them in Foundry; keep the web search off Terra's small rate limit; and offer the mic only when the resource has a deployment that can write speech down.
+
+**Built:**
+
+- `AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME` gives the Chief of Staff a deployment of its own; the specialists, and the Chief without it, use `AZURE_OPENAI_DEPLOYMENT_NAME` (`llm.deployment(role)`). gpt-5.6 models do not take the "minimal" effort, so they are sent "none" in its place; gpt-5-mini keeps "minimal".
+- `AZURE_OPENAI_SEARCH_DEPLOYMENT_NAME` runs Azure's web search on a deployment of its own (`azure_web.search_deployment()`), so a brief's parallel searches draw on another deployment's quota: on Terra they met 429s.
+- `voice.available()` asks the resource for its deployments (once every five minutes) and offers dictation only when the Whisper deployment is there. A realtime model such as gpt-realtime-whisper refuses the REST audio routes (OperationNotSupported), so on its own it does not count. Without one, `/health` says `dictation: false` and the input boxes show no mic.
+- Clean-up: unused imports in the tests.
+
+**Check:**
+
+- Automated: the Chief's own deployment, and the specialists' without it; "none" for gpt-5.6 and "minimal" for gpt-5-mini; the web search's own deployment; no dictation without the Whisper deployment; no mic in the browser when dictation is off.
+- Live: on Luna and Terra, a brief in 37 s (its search on gpt-5-mini), a team run in 89 s with no call failed, the proposal in 65 s, a question in 3 s; dictation on `whisper` through the web app, English, Spanish and German written down in English in about 2 s.
+
+**Done when:**
+
+- Each role runs on the deployment chosen for it, and the mic shows only when dictation can work.
+
 ## Target layout
 
 ```
@@ -1046,9 +1066,9 @@ brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20
 providers.py               Where web research runs            Step 21
-azure_web.py               Azure OpenAI's web search          Step 21
+azure_web.py               Azure OpenAI's web search          Steps 21, 40
 config.py                  Environment settings               Step 0
-llm.py                     Chat model client                  Steps 1, 39
+llm.py                     Chat model client                  Steps 1, 39-40
 state.py                   Shared workflow state              Step 2 onward
 graph.py                   LangGraph state machine            Step 2 onward
 metrics.py                 Per-node run metrics               Step 10
@@ -1062,7 +1082,7 @@ extract.py                 The text of an uploaded file       Step 30
 library.py                 The founder's documents            Step 30
 lookups.py                 Look-ups through MCP servers       Step 31
 rates.py                   Today's exchange rates (ECB)       Step 34
-voice.py                   Dictation: speech-to-text          Steps 37, 39
+voice.py                   Dictation: speech-to-text          Steps 37, 39-40
 tracing.py                 Tracing, prompts, scores: Langfuse Step 35
 prompt_library.py          The prompts, named for Langfuse    Step 35
 judge.py                   An LLM judge of a strategy         Step 35
@@ -1076,5 +1096,5 @@ scenarios/                 Startup scenarios                  Step 9
 templates/                 Decision templates                 Step 19
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-frontend/                  Next.js frontend                   Steps 13-14, 18, 32-39
+frontend/                  Next.js frontend                   Steps 13-14, 18, 32-40
 ```

@@ -3,7 +3,7 @@
 Tavily's server that answers in Tavily's text format. A test puts them in
 lookups.SERVERS, and the client connects to them in-process."""
 
-from datetime import date, timedelta
+from datetime import date
 
 import httpx
 from mcp.server.mcpserver import MCPServer

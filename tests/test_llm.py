@@ -191,3 +191,27 @@ def test_the_monitor_counts_the_providers_model_calls_and_why_one_failed():
     assert (azure.provider, model.service, model.calls, model.failed) == ("azure", "model", 3, 1)
     assert (model.tokens_in, model.tokens_out) == (1_800, 200)
     assert model.last_failure == "401: Access denied due to invalid subscription key."
+
+
+def test_the_chief_of_staff_can_run_on_a_deployment_of_its_own(monkeypatch, capture_models):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5.6-terra")
+    monkeypatch.setenv("AZURE_OPENAI_REASONING_EFFORT", "minimal")
+    monkeypatch.setenv("AZURE_OPENAI_CHIEF_REASONING_EFFORT", "medium")
+
+    # Without one, the team's.
+    assert built(llm.get_llm(llm.CHIEF)).kwargs["azure_deployment"] == "gpt-5.6-terra"
+    monkeypatch.setenv("AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME", "gpt-5.6-luna")
+    chief, specialist = built(llm.get_llm(llm.CHIEF)), built(llm.get_llm(llm.SPECIALIST))
+    assert (chief.kwargs["azure_deployment"], chief.kwargs["reasoning_effort"]) == ("gpt-5.6-luna", "medium")
+    # gpt-5.6 takes "none" where gpt-5 took "minimal".
+    assert (specialist.kwargs["azure_deployment"], specialist.kwargs["reasoning_effort"]) == ("gpt-5.6-terra", "none")
+
+
+def test_gpt_5_mini_keeps_its_minimal_effort(monkeypatch, capture_models):
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_DEPLOYMENT_NAME", "gpt-5-mini")
+    monkeypatch.setenv("AZURE_OPENAI_REASONING_EFFORT", "minimal")
+    assert built(llm.get_llm(llm.SPECIALIST)).kwargs["reasoning_effort"] == "minimal"
