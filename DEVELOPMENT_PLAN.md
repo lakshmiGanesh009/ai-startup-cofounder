@@ -1065,10 +1065,29 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - A brief takes at most about 1½ minutes when a search stalls, and about 30-40 s when none does.
 
+### Step 42 - A request Azure refuses is a red warning, not a crash (Built)
+
+**Goal:** checking the guardrails before the demo, an illegal idea (selling stolen card numbers) was refused by the gpt-5.6 models' own policy (`cyber_policy`), which the app passed on as a 502 with Azure's raw error and a ChatGPT link. The founder asked for it to be explained, in red, like a warning.
+
+**Built:**
+
+- `llm.refused(error)`: Azure refusing what a request asks, by its content filter (`content_filter`) or a model's own usage policy (`cyber_policy`, any `…_policy`). `failure()` explains a policy refusal in plain words, without the provider's links.
+- The API answers a refusal with 422 and `X-Refused: true` (a brief, an evaluation, a passage revision, a question), and on the stream with an `error` event marked `refused`; any other failed call is still a 502. The web app's proxy passes `X-Refused` on.
+- `RefusalNotice`: a red-edged warning, "The team won't work on this request", with the reason and "Refused by Azure OpenAI's safety policy", brought into view when it appears; on the Evaluate page (the brief, a run, a follow-up) and the Ask panel, while other failures keep the plain error line. `ApiError.refused` carries the mark.
+
+**Check:**
+
+- Automated: the policy refusal's message, without its links; what counts as a refusal; 422 with `X-Refused` for a brief and an evaluation, `refused` on the stream; the page's warning for a refused brief and a refused run.
+- Live: the illegal brief through the web app on Azure, shown as the red warning, in plain words, scrolled into view, the brief kept; light, dark and phone.
+
+**Done when:**
+
+- A refused request says why in plain words, in red, and the founder can rephrase it.
+
 ## Target layout
 
 ```
-main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-26
+main.py                    FastAPI app                        Step 0, then 2, 5, 8, 13, 15, 17-26, 42
 progress.py                Step summaries for the stream      Step 18
 monitor.py                 What the API has done              Steps 22-24, 39
 observability.py           Request IDs, logs, access log      Step 23
@@ -1085,7 +1104,7 @@ deep_research.py           Deep research for the specialists  Step 20
 providers.py               Where web research runs            Step 21
 azure_web.py               Azure OpenAI's web search          Steps 21, 40-41
 config.py                  Environment settings               Step 0
-llm.py                     Chat model client                  Steps 1, 39-40
+llm.py                     Chat model client                  Steps 1, 39-40, 42
 state.py                   Shared workflow state              Step 2 onward
 graph.py                   LangGraph state machine            Step 2 onward
 metrics.py                 Per-node run metrics               Step 10
@@ -1113,5 +1132,5 @@ scenarios/                 Startup scenarios                  Step 9
 templates/                 Decision templates                 Step 19
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-frontend/                  Next.js frontend                   Steps 13-14, 18, 32-40
+frontend/                  Next.js frontend                   Steps 13-14, 18, 32-40, 42
 ```

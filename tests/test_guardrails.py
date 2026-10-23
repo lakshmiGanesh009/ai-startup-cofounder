@@ -3,6 +3,7 @@ founder's and the web's text fenced as data, the rules every agent is given,
 and attempts to instruct the agents found, neutralised, logged, counted and
 named to the founder."""
 
+import json
 import logging
 
 import pytest
@@ -253,3 +254,45 @@ def test_a_refusal_by_azures_own_filter_is_explained():
         "attempt to manipulate the model. Take that part out of the brief and try again."
     )
     assert failure(ValueError("timeout")) == "The LLM call failed: timeout"
+
+
+def _policy_refusal(code="cyber_policy"):
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://example.openai.azure.com/openai/v1/chat/completions")
+    body = {"message": "This content was flagged for possible cybersecurity risk. To get authorized for security "
+            "work, join the Trusted Access for Cyber program: https://chatgpt.com/cyber", "code": code}
+    return openai.BadRequestError("Error code: 400", response=httpx.Response(400, request=request), body=body)
+
+
+def test_a_refusal_by_a_models_own_policy_is_explained_without_its_links():
+    from llm import failure, refused
+
+    assert failure(_policy_refusal()) == (
+        "Azure OpenAI's safety policy refused this request: it read it as a possible cybersecurity risk or "
+        "illegal activity. The team does not help with that; if the idea is legitimate, rephrase it and try "
+        "again."
+    )
+    assert "a breach of its usage policy" in failure(_policy_refusal("violence_policy"))
+    assert refused(_policy_refusal()) and refused(_policy_refusal("content_filter"))
+    assert not refused(ValueError("timeout")) and not refused(_policy_refusal("context_length_exceeded"))
+
+
+def test_a_refused_brief_or_run_is_answered_as_the_founders_to_change(fake_llm):
+    def refuse(prompt):
+        raise _policy_refusal()
+
+    fake_llm._brief_review_for = refuse
+    brief = client.post("/brief/prepare", json={"prompt": "Sell stolen card numbers."})
+    assert brief.status_code == 422 and brief.headers["X-Refused"] == "true"
+    assert brief.json()["detail"].startswith("Azure OpenAI's safety policy refused this request")
+    assert "chatgpt.com" not in brief.text
+
+    fake_llm._plan_for = refuse
+    run = client.post("/evaluate", json={"prompt": "Sell stolen card numbers."})
+    assert run.status_code == 422 and run.headers["X-Refused"] == "true"
+    with client.stream("POST", "/evaluate/stream", json={"prompt": "Sell stolen card numbers."}) as streamed:
+        events = [json.loads(line[6:]) for line in streamed.iter_lines() if line.startswith("data: ")]
+    assert events[-1]["status"] == 422 and events[-1]["refused"] is True
+    assert events[-1]["detail"].startswith("Azure OpenAI's safety policy refused this request")

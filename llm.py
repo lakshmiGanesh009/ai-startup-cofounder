@@ -37,11 +37,28 @@ class LLMReplyError(Exception):
 LLM_ERRORS = (openai.OpenAIError, LLMReplyError)
 
 
+# What a model's own usage policy refused a request as, by Azure's code for it.
+_POLICIES = {"cyber_policy": "a possible cybersecurity risk or illegal activity"}
+
+
+def refused(error: Exception) -> bool:
+    """Whether Azure refused the request for what it asks: its content filter
+    ("content_filter"), or a model's own usage policy ("cyber_policy" and the
+    like). That is for the founder to change, not a fault to retry."""
+    if not isinstance(error, openai.BadRequestError):
+        return False
+    code = error.code or ""
+    return code == "content_filter" or code.endswith("_policy")
+
+
 def failure(error: Exception) -> str:
-    """What to tell the founder when a model call failed. Azure's own content
-    filter refuses a prompt it reads as harmful or as a jailbreak: that is
-    text for the founder to change, not a fault to retry."""
-    if isinstance(error, openai.BadRequestError) and error.code == "content_filter":
+    """What to tell the founder when a model call failed: for a refusal, why,
+    in plain words, without the provider's own links."""
+    if refused(error) and error.code != "content_filter":
+        what = _POLICIES.get(error.code, "a breach of its usage policy")
+        return (f"Azure OpenAI's safety policy refused this request: it read it as {what}. The team does not "
+                "help with that; if the idea is legitimate, rephrase it and try again.")
+    if refused(error):
         body = error.body if isinstance(error.body, dict) else {}
         results = (body.get("innererror") or {}).get("content_filter_result") or {}
         flagged = [

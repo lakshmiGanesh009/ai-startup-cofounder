@@ -59,6 +59,7 @@ from llm import (
     main_provider,
     reasoning,
     reasoning_effort,
+    refused,
     takes_reasoning_effort,
 )
 from metrics import track
@@ -178,6 +179,15 @@ class Reasoning(BaseModel):
 
 def _efforts(choice: Reasoning | None) -> dict:
     return choice.model_dump() if choice else {}
+
+
+def _failed(error: Exception) -> HTTPException:
+    """A model call that still failed: a refusal of what the request asks is
+    the founder's to change (422, marked X-Refused for the page), any other
+    failure the provider's (502)."""
+    if refused(error):
+        return HTTPException(status_code=422, detail=failure(error), headers={"X-Refused": "true"})
+    return HTTPException(status_code=502, detail=failure(error))
 
 
 # A session's id, wherever a request names one.
@@ -446,7 +456,7 @@ async def prepare(request: PrepareRequest):
     except LLM_ERRORS as error:
         monitor.count("briefs", ok=False)
         logger.warning("Preparing a brief failed on an LLM call: %s", error)
-        raise HTTPException(status_code=502, detail=failure(error)) from error
+        raise _failed(error) from error
     monitor.count("briefs")
     facts = len(prepared.research.findings) if prepared.research else 0
     by = f" with {prepared.provider}" if prepared.provider else ""
@@ -626,7 +636,7 @@ async def evaluate(request: EvaluateRequest):
     except LLM_ERRORS as error:
         logger.warning("Evaluation failed on an LLM call: %s", error)
         _record(request, session_id, started, error=failure(error))
-        raise HTTPException(status_code=502, detail=failure(error)) from error
+        raise _failed(error) from error
     except BaseException:  # anything else, a cancellation too: recorded, then raised (an error becomes a 500)
         _record(request, session_id, started, error="The evaluation failed unexpectedly.")
         raise
@@ -683,7 +693,8 @@ async def evaluate_stream(request: EvaluateRequest):
         except LLM_ERRORS as error:
             logger.warning("Evaluation failed on an LLM call: %s", error)
             _record(request, session_id, began, error=failure(error))
-            yield _event("error", {"status": 502, "detail": failure(error)})
+            yield _event("error", {"status": 422 if refused(error) else 502, "detail": failure(error),
+                                   "refused": refused(error)})
             return
         except Exception:  # the status is already sent, so say what happened instead
             logger.exception("Evaluation failed")
@@ -1012,7 +1023,7 @@ async def revise_report_text(session_id: SessionId, revision: TextRevision):
             raise HTTPException(status_code=503, detail=str(error)) from error
         except LLM_ERRORS as error:
             monitor.event("error", "proposal", f"Revising a passage failed: {error}", session_id)
-            raise HTTPException(status_code=502, detail=failure(error)) from error
+            raise _failed(error) from error
     where = document.label(report, revision.path)
     draft = document.draft(report, document.set_text(report, revision.path, text),
                            f"Rewrote {'a passage of ' if revision.passage else ''}{where} as you asked.",
@@ -1245,7 +1256,7 @@ async def ask(question: Question):
             raise HTTPException(status_code=503, detail=str(error)) from error
         except LLM_ERRORS as error:
             monitor.event("error", "ask", f"Answering a question failed: {error}")
-            raise HTTPException(status_code=502, detail=failure(error)) from error
+            raise _failed(error) from error
     count = len(question.uploads) + len(question.reports)
     monitor.event(
         "document", "ask",

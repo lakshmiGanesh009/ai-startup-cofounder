@@ -27,7 +27,7 @@ const ROUTES = new Set([
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 // What goes on to the API, and what comes back from it.
 const FORWARDED = ["content-type", "accept", "x-request-id"];
-const RETURNED = ["content-type", "content-disposition", "x-request-id", "retry-after", "www-authenticate"];
+const RETURNED = ["content-type", "content-disposition", "x-request-id", "x-refused", "retry-after", "www-authenticate"];
 
 function problem(status: number, detail: string): Response {
   return Response.json({ detail }, { status, headers: { "cache-control": "no-store" } });

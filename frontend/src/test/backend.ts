@@ -346,7 +346,10 @@ export const STEPS: Step[] = [
 ];
 
 // The server-sent events of a stream: the steps, then the result or an error.
-export function sse(steps: Step[], end: { result: unknown } | { error: { status: number; detail: string } } | null) {
+export function sse(
+  steps: Step[],
+  end: { result: unknown } | { error: { status: number; detail: string; refused?: boolean } } | null,
+) {
   const events = steps.map(({ type, ...data }) => `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
   if (end && "result" in end) events.push(`event: result\ndata: ${JSON.stringify(end.result)}\n\n`);
   if (end && "error" in end) events.push(`event: error\ndata: ${JSON.stringify(end.error)}\n\n`);

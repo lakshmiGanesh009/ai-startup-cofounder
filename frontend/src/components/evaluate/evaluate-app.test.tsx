@@ -219,6 +219,40 @@ describe("the Evaluate page", () => {
     expect(screen.getByLabelText<HTMLTextAreaElement>("The brief").value).toBe("An idea");
   });
 
+  test("a brief Azure's safety policy refuses is shown as a warning, apart from a failure", async () => {
+    const refusal = "Azure OpenAI's safety policy refused this request: it read it as a possible cybersecurity risk.";
+    fakeBackend({
+      "POST /brief/prepare": { status: 422, body: { detail: refusal }, headers: { "X-Refused": "true" } },
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText("The brief"), "Sell stolen card numbers");
+
+    await user.click(screen.getByRole("button", { name: /^Check the brief/ }));
+
+    const warning = await screen.findByRole("alert", { name: "The team won’t work on this request" });
+    expect(warning.textContent).toContain(refusal);
+    expect(warning.textContent).not.toContain("The backend returned");
+    expect(warning.className).toContain("border-l-bad");
+    expect(screen.getByLabelText<HTMLTextAreaElement>("The brief").value).toBe("Sell stolen card numbers");
+  });
+
+  test("a run Azure's safety policy refuses partway is shown as that warning too", async () => {
+    fakeBackend({
+      "POST /evaluate/stream": () => ({
+        stream: sse([], { error: { status: 422, refused: true, detail: "Azure OpenAI's safety policy refused this request." } }),
+      }),
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText("The brief"), "An idea");
+
+    await evaluateNow(user);
+
+    const warning = await screen.findByRole("alert", { name: "The team won’t work on this request" });
+    expect(warning.textContent).toContain("Azure OpenAI's safety policy refused this request.");
+  });
+
   test("the session survives a reload, until a new one is started", async () => {
     window.sessionStorage.setItem(
       "cofounder-session",

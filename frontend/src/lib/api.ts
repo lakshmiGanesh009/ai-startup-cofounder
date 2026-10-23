@@ -211,6 +211,8 @@ export class ApiError extends Error {
     readonly requestId: string | null = null,
     // What the API said was wrong, on its own: "The file is empty."
     readonly detail: string = message,
+    // Azure OpenAI refused what the request asked, by its safety policy (X-Refused).
+    readonly refused: boolean = false,
   ) {
     super(requestId ? `${message} (request ${requestId})` : message);
     this.name = "ApiError";
@@ -224,6 +226,7 @@ async function failure(response: Response): Promise<ApiError> {
     response.status,
     response.headers.get("X-Request-ID"),
     detail,
+    response.headers.has("X-Refused"),
   );
 }
 
@@ -377,7 +380,8 @@ export async function evaluateStream(body: EvaluateRequest, onStep: (step: Step)
       if (event.name === "result") return event.data as unknown as EvaluateResponse;
       if (event.name === "error") {
         const status = Number(event.data.status) || null;
-        throw new ApiError(`The backend returned ${status}: ${String(event.data.detail)}`, status, requestId);
+        const detail = String(event.data.detail);
+        throw new ApiError(`The backend returned ${status}: ${detail}`, status, requestId, detail, event.data.refused === true);
       }
       if (event.name === "start" || event.name === "done") {
         onStep({ ...(event.data as Omit<Step, "type">), type: event.name });

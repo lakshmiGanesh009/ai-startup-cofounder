@@ -17,12 +17,14 @@ import {
 } from "@/components/documents";
 import { GuardrailNotice } from "@/components/guardrail-notice";
 import { Markdown } from "@/components/markdown";
+import { RefusalNotice } from "@/components/refusal-notice";
 import { AgentAvatar } from "@/components/ui/agent";
 import { Button, Kbd } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { Progress } from "@/components/ui/progress";
 import { Voice } from "@/components/voice";
 import {
+  ApiError,
   ask,
   type AskResult,
   getUpload,
@@ -85,6 +87,8 @@ function Questions({
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  // A question Azure's safety policy refused: shown as a warning, apart from a failure.
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [exchanges, setExchanges] = useState<Exchange[]>([]);
   const latest = useRef<HTMLDivElement>(null);
   const none = !documents.uploads.length && !documents.reportIds.length;
@@ -106,6 +110,7 @@ function Questions({
       return;
     }
     setProblem(null);
+    setRefusal(null);
     setAsking(true);
     const named = documents.refs;
     try {
@@ -113,7 +118,8 @@ function Questions({
       setExchanges((current) => [...current, { question: asked, documents: named, result }]);
       setQuestion("");
     } catch (reason) {
-      setProblem((reason as Error).message);
+      if (reason instanceof ApiError && reason.refused) setRefusal(reason.detail);
+      else setProblem((reason as Error).message);
     } finally {
       setAsking(false);
     }
@@ -173,6 +179,7 @@ function Questions({
                 className={BRIEF_CLASS}
               />
             </Voice>
+            {refusal && <RefusalNotice detail={refusal} className="mt-3" />}
             {problem && (
               <Notice tone="bad" className="mt-3">
                 {problem}

@@ -19,8 +19,10 @@ import { inputClass, Label } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { Clock, Progress } from "@/components/ui/progress";
+import { RefusalNotice } from "@/components/refusal-notice";
 import { Voice } from "@/components/voice";
 import {
+  ApiError,
   evaluateStream,
   getScenarios,
   getTemplates,
@@ -46,6 +48,13 @@ type Pending = { prompt: string; steps: Step[]; started: number };
 // Preparing the first request's brief: the Chief of Staff at work on it, then
 // the founder reviewing what it found and asked.
 type Preparing = { submission: Submission; prepared: PreparedBrief | null };
+// Why the last request failed; a refusal by Azure's safety policy is shown apart, as a warning.
+type Problem = { message: string; refusal: string | null };
+
+function problemOf(reason: unknown): Problem {
+  const refused = reason instanceof ApiError && reason.refused;
+  return { message: (reason as Error).message, refusal: refused ? reason.detail : null };
+}
 
 function restore(): Saved {
   try {
@@ -110,7 +119,7 @@ function Session() {
   const [followUp, setFollowUp] = useState(saved.followUp);
   const [preparing, setPreparing] = useState<Preparing | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Problem | null>(null);
   // The live graph's pop-up, and the run that ended last, which it stays open on.
   const [watching, setWatching] = useState(false);
   const [ended, setEnded] = useState<Watched | null>(null);
@@ -166,7 +175,7 @@ function Session() {
       return true;
     } catch (reason) {
       problem = (reason as Error).message;
-      setError(problem);
+      setError(problemOf(reason));
       return false;
     } finally {
       setEnded({ prompt, steps: seen, started, problem });
@@ -191,7 +200,7 @@ function Session() {
       });
       setPreparing({ submission, prepared });
     } catch (reason) {
-      setError((reason as Error).message);
+      setError(problemOf(reason));
       setPreparing(null);
     }
   }
@@ -321,9 +330,10 @@ function Session() {
       <LiveGraph open={watching} run={pending ?? ended} live={Boolean(pending)} onClose={() => setWatching(false)} />
 
 
-      {error && (
+      {error?.refusal && <RefusalNotice detail={error.refusal} className="mt-8" />}
+      {error && !error.refusal && (
         <Notice tone="bad" className="mt-8">
-          {error}
+          {error.message}
         </Notice>
       )}
 
