@@ -585,6 +585,199 @@ mark.assumption {
   margin-inline: -0.1em;
 }
 
+/* ---- Dictation: the mic in the input boxes, the same everywhere (voice.tsx) ----
+   The team's signature: a ring of the five agents' colours, and while it
+   records five bars, one an agent, that follow the voice. */
+
+@property --voice-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 210deg;
+}
+
+/* Room for the mic: at the end of a line, or in a strip below the text. */
+.voice-field[data-lines="one"] > input {
+  padding-right: 2.75rem;
+}
+
+.voice-field[data-lines="many"] > textarea {
+  padding-bottom: 2.6rem;
+}
+
+.voice-mic {
+  position: absolute;
+  right: 0.375rem;
+  top: 50%;
+  translate: 0 -50%;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  height: 1.875rem;
+  min-width: 1.875rem;
+  padding-inline: 0.4rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-3);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    box-shadow 0.2s,
+    padding 0.2s;
+}
+
+/* Clear of the corner, where the box's resize grip is. */
+.voice-field[data-lines="many"] .voice-mic {
+  top: auto;
+  bottom: 0.45rem;
+  right: 1.1rem;
+  translate: none;
+}
+
+/* The ring: the agents' colours round the edge, faint until it is wanted. */
+.voice-mic::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: conic-gradient(
+    from var(--voice-turn),
+    var(--agent-chief),
+    var(--agent-marketing),
+    var(--agent-finance),
+    var(--agent-technical),
+    var(--agent-risk),
+    var(--agent-chief)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+  opacity: 0.45;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.voice-mic:hover {
+  color: var(--ink);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--agent-chief) 12%, transparent);
+}
+
+.voice-mic:hover::before,
+.voice-mic:focus-visible::before {
+  opacity: 1;
+}
+
+.voice-mic:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Recording: the ring turns, and the mic opens into the bars, the time and a stop. */
+.voice-mic[data-phase="recording"],
+.voice-mic[data-phase="starting"],
+.voice-mic[data-phase="writing"] {
+  padding-inline: 0.6rem;
+  color: var(--ink-2);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 0 0 4px color-mix(in oklab, var(--agent-chief) 10%, transparent);
+}
+
+.voice-mic[data-phase="recording"]::before,
+.voice-mic[data-phase="starting"]::before,
+.voice-mic[data-phase="writing"]::before {
+  opacity: 1;
+  animation: voice-turn 2.4s linear infinite;
+}
+
+.voice-mic[aria-disabled="true"] {
+  cursor: default;
+}
+
+.voice-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 0.875rem;
+}
+
+.voice-bars > span {
+  width: 3px;
+  height: 100%;
+  border-radius: 2px;
+  transform: scaleY(0.22);
+  transition: transform 90ms linear;
+}
+
+/* Writing it down: the bars ripple, each agent in turn. */
+.voice-mic[data-phase="writing"] .voice-bars > span,
+.voice-mic[data-phase="starting"] .voice-bars > span {
+  animation: voice-ripple 0.9s ease-in-out infinite;
+  animation-delay: calc(var(--i) * 0.11s);
+}
+
+.voice-time {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  min-width: 1.6rem;
+}
+
+.voice-stop {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 2px;
+  background: var(--bad);
+}
+
+/* What went wrong, or why it is off: under the box, beside the mic. */
+.voice-note {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.375rem);
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  max-width: min(26rem, 100%);
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule-strong);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.12);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+
+@keyframes voice-turn {
+  to {
+    --voice-turn: 570deg;
+  }
+}
+
+@keyframes voice-ripple {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voice-mic::before,
+  .voice-bars > span {
+    animation: none !important;
+  }
+}
+
 /* ---- The reasoning sliders: a native range input, drawn to match ---- */
 
 .range {

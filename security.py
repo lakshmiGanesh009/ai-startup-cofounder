@@ -6,8 +6,8 @@ reaches a route, in this order:
   Next.js app's server adds it to the browser's calls it forwards, so the key
   never reaches a browser.
 - Size: a body over MAX_REQUEST_BYTES is refused (413), whether it says how
-  long it is or not; an uploaded file (POST /uploads) may be up to the
-  upload limit instead.
+  long it is or not; an uploaded file (POST /uploads) and a recording to
+  write down (POST /transcribe) may be up to the upload limit instead.
 - Rate: each caller may send REQUESTS_PER_MINUTE requests a minute and start
   RUNS_PER_HOUR runs (evaluations, briefs and proposals) an hour (429, with
   Retry-After). A caller is its address or, behind the app's proxy, the browser
@@ -37,8 +37,8 @@ OPEN_PATHS = frozenset({"/health"})
 # The requests that start a run: an evaluation, a brief, a proposal written or
 # revised, one passage of a report revised, or a question about documents.
 RUN_PATH = re.compile(r"/(evaluate(/stream)?|brief/prepare|ask|reports/[^/]+/(proposal(/revise)?|revise))")
-# Where a file is uploaded: its body may be as large as the upload limit.
-UPLOAD_PATH = "/uploads"
+# Where a file is uploaded or a recording sent: its body may be as large as the upload limit.
+UPLOAD_PATHS = frozenset({"/uploads", "/transcribe"})
 
 Reason = Literal["key", "size", "rate", "busy"]
 
@@ -188,7 +188,7 @@ class GuardMiddleware:
                           [(b"www-authenticate", b'Bearer realm="cofounder"')])
             return
 
-        most = guard.upload_bytes if method == "POST" and path == UPLOAD_PATH else guard.max_bytes
+        most = guard.upload_bytes if method == "POST" and path in UPLOAD_PATHS else guard.max_bytes
         length = _header(scope, b"content-length")
         if length.isdigit() and int(length) > most:
             self.on_refuse("size")

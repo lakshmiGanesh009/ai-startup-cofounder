@@ -541,8 +541,8 @@ count (`cofounder_refused_requests_total`, by reason).
   query, which comes from the brief.
 - **The pages.** Every page is served with a content security policy (scripts,
   styles, fonts and connections from the app only; the PDF from a blob in a
-  frame; no framing by other sites), `nosniff`, a strict referrer policy, and no
-  camera, microphone or location.
+  frame; no framing by other sites), `nosniff`, a strict referrer policy, no
+  camera or location, and the microphone only for the app's own pages (dictation).
 
 The limits' counts live in the process, like the Monitor's statistics: with
 several workers each enforces its own share. TLS and user accounts are the

@@ -19,6 +19,7 @@ import { inputClass, Label, Select } from "@/components/ui/field";
 import { ClockIcon, DownloadIcon, PencilIcon, SearchIcon, SidebarIcon, SlidersIcon } from "@/components/ui/icons";
 import { Notice, type Tone } from "@/components/ui/notice";
 import { Progress } from "@/components/ui/progress";
+import { Voice } from "@/components/voice";
 import {
   ApiError,
   contentOf,
@@ -459,15 +460,17 @@ function ReviseTool({
       </fieldset>
       <div>
         <Label htmlFor="revise-instruction">What to change</Label>
-        <textarea
-          ref={prompt}
-          id="revise-instruction"
-          rows={4}
-          value={instruction}
-          onChange={(event) => setInstruction(event.target.value)}
-          placeholder="Make the year-one figures more conservative, and add a referral channel."
-          className={`${inputClass} leading-relaxed`}
-        />
+        <Voice label="what to change" multiline>
+          <textarea
+            ref={prompt}
+            id="revise-instruction"
+            rows={4}
+            value={instruction}
+            onChange={(event) => setInstruction(event.target.value)}
+            placeholder="Make the year-one figures more conservative, and add a referral channel."
+            className={`${inputClass} leading-relaxed`}
+          />
+        </Voice>
       </div>
       {converting && (
         <Notice tone="info">
@@ -645,7 +648,9 @@ function SettingsTool({
         </h3>
         <div>
           <Label htmlFor="prepared-by">Prepared by</Label>
-          <input id="prepared-by" value={preparedBy} onChange={(event) => setPreparedBy(event.target.value)} className={inputClass} />
+          <Voice label="prepared by">
+            <input id="prepared-by" value={preparedBy} onChange={(event) => setPreparedBy(event.target.value)} className={inputClass} />
+          </Voice>
         </div>
         <fieldset>
           <legend className="mb-1.5 text-[13px] font-medium text-ink">The team&apos;s report in the document</legend>
@@ -693,11 +698,15 @@ function TextTool({ busy, onDraft }: { busy: string | null; onDraft: (change: Dr
         <p className="text-sm text-ink-2">Everywhere: the title, the team&apos;s report and the proposal. A new product name, say.</p>
         <div>
           <Label htmlFor="replace-find">Find</Label>
-          <input id="replace-find" value={find} onChange={(event) => setFind(event.target.value)} className={inputClass} />
+          <Voice label="find">
+            <input id="replace-find" value={find} onChange={(event) => setFind(event.target.value)} className={inputClass} />
+          </Voice>
         </div>
         <div>
           <Label htmlFor="replace-by">Replace with</Label>
-          <input id="replace-by" value={by} onChange={(event) => setBy(event.target.value)} className={inputClass} />
+          <Voice label="replace with">
+            <input id="replace-by" value={by} onChange={(event) => setBy(event.target.value)} className={inputClass} />
+          </Voice>
         </div>
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <label className="flex cursor-pointer items-center gap-2">

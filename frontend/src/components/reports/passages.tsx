@@ -8,6 +8,7 @@
 import { createContext, useContext, useState } from "react";
 
 import { PencilIcon, TrashIcon } from "@/components/ui/icons";
+import { Voice } from "@/components/voice";
 
 export type PassageAction = { path: string; passage: string } & (
   | { kind: "remove" }
@@ -76,18 +77,20 @@ export function Passage({
       </span>
       {asking && (
         <span className="mt-2 flex flex-col gap-2 rounded-lg border border-rule bg-surface p-2.5 font-sans text-sm sm:flex-row">
-          <input
-            autoFocus
-            value={instruction}
-            onChange={(event) => setInstruction(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && instruction.trim()) run({ kind: "revise", path, passage, instruction: instruction.trim() });
-              if (event.key === "Escape") setAsking(false);
-            }}
-            placeholder="What to change in this passage"
-            aria-label="What to change in this passage"
-            className="min-w-0 flex-1 rounded-md border border-rule-strong bg-paper px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-3 focus:border-focus focus:outline-none"
-          />
+          <Voice label="what to change in this passage" className="min-w-0 flex-1">
+            <input
+              autoFocus
+              value={instruction}
+              onChange={(event) => setInstruction(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && instruction.trim()) run({ kind: "revise", path, passage, instruction: instruction.trim() });
+                if (event.key === "Escape") setAsking(false);
+              }}
+              placeholder="What to change in this passage"
+              aria-label="What to change in this passage"
+              className="w-full rounded-md border border-rule-strong bg-paper px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-3 focus:border-focus focus:outline-none"
+            />
+          </Voice>
           <button
             type="button"
             disabled={busy || !instruction.trim()}

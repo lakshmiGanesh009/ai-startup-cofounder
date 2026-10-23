@@ -154,6 +154,8 @@ export type Health = {
   lookups?: { fred: boolean; competitor_pages: boolean };
   // Model calls traced in Langfuse, and how many of the app's prompts are registered there.
   tracing?: { langfuse: boolean; prompts: number };
+  // Whether dictation can run: Azure OpenAI, for its Whisper deployment.
+  voice?: { dictation: boolean };
 };
 
 export type Scenario = {
@@ -898,6 +900,11 @@ export function uploadFile(file: File): Promise<UploadResult> {
     headers: { "Content-Type": "application/octet-stream" },
     body: file,
   });
+}
+
+// A recording of the founder's voice, written down in English by Azure OpenAI's Whisper.
+export function transcribe(audio: Blob): Promise<{ text: string }> {
+  return request("/transcribe", { method: "POST", headers: { "Content-Type": audio.type || "audio/webm" }, body: audio });
 }
 
 export function getUpload(id: string): Promise<UploadSummary> {

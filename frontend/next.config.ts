@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 // its own /api route, the fonts it serves. Next's inline scripts and the
 // diagrams' inline styles are allowed, eval and the reload socket only in
 // development; the PDF opens from a blob in a frame; no other site may frame it.
+// The microphone is the app's own, for dictation (voice.tsx); no camera, no location.
 const development = process.env.NODE_ENV !== "production";
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
@@ -24,7 +25,7 @@ const SECURITY_HEADERS = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
 ];
 
 const nextConfig: NextConfig = {

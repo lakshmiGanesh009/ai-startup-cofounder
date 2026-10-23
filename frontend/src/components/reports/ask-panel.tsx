@@ -21,6 +21,7 @@ import { AgentAvatar } from "@/components/ui/agent";
 import { Button, Kbd } from "@/components/ui/button";
 import { Notice } from "@/components/ui/notice";
 import { Progress } from "@/components/ui/progress";
+import { Voice } from "@/components/voice";
 import {
   ask,
   type AskResult,
@@ -159,17 +160,19 @@ function Questions({
             <label htmlFor={`${id}-question`} className="sr-only">
               Your question
             </label>
-            <textarea
-              id={`${id}-question`}
-              rows={2}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit();
-              }}
-              placeholder="Ask about this report, or compare it with your files…"
-              className={BRIEF_CLASS}
-            />
+            <Voice label="your question" multiline>
+              <textarea
+                id={`${id}-question`}
+                rows={2}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") void submit();
+                }}
+                placeholder="Ask about this report, or compare it with your files…"
+                className={BRIEF_CLASS}
+              />
+            </Voice>
             {problem && (
               <Notice tone="bad" className="mt-3">
                 {problem}

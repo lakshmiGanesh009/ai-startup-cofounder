@@ -14,6 +14,7 @@ import { AgentAvatar } from "@/components/ui/agent";
 import { Button, Kbd } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
+import { Voice } from "@/components/voice";
 import type { Answer, PreparedBrief, Question, Research } from "@/lib/api";
 import { keepFindings } from "@/lib/brief";
 
@@ -61,13 +62,15 @@ function Ask({
             })}
           </div>
         )}
-        <input
-          value={answer}
-          onChange={(event) => onAnswer(event.target.value)}
-          aria-label={`Your answer: ${question.question}`}
-          placeholder="Or answer in your own words"
-          className={`${inputClass} mt-3`}
-        />
+        <Voice label="your answer" className="mt-3">
+          <input
+            value={answer}
+            onChange={(event) => onAnswer(event.target.value)}
+            aria-label={`Your answer: ${question.question}`}
+            placeholder="Or answer in your own words"
+            className={inputClass}
+          />
+        </Voice>
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import { inputClass, Label } from "@/components/ui/field";
 import { Notice } from "@/components/ui/notice";
 import { PageHeader } from "@/components/ui/page-header";
 import { Clock, Progress } from "@/components/ui/progress";
+import { Voice } from "@/components/voice";
 import {
   evaluateStream,
   getScenarios,
@@ -338,13 +339,15 @@ function Session() {
         >
           <Label htmlFor="follow-up">Follow up in this session</Label>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <input
-              id="follow-up"
-              value={followUp}
-              onChange={(event) => setFollowUp(event.target.value)}
-              placeholder="Refine the pricing strategy after financial review."
-              className={inputClass}
-            />
+            <Voice label="the follow-up" className="min-w-0 flex-1">
+              <input
+                id="follow-up"
+                value={followUp}
+                onChange={(event) => setFollowUp(event.target.value)}
+                placeholder="Refine the pricing strategy after financial review."
+                className={inputClass}
+              />
+            </Voice>
             <Button type="submit" variant="primary" disabled={!followUp.trim()}>
               Send follow-up
             </Button>

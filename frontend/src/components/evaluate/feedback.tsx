@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { ThumbDownIcon, ThumbUpIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
+import { Voice } from "@/components/voice";
 import { type EvaluateResponse, sendFeedback } from "@/lib/api";
 
 export function Feedback({ result }: { result: EvaluateResponse }) {
@@ -75,14 +76,16 @@ export function Feedback({ result }: { result: EvaluateResponse }) {
           <label htmlFor={field} className="text-sm text-ink-2">
             {useful ? "What made it useful?" : "What would have made it useful?"} <span className="text-ink-3">(optional)</span>
           </label>
-          <textarea
-            id={field}
-            rows={2}
-            value={comment}
-            maxLength={4000}
-            onChange={(event) => setComment(event.target.value)}
-            className={`${inputClass} mt-1.5`}
-          />
+          <Voice label="your comment" multiline className="mt-1.5">
+            <textarea
+              id={field}
+              rows={2}
+              value={comment}
+              maxLength={4000}
+              onChange={(event) => setComment(event.target.value)}
+              className={inputClass}
+            />
+          </Voice>
           <div className="mt-2 flex items-center gap-3">
             <Button type="submit" size="sm" variant="primary" disabled={sending}>
               {sending ? "Sending…" : "Send"}

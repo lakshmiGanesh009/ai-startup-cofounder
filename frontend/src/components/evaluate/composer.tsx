@@ -11,6 +11,7 @@ import { DocumentPicker, type DocumentRef, useDocuments } from "@/components/doc
 import { Button, Kbd } from "@/components/ui/button";
 import { inputClass, Label } from "@/components/ui/field";
 import { CheckIcon } from "@/components/ui/icons";
+import { Voice } from "@/components/voice";
 import { PROVIDER_NAMES, type RequestContext, type ResearchProvider, type Scenario, type Template } from "@/lib/api";
 import { fillTemplate, missingField, type TemplateValues } from "@/lib/brief";
 import { DEEP_RESEARCH_COST } from "@/lib/team";
@@ -194,7 +195,9 @@ export function Composer({
             return (
               <div key={field.key}>
                 <Label htmlFor={id}>{field.label}</Label>
-                {field.long ? <textarea rows={3} className={BRIEF_CLASS} {...shared} /> : <input className={inputClass} {...shared} />}
+                <Voice label={field.label} multiline={field.long}>
+                  {field.long ? <textarea rows={3} className={BRIEF_CLASS} {...shared} /> : <input className={inputClass} {...shared} />}
+                </Voice>
                 {message(id)}
               </div>
             );
@@ -207,17 +210,19 @@ export function Composer({
       ) : (
         <div>
           <Label htmlFor="brief">The brief</Label>
-          <textarea
-            id="brief"
-            rows={5}
-            value={prompt}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={sendOnShortcut}
-            placeholder="An assistant that drafts and schedules patient follow-ups from clinical notes, for small clinics. Is it worth building, and how should we launch it?"
-            aria-invalid={invalid("brief")}
-            aria-describedby={invalid("brief") ? "brief-problem" : undefined}
-            className={BRIEF_CLASS}
-          />
+          <Voice label="the brief" multiline>
+            <textarea
+              id="brief"
+              rows={5}
+              value={prompt}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={sendOnShortcut}
+              placeholder="An assistant that drafts and schedules patient follow-ups from clinical notes, for small clinics. Is it worth building, and how should we launch it?"
+              aria-invalid={invalid("brief")}
+              aria-describedby={invalid("brief") ? "brief-problem" : undefined}
+              className={BRIEF_CLASS}
+            />
+          </Voice>
           {message("brief")}
         </div>
       )}
@@ -230,13 +235,15 @@ export function Composer({
           {FIELDS.map(([field, label, hint]) => (
             <div key={field}>
               <Label htmlFor={field}>{label}</Label>
-              <input
-                id={field}
-                value={context[field]}
-                placeholder={hint}
-                onChange={(event) => setContext((current) => ({ ...current, [field]: event.target.value }))}
-                className={inputClass}
-              />
+              <Voice label={label}>
+                <input
+                  id={field}
+                  value={context[field]}
+                  placeholder={hint}
+                  onChange={(event) => setContext((current) => ({ ...current, [field]: event.target.value }))}
+                  className={inputClass}
+                />
+              </Voice>
             </div>
           ))}
         </div>

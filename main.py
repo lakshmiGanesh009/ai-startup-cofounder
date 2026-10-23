@@ -84,6 +84,7 @@ from reports import (
     store,
 )
 import judge
+import voice
 import lookups
 import providers
 import tracing
@@ -251,6 +252,7 @@ async def health():
         "lookups": {"fred": lookups.fred_configured(), "competitor_pages": lookups.tavily_configured()},
         # Model calls traced in Langfuse, with the prompts registered there (tracing.py).
         "tracing": {"langfuse": tracing.enabled(), "prompts": len(tracing.versions())},
+        "voice": {"dictation": voice.available()},
     }
 
 
@@ -1136,6 +1138,38 @@ def get_upload(upload_id: Annotated[str, InPath(pattern=library.UPLOAD_ID)]):
         return summary_of(uploads.get(upload_id))
     except UploadNotFound as error:
         raise HTTPException(status_code=404, detail="This file is no longer kept; upload it again.") from error
+
+
+class Transcript(BaseModel):
+    text: str
+
+
+@app.post("/transcribe", response_model=Transcript)
+async def transcribe(request: Request):
+    """The founder's dictation, written down in English: the recording as the
+    body (WebM, Ogg, MP4 or M4A, MP3, WAV or FLAC, as its Content-Type says), up
+    to 10 MB, sent to Azure OpenAI's Whisper deployment, which translates speech
+    in any language into English text, and not kept. 503 without Azure OpenAI,
+    415 for a format it does not take, 422 for an empty recording, 502 when the
+    call fails, with what Azure answered."""
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(status_code=422, detail="The recording is empty.")
+    kind = request.headers.get("content-type", "")
+    try:
+        with tracing.trace("transcribe", input={"audio": f"{len(audio):,} bytes of {kind or 'audio'}"},
+                           tags=["voice"]) as run:
+            text = await run_in_threadpool(voice.transcribe, audio, kind)
+            run.output(text)
+    except voice.VoiceNotConfigured as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    except voice.UnsupportedAudio as error:
+        raise HTTPException(status_code=415, detail=str(error)) from error
+    except LLM_ERRORS as error:
+        monitor.event("error", "voice", f"Dictation failed: {error}"[:500])
+        raise HTTPException(status_code=502, detail=f"The speech-to-text call failed: {voice.why(error)}") from error
+    monitor.event("run", "voice", f"Wrote down {len(text.split())} words from {len(audio):,} bytes of audio.")
+    return Transcript(text=text)
 
 
 class Question(BaseModel):

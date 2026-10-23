@@ -3,8 +3,8 @@
 // key (API_KEY), so the key stays on this server and never reaches a browser.
 // The answer streams back as it comes: an evaluation's events, a PDF, JSON.
 // Only the API's routes the pages use are forwarded, and a body is capped
-// before it is held in memory: an uploaded file at the upload limit, anything
-// else at the request limit.
+// before it is held in memory: an uploaded file or a recording to write down at
+// the upload limit, anything else at the request limit.
 
 const BACKEND = (process.env.BACKEND_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 const MAX_BYTES = Number(process.env.MAX_REQUEST_BYTES ?? 1_000_000);
@@ -22,6 +22,7 @@ const ROUTES = new Set([
   "uploads",
   "ask",
   "feedback",
+  "transcribe",
 ]);
 const SEGMENT = /^[A-Za-z0-9_-]{1,64}$/;
 // What goes on to the API, and what comes back from it.
@@ -75,7 +76,10 @@ async function forward(request: Request, { params }: { params: Promise<{ path: s
 
   let body: Uint8Array<ArrayBuffer> | undefined;
   if (request.method !== "GET" && request.method !== "HEAD") {
-    const most = request.method === "POST" && path.length === 1 && path[0] === "uploads" ? MAX_UPLOAD_BYTES : MAX_BYTES;
+    const most =
+      request.method === "POST" && path.length === 1 && (path[0] === "uploads" || path[0] === "transcribe")
+        ? MAX_UPLOAD_BYTES
+        : MAX_BYTES;
     const length = Number(request.headers.get("content-length") ?? 0);
     const read = length > most ? null : await cappedBody(request, most);
     if (!read) return problem(413, `The request is larger than the ${most.toLocaleString("en")} bytes the API accepts.`);

@@ -23,6 +23,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { inputClass, Select } from "@/components/ui/field";
 import { ArrowRightIcon, DocumentIcon, SearchIcon, TrashIcon } from "@/components/ui/icons";
 import { Notice } from "@/components/ui/notice";
+import { Voice } from "@/components/voice";
 import { AGENTS, specialistAgent } from "@/lib/agents";
 import type { KeyFigure, Report, ReportFigures, ReportSummary } from "@/lib/api";
 import { stamp } from "@/lib/dates";
@@ -542,21 +543,23 @@ function Browser({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-rule px-5 py-3.5">
         <div className="relative min-w-[14rem] flex-1">
-          <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-3" />
-          <input
-            type="search"
-            role="combobox"
-            aria-label="Search the reports"
-            aria-controls={list}
-            aria-expanded="true"
-            aria-activedescendant={active ? optionId(active) : undefined}
-            ref={search}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={keys}
-            placeholder="Search by name, decision, verdict or session"
-            className={`${inputClass} pl-9`}
-          />
+          <Voice label="the search">
+            <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-ink-3" />
+            <input
+              type="search"
+              role="combobox"
+              aria-label="Search the reports"
+              aria-controls={list}
+              aria-expanded="true"
+              aria-activedescendant={active ? optionId(active) : undefined}
+              ref={search}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={keys}
+              placeholder="Search by name, decision, verdict or session"
+              className={`${inputClass} pl-9`}
+            />
+          </Voice>
         </div>
         <div role="group" aria-label="Show" className="flex rounded-md border border-rule-strong bg-sunken p-0.5">
           {KINDS.map(([value, label]) => (

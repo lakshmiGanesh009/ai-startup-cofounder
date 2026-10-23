@@ -151,3 +151,8 @@ export function useBackend(): BackendState {
   if (!state) throw new Error("useBackend must be used inside <BackendProvider>.");
   return state;
 }
+
+// The API's health where the page has the provider; null where it has not.
+export function useHealth(): Health | null {
+  return useContext(BackendContext)?.health ?? null;
+}

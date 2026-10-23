@@ -126,10 +126,11 @@ describe("the API proxy", () => {
     const upload = await call(POST, "http://app.test/api/uploads?name=plan.pdf", { method: "POST", body: "x".repeat(250) });
     const tooLarge = await call(POST, "http://app.test/api/uploads?name=plan.pdf", { method: "POST", body: "x".repeat(301) });
     const question = await call(POST, "http://app.test/api/ask", { method: "POST", body: "x".repeat(250) });
+    const recording = await call(POST, "http://app.test/api/transcribe", { method: "POST", body: "x".repeat(250) });
 
-    expect([upload.status, tooLarge.status, question.status]).toEqual([201, 413, 413]);
+    expect([upload.status, tooLarge.status, question.status, recording.status]).toEqual([201, 413, 413, 201]);
     expect((await tooLarge.json()).detail).toBe("The request is larger than the 300 bytes the API accepts.");
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(fetch.mock.calls[0][0]).toBe("http://api.test:8000/uploads?name=plan.pdf");
   });
 
