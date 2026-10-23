@@ -1,9 +1,10 @@
 // Buttons, in three weights: primary for the one action a view is for,
-// secondary for the rest, quiet for tools that should not draw the eye.
+// secondary for the rest, quiet for tools that should not draw the eye; and
+// danger, for the one that confirms what cannot be undone.
 
 import Link from "next/link";
 
-type Variant = "primary" | "secondary" | "quiet";
+type Variant = "primary" | "secondary" | "quiet" | "danger";
 type Size = "sm" | "md";
 
 const BASE =
@@ -13,6 +14,7 @@ const VARIANTS: Record<Variant, string> = {
   primary: "bg-primary text-primary-ink shadow-[0_1px_1px_rgb(0_0_0/0.08)] hover:bg-primary-hover",
   secondary: "border border-rule-strong bg-surface text-ink hover:border-ink-3 hover:bg-sunken/60",
   quiet: "text-ink-2 hover:bg-sunken hover:text-ink",
+  danger: "bg-bad text-surface shadow-[0_1px_1px_rgb(0_0_0/0.08)] hover:opacity-90",
 };
 
 const SIZES: Record<Size, string> = {
@@ -29,7 +31,7 @@ export function Button({
   size = "md",
   className = "",
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: Size }) {
+}: React.ComponentProps<"button"> & { variant?: Variant; size?: Size }) {
   return <button type="button" {...props} className={buttonClass(variant, size, className)} />;
 }
 

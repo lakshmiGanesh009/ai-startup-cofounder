@@ -574,6 +574,17 @@ mark.assumption {
   white-space: nowrap;
 }
 
+/* A brief's figures, picked out to find at a glance: amounts, shares, spans of time. */
+.figure {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  white-space: nowrap;
+  background: linear-gradient(transparent 58%, var(--primary-soft) 58%, var(--primary-soft) 92%, transparent 92%);
+  padding-inline: 0.1em;
+  margin-inline: -0.1em;
+}
+
 /* ---- The reasoning sliders: a native range input, drawn to match ---- */
 
 .range {

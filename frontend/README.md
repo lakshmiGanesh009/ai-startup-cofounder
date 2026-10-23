@@ -60,7 +60,7 @@ The sidebar shows whether the browser can reach the backend, checking again ever
 
 ## The Reports page
 
-- **Report** picks a session's report: the one in the address (`/reports?session=…`), else the Evaluate page's, else the newest.
+- The report shown is the one in the address (`/reports?session=…`), else the Evaluate page's, else the newest. The button beside the title (`report-picker.tsx`) names it, with its kind, date and verdict, and **Browse** opens every report: a list, searchable by name, decision, verdict or session, filtered by kind and sorted, each entry with its verdict, decision, version, date, NPV and whether it was edited or has newer results; beside it, a preview of the one highlighted with its recommendation and its brief under it (amounts, shares and spans of time picked out by Markdown's `figures` option), headline figures (NPV, IRR, payback, break-even), key figures (a proposal's calculated from its plan, a team report's as the team gave them), figures that disagree, the founder's choices while it was built (`report-choices.tsx`: their brief, clipped until asked for whole, and its follow-up; the target market, constraints and competition; their answers to the Chief of Staff's questions; the research facts they kept, each with a link to its source; their documents; deep research and the efforts it ran at; every amount, share and span of time in their words picked out by `Figured`, from `markdown.tsx`), its versions (`report-versions.tsx`: a timeline, newest first, each with what made it, how many fields it changed and where; **What changed** opens them field by field from the version before, shown as a draft's changes are), the objective, the team, who it is from, its currency and what it worked from. Opening it loads the list afresh. The arrow keys move through the list and Enter opens; on a phone a tap opens. The preview has a title bar that stays in view as the rest scrolls: the report's kind, version and name, with **Delete** and **Open this report** beside them. **Delete** deletes a report for good (`DELETE /reports/{session_id}`) once the founder confirms, with Keep it focused; **More actions** has **Delete this report** for the open one, on any screen. When the open report is deleted, the newest left opens, and the page says what went.
 - Before the proposal, the page shows the team's report (the strategy, each specialist's report, the decisions on conflicts), each section labelled with the agent that wrote it. **Edit the team's report** turns it into markdown boxes, saved together.
 - **Write the investment proposal** has the agents write it (a minute or two at the default efforts). It then reads as chapters, numbered as in the PDF: executive summary, market and marketing, technical and operations, the financial plan, risk and compliance, success metrics, and the team's report as an appendix. Each has its text, tables and charts (market size, funnel, roadmap, costs, projections, cash position, risk matrix), the agent that wrote it, and "calculated" on the figures the API works out; figures that fail a check are flagged. **Edit** turns a chapter into a form, tables included.
 - Each paragraph and list item has **Revise** and **Remove** buttons (on hover, or faint on a phone): the agent that wrote it rewrites just that, or it is taken out (`components/reports/passages.tsx`).
@@ -115,6 +115,9 @@ src/components/evaluate/live-graph.tsx     The team at work, lit up on the graph
 src/lib/live-graph.ts                      Each step's state and the edges taken, from the streamed steps
 src/components/evaluate/result-view.tsx    One result: the strategy memo, the reviews, the team's work
 src/components/reports/reports-app.tsx     The Reports page: cover, chapters, writing, editing, resetting
+src/components/reports/report-picker.tsx   Every report, searchable, with a preview of the one highlighted
+src/components/reports/report-versions.tsx A report's versions, each with what it changed from the one before
+src/components/reports/report-choices.tsx  What the founder chose and told the team while a report was built
 src/components/reports/proposal-view.tsx   The proposal's chapters on screen
 src/components/reports/charts.tsx          The proposal's charts, in HTML and CSS
 src/components/reports/edit-form.tsx       The forms that edit each part, tables included
@@ -145,6 +148,7 @@ src/lib/api.ts                             Typed client for the backend, the str
 src/lib/backend.tsx                        The backend's status, the chosen efforts and research provider, app-wide
 src/lib/team.ts                            The team: names, stages, what it is doing, how long it takes
 src/lib/proposal.ts                        The proposal's parts, and its metrics in words
+src/lib/dates.ts                           Dates as the pages show them
 src/lib/brief.ts                           Templates filled in, and the research the founder keeps
 ```
 

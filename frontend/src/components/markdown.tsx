@@ -1,5 +1,6 @@
 // The agents' markdown, rendered safely: raw HTML in it is shown as text,
-// figures they marked as assumptions are highlighted, and what the agents cite
+// figures they marked as assumptions are highlighted (and, where asked, every
+// amount, share and span of time picked out), and what the agents cite
 // in square brackets is set as tags: an agent ("[finance]") in its colour, a
 // passage of the founder's documents ("[D1 · page 3]") or a whole one ("[R1]")
 // naming it, an official figure ("[FRED · DGS10]") linking to its page on
@@ -11,12 +12,33 @@ import remarkGfm from "remark-gfm";
 import { type DocumentRef, useDocumentNames } from "@/components/documents";
 import { Passage, usePassages } from "@/components/reports/passages";
 import { AGENTS, type AgentKey } from "@/lib/agents";
+import { CURRENCIES } from "@/lib/proposal";
 
 const ASSUMPTION = /\((?:assumption|assumed|estimate|estimated)s?\)/gi;
 const CITED = /\[([^[\]\n]{1,240})\]/g;
 const AGENT_CITED = /^(marketing|finance|technical|risk|research|chief(?: of staff)?)$/i;
 const DOCUMENT_CITED = /^([DR]\d{1,2}(?:–[DR]?\d{1,2})?)(?: · (.{1,160}))?$/;
 const FRED_CITED = /^FRED · ([A-Za-z0-9_.]{1,40})$/;
+// An amount in any of the currencies ("$15,000", "€12k", "AED 400 a month",
+// "$150-$200", "$300+ a month"), a share ("84%", "8-10%") or a span of time
+// ("90 days", "120–160 hrs"). A sign that is a word ("AED", "R") is followed by
+// a space, so "R2" is not an amount.
+const SIGNS = [...new Set(Object.entries(CURRENCIES).flatMap(([code, { symbol }]) => [symbol.trim(), code]))].sort(
+  (a, b) => b.length - a.length,
+);
+const signs = (worded: boolean) =>
+  SIGNS.filter((sign) => /[A-Za-z]$/.test(sign) === worded)
+    .map((sign) => sign.replace(/[$.]/g, "\\$&"))
+    .join("|");
+const NUMBER = String.raw`\d+(?:,\d{2,3})*(?:\.\d+)?`;
+const SCALE = String.raw`(?:\s?(?:[kKmMbB]|bn|million|billion)\b)?`;
+const AMOUNT = String.raw`(?:(?:${signs(false)})\s?|(?:${signs(true)})\s)${NUMBER}${SCALE}`;
+const AMOUNTS = String.raw`${AMOUNT}(?:\s?[–-]\s?(?:${AMOUNT}|${NUMBER}${SCALE}))?\+?`;
+const PER = String.raw`(?:\s?(?:\/|per |a |an )(?:month|mo|year|yr|customer|client|clinic|practice|user|seat|sprint|pilot)s?\b){0,2}`;
+const FIGURE = new RegExp(
+  String.raw`(?<![\w$€£¥₹₩])(?:${AMOUNTS}${PER}|${NUMBER}(?:\s?[–-]\s?${NUMBER})?\s?%|${NUMBER}(?:\s?[–-]\s?${NUMBER})?\s(?:days?|weeks?|months?|years?|hrs|hours)\b)`,
+  "g",
+);
 // Citations side by side: "D1 · page 3; R1", "D1–D3, R1" (a comma only before a document's mark,
 // as one may be inside a place: "sheet Revenue, rows 2–7").
 const SEPARATOR = /;\s*|,\s*(?=[DR]\d)/;
@@ -60,13 +82,14 @@ function remarkLabels({ level }: { level: number }) {
 }
 
 // A remark plugin that sets each match of `pattern` in the text as the node
-// `wrap` makes of it, or leaves it as it is when `wrap` makes none.
-function remarkMatches(pattern: RegExp, wrap: (match: RegExpMatchArray) => Node | null) {
+// `wrap` makes of it, or leaves it as it is when `wrap` makes none; the text
+// inside a node of a type in `skip` is left alone.
+function remarkMatches(pattern: RegExp, wrap: (match: RegExpMatchArray) => Node | null, skip: string[] = []) {
   function split(node: Node) {
     if (!node.children) return;
     node.children = node.children.flatMap((child): Node[] => {
       if (child.type !== "text" || !child.value) {
-        split(child);
+        if (!skip.includes(child.type)) split(child);
         return [child];
       }
       const parts: Node[] = [];
@@ -91,6 +114,36 @@ const remarkAssumptions = remarkMatches(ASSUMPTION, (match) => ({
   data: { hName: "mark", hProperties: { className: "assumption" } },
   children: [{ type: "text", value: match[0] }],
 }));
+
+// Each amount, share and span of time, picked out; not inside a tag or a mark.
+const remarkFigures = remarkMatches(
+  FIGURE,
+  (match) => ({
+    type: "figure",
+    data: { hName: "span", hProperties: { className: "figure" } },
+    children: [{ type: "text", value: match[0] }],
+  }),
+  ["assumption", "citations", "inlineCode", "link"],
+);
+
+// Plain text, the founder's own, with its amounts, shares and spans of time
+// picked out as the `figures` option picks them out of the agents' markdown.
+export function Figured({ text }: { text: string }) {
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  for (const match of text.matchAll(FIGURE)) {
+    const at = match.index ?? 0;
+    if (at > last) parts.push(text.slice(last, at));
+    parts.push(
+      <span key={at} className="figure">
+        {match[0]}
+      </span>,
+    );
+    last = at + match[0].length;
+  }
+  parts.push(text.slice(last));
+  return <>{parts}</>;
+}
 
 // "[finance]", as a tag in the agent's colour that names it.
 function agentTag(cited: string): Node | null {
@@ -171,28 +224,35 @@ function slice(source: string, node: Positioned | undefined, item: boolean): str
 }
 
 // The agents' text set as a document (globals.css, `.doc`); `compact` for a
-// report shown inside another view, and `labels` to set a whole report's
-// section labels as headings (of level 3, or the level given). With `path`
+// report shown inside another view, `labels` to set a whole report's section
+// labels as headings (of level 3, or the level given), and `figures` to pick
+// out its amounts, shares and spans of time, for a brief read at a glance. With `path`
 // (where the text is in the report) on a page that handles passages, each
 // paragraph and list item can be revised or removed on its own.
 export function Markdown({
   children,
   compact = false,
   labels = false,
+  figures = false,
   path,
 }: {
   children: string;
   compact?: boolean;
   labels?: boolean | 3 | 4;
+  figures?: boolean;
   path?: string;
 }) {
   const passages = usePassages();
   const names = useDocumentNames();
   const level = labels === true ? 3 : labels;
   const citations: [typeof remarkCitations, { names: DocumentRef[] }] = [remarkCitations, { names }];
-  const plugins: Options["remarkPlugins"] = level
-    ? [remarkGfm, [remarkLabels, { level }], remarkAssumptions, citations]
-    : [remarkGfm, remarkAssumptions, citations];
+  const plugins: Options["remarkPlugins"] = [
+    remarkGfm,
+    ...(level ? [[remarkLabels, { level }] as [typeof remarkLabels, { level: number }]] : []),
+    remarkAssumptions,
+    citations,
+    ...(figures ? [remarkFigures] : []),
+  ];
   const components: Components | undefined =
     path && passages
       ? {

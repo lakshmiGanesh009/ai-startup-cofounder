@@ -19,11 +19,12 @@ const CONTEXT = 140;
 
 function Shortened({ text }: { text: string }) {
   if (text.length <= CONTEXT * 2) return <>{text}</>;
+  // Each end cut at a word, not inside one.
   return (
     <>
-      {text.slice(0, CONTEXT)}
+      {text.slice(0, CONTEXT).replace(/\s+\S*$/, "")}
       <span className="text-ink-3"> … </span>
-      {text.slice(-CONTEXT)}
+      {text.slice(-CONTEXT).replace(/^\S*\s+/, "")}
     </>
   );
 }
@@ -34,7 +35,8 @@ function Value({ value, money, currency }: { value: string | number | null; mone
   return <>{value}</>;
 }
 
-function Change({ change, from, to }: { change: FieldChange; from: string; to: string }) {
+// One field a change touches, before and after: amounts in the currencies `from` and `to`.
+export function Change({ change, from, to }: { change: FieldChange; from: string; to: string }) {
   const { before, after } = change;
   const text = typeof before === "string" && typeof after === "string";
   return (

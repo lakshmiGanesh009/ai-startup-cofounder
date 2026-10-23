@@ -57,6 +57,7 @@ from llm import (
     failure,
     default_effort,
     reasoning,
+    reasoning_effort,
     takes_reasoning_effort,
 )
 from metrics import track
@@ -70,6 +71,7 @@ from document import Draft
 from proposal import OWNERS, TITLES, Proposal
 from report_pdf import render_pdf
 from reports import (
+    Choices,
     DocumentSettings,
     Report,
     ReportChanged,
@@ -501,7 +503,9 @@ async def _finish(session_id: str, result: dict, flags: list[Flag], run: tracing
     """Record the session's report and answer with its results; on Langfuse,
     score the run and give the way to its trace."""
     # In a worker thread: the results name the founder's documents, read from the database.
-    await run_in_threadpool(lambda: store.record(session_id, SessionResults.from_state(result)))
+    efforts = {role: effort for role in (SPECIALIST, CHIEF) if (effort := reasoning_effort(role))} \
+        if takes_reasoning_effort() else {}
+    await run_in_threadpool(lambda: store.record(session_id, SessionResults.from_state(result, efforts)))
     deep = result.get("deep_research")
     trace_id = trace_url = None
     if run is not None and run.id:
@@ -825,6 +829,20 @@ def get_report(session_id: SessionId):
     return store.get(session_id)
 
 
+@app.delete("/reports/{session_id}", status_code=204)
+async def delete_report(session_id: SessionId):
+    """Delete a session's report, with its versions, the results it was built
+    from and the team's saved state for the session, so nothing of it is kept
+    to rebuild it from. 404 if there is no such report. The founder's uploaded
+    files stay: another report may have worked from them."""
+    bind_session(session_id)
+    await run_in_threadpool(store.delete, session_id)
+    if graph.checkpointer is not None:
+        await graph.checkpointer.adelete_thread(session_id)
+    monitor.event("document", "reports", "Deleted a report, with its versions and the session's saved state.", session_id)
+    return Response(status_code=204)
+
+
 @app.put("/reports/{session_id}", response_model=Report)
 def save_report(session_id: SessionId, edit: ReportEdit):
     """Save edited sections. Returns 409 if the report changed since `version`."""
@@ -1002,11 +1020,34 @@ def accept_draft(session_id: SessionId, acceptance: Acceptance):
     return store.accept(session_id, acceptance.version, acceptance.content, acceptance.change)
 
 
+@app.get("/reports/{session_id}/choices", response_model=Choices)
+async def report_choices(session_id: SessionId):
+    """What the founder chose and told the team while the report was built: the
+    request and its details (target market, constraints, competition), their
+    answers to the Chief of Staff's questions, the research facts they kept, their
+    documents, and whether the team researched first and at what efforts. A report
+    built before these were kept has them from the session's saved state, where
+    there is one, else only what its results hold (`complete` false)."""
+    results = await run_in_threadpool(store.results, session_id)
+    if results.choices:
+        return results.choices
+    state = (await graph.aget_state({"configurable": {"thread_id": session_id}})).values if graph.checkpointer else {}
+    if state.get("request"):
+        return Choices.from_state(state, results.documents)
+    return Choices(brief=results.venture, research=results.research, documents=results.documents, complete=False)
+
+
 @app.get("/reports/{session_id}/versions", response_model=list[VersionSummary])
 def report_versions(session_id: SessionId):
     """The report's current version and those kept before it, newest first,
-    each with how it came about."""
-    return store.versions(session_id)
+    each with how it came about and how many fields it changed, where."""
+    return store.versions(session_id, compare=document.places)
+
+
+@app.get("/reports/{session_id}/versions/{version}/changes", response_model=document.VersionChanges)
+def report_version_changes(session_id: SessionId, version: int):
+    """What changed in a version, field by field, from the version before it."""
+    return document.version_changes(*store.with_before(session_id, version))
 
 
 @app.get("/reports/{session_id}/versions/{version}", response_model=Report)

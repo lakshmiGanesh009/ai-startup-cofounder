@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import ReportsPage from "@/app/reports/page";
 import { BackendProvider } from "@/lib/backend";
@@ -57,7 +57,7 @@ describe("the Reports page, before the proposal", () => {
     expect(screen.getByText("Written by the Chief of Staff")).toBeTruthy();
     expect(screen.getByText("Decided by the Chief of Staff")).toBeTruthy();
     expect(screen.getByText("Written by the Financial Planning Agent")).toBeTruthy();
-    expect(within(screen.getByLabelText("Report")).getByRole("option").textContent).toMatch(/team report, 19 Oct, 09:30 UTC\)$/);
+    expect(screen.getByRole("button", { name: /^Report: / }).textContent).toContain("Team report · 19 Oct");
     expect(screen.getByText(SESSION.slice(0, 8))).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Revise with the team" })).toBeNull();
   });
@@ -96,7 +96,8 @@ describe("the Reports page, before the proposal", () => {
       body: { version: 1, reasoning: { specialist: "minimal", chief: "medium" }, currency: "USD" },
     });
     expect(screen.getByRole("status").textContent).toContain("The investment proposal is written.");
-    expect(screen.getByRole("option").textContent).toContain("(investment proposal,");
+    // The picker follows the open report: now an investment proposal, under its project's name.
+    expect(screen.getByRole("button", { name: /^Report: / }).textContent).toMatch(/^Report · 1 in allFollowUp AssistProposal · /);
     expect(screen.getAllByRole("tab")).toHaveLength(CHAPTERS.length);
     for (const name of CHAPTERS) expect(screen.getByRole("tab", { name })).toBeTruthy();
     expect(screen.getByText("Investment proposal")).toBeTruthy();
@@ -189,6 +190,7 @@ describe("the Reports page, before the proposal", () => {
     // A team report has no proposal to rewrite.
     expect(screen.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
       expect.stringMatching(/^Reset to the latest results/),
+      expect.stringMatching(/^Delete this report/),
     ]);
     await user().keyboard("{Escape}");
     expect(screen.queryByRole("menu")).toBeNull();
@@ -816,8 +818,12 @@ describe("choosing a report", () => {
     renderPage();
 
     await screen.findByRole("heading", { name: "Launch Strategy" });
-    expect(screen.getByLabelText<HTMLSelectElement>("Report").value).toBe(SESSION);
-    await user().selectOptions(screen.getByLabelText("Report"), "other-session");
+    const picker = screen.getByRole("button", { name: /^Report: / });
+    expect(picker.getAttribute("aria-label")).toBe(`Report: ${SAMPLE_REPORT.title}. Choose another of 2.`);
+    await user().click(picker);
+    const dialog = screen.getByRole("dialog", { name: "Reports" });
+    await user().click(within(dialog).getByRole("option", { name: /Another idea/ }));
+    await user().click(within(dialog).getByRole("button", { name: "Open this report" }));
     await waitFor(() => expect(screen.getByText("other-se")).toBeTruthy());
     window.history.pushState({}, "", "/reports");
   });
@@ -840,6 +846,405 @@ describe("choosing a report", () => {
     renderPage();
 
     await screen.findByRole("heading", { name: "Launch Strategy" });
-    expect(screen.getByLabelText<HTMLSelectElement>("Report").value).toBe(SESSION);
+    expect(screen.getByText(SESSION.slice(0, 8))).toBeTruthy();
+  });
+});
+
+describe("the report picker", () => {
+  const BASE = { version: 1, edited: false, outdated: false, has_proposal: false, team: [], sections: 6, documents: 0, checks: 0 };
+  const PROPOSAL = {
+    ...BASE,
+    session_id: "proposal-session",
+    title: "Should we launch a prepaid sneaker drop for Gen-Z?",
+    objective: "Decide whether to run a capped 300-unit prepaid pilot.",
+    has_proposal: true,
+    project_name: "Sneaker Pilot Drop",
+    verdict: "Not yet",
+    currency: "EUR",
+    prepared_by: "Northwind Ventures",
+    team: ["marketing", "finance"],
+    documents: 2,
+    version: 4,
+    outdated: true,
+    checks: 2,
+    change: "Rewrote the market part as you asked.",
+    figures: { npv: -239365, irr: null, payback_months: null, break_even_customers: null },
+    key_figures: [
+      { label: "Price", value: "€89 a month" },
+      { label: "Start-up cost", value: "€18k" },
+    ],
+    updated_at: "2026-10-20T08:00:00Z",
+  };
+  const OLDER = {
+    ...BASE,
+    session_id: "older-session",
+    title: "A dental reminder service in Ohio",
+    objective: "Decide whether to launch at $99 a practice.",
+    verdict: "Go",
+    updated_at: "2026-10-01T12:00:00Z",
+  };
+
+  function withReports(extra = {}) {
+    return fakeReports({
+      extra: {
+        "GET /reports": { body: [PROPOSAL, { ...SAMPLE_REPORT, ...BASE, session_id: SESSION, has_proposal: false }, OLDER] },
+        "GET /reports/proposal-session": { body: { ...SAMPLE_REPORT, session_id: "proposal-session", title: PROPOSAL.title } },
+        "GET /reports/older-session": { body: { ...SAMPLE_REPORT, session_id: "older-session", title: OLDER.title } },
+        ...extra,
+      },
+    });
+  }
+
+  async function openPicker() {
+    window.history.replaceState(null, "", `/reports?session=${SESSION}`);
+    renderPage();
+    await screen.findByRole("heading", { name: "Launch Strategy" });
+    await user().click(screen.getByRole("button", { name: /^Report: / }));
+    return screen.getByRole("dialog", { name: "Reports" });
+  }
+
+  test("lists every report with what tells them apart, and previews the one highlighted", async () => {
+    withReports();
+    const dialog = await openPicker();
+    const options = within(within(dialog).getByRole("listbox", { name: "Reports" })).getAllByRole("option");
+    expect(options).toHaveLength(3);
+    // The open report is highlighted first, and marked.
+    expect(options[1].getAttribute("aria-selected")).toBe("true");
+    expect(within(options[1]).getByText("Open")).toBeTruthy();
+    expect(options[0].textContent).toContain("Sneaker Pilot Drop");
+    expect(options[0].textContent).toContain("Not yet");
+    expect(options[0].textContent).toContain("Proposal·v4·20 Oct·NPV -€239k");
+    expect(options[0].textContent).toContain("Newer results");
+    expect(within(dialog).getByRole("button", { name: "This report is open" })).toHaveProperty("disabled", true);
+
+    await user().click(options[0]);
+    const preview = within(dialog).getByRole("article", { name: "The report highlighted" });
+    expect(within(preview).getByRole("heading", { level: 3 }).textContent).toBe("Sneaker Pilot Drop");
+    expect(preview.textContent).toContain(PROPOSAL.title);
+    expect(within(preview).getByRole("region", { name: "The decision" }).textContent).toContain(PROPOSAL.objective);
+    const figures = within(preview).getByRole("region", { name: "Headline figures" });
+    expect(figures.textContent).toBe("The investment caseNPV-€239kthree yearsIRRNonePaybackAfter year 3Break-evenNever");
+    // And the proposal's own figures, calculated from its plan.
+    expect(within(preview).getByRole("region", { name: "Key figures" }).textContent).toBe(
+      "The plancalculated from its financial planPrice€89 a monthStart-up cost€18k",
+    );
+    expect(preview.textContent).toContain("2 of the proposal's figures disagree");
+    expect(preview.textContent).toContain("newer results, which this report does not include");
+    const about = within(preview).getByRole("region", { name: "About this report" });
+    expect(about.textContent).toContain("MarketingFinance");
+    expect(about.textContent).toContain("Prepared byNorthwind Ventures");
+    expect(about.textContent).toContain("CurrencyEuro (EUR)");
+    expect(about.textContent).toContain("Worked from2 of the founder's documents");
+    expect(about.textContent).toContain("Sessionproposal-session");
+
+    await user().click(within(preview).getByRole("button", { name: "Open this report" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(screen.getByText("proposal")).toBeTruthy());
+  });
+
+  test("previews the decision in brief, its figures picked out, with the figures to see at a glance", async () => {
+    const TEAM = {
+      ...BASE,
+      session_id: SESSION,
+      title: SAMPLE_REPORT.title,
+      updated_at: SAMPLE_REPORT.updated_at,
+      verdict: "Go with conditions",
+      brief:
+        "Recommendation: launch at **$15,000** to win 1–2 pilots in 90 days [finance].\n\n" +
+        "Key facts\n- Launch budget = $3,000, build $1,200.\n- Margin: 84% (assumption).",
+      key_figures: [
+        { label: "Price", value: "$15,000" },
+        { label: "Launch budget", value: "$3,000" },
+      ],
+    };
+    // The list as the page loaded it, then as it stands when the picker opens.
+    let loaded = 0;
+    fakeReports({ extra: { "GET /reports": () => ({ body: [loaded++ ? TEAM : { ...TEAM, brief: "An older brief." }] }) } });
+    const dialog = await openPicker();
+    const decision = await within(dialog).findByRole("region", { name: "The decision" });
+
+    await waitFor(() => expect(decision.textContent).toContain("launch at $15,000 to win 1–2 pilots in 90 days"));
+    expect(loaded).toBe(2);
+    expect([...decision.querySelectorAll(".figure")].map((figure) => figure.textContent)).toEqual([
+      "$15,000",
+      "90 days",
+      "$3,000",
+      "$1,200",
+      "84%",
+    ]);
+    // What the team cites is a tag, a figure it marked an assumption stays marked, and a label is a heading.
+    expect(decision.querySelector(".cite.agent-finance")).toBeTruthy();
+    expect(decision.querySelector("mark.assumption")?.textContent).toBe("(assumption)");
+    expect(within(decision).getByRole("heading", { level: 4, name: "Key facts" })).toBeTruthy();
+    expect(within(dialog).getByRole("region", { name: "Key figures" }).textContent).toBe(
+      "Key figuresas the team gave themPrice$15,000Launch budget$3,000",
+    );
+    // The founder's objective moves to what is said about the report.
+    expect(within(dialog).getByRole("region", { name: "About this report" }).textContent).toContain(
+      `Objective${SAMPLE_REPORT.objective}`,
+    );
+  });
+
+  test("shows what the founder chose and told the team, with their figures picked out", async () => {
+    const CHOICES = {
+      brief: "A prepaid sneaker drop for Gen-Z college buyers, capped at 300 pairs at $129 each. " + "More about the idea. ".repeat(30),
+      follow_up: "Try it at €119 instead.",
+      target_market: "College students in Berlin",
+      constraints: "A €15k budget and 90 days",
+      competitive_landscape: null,
+      answers: [{ question: "How will you reach buyers?", answer: "Campus ambassadors, paid 15-20% of each sale." }],
+      research: {
+        findings: Array.from({ length: 5 }, (_, index) => ({ point: `Fact ${index + 1}: resale grew 12% in 2025.`, sources: [1] })),
+        sources: [{ title: "Sneaker resale statistics", url: "https://www.statista.com/sneakers" }],
+      },
+      documents: ["D1: plan.pdf (PDF, 12 pages)"],
+      deep_research: true,
+      research_provider: "tavily",
+      efforts: { specialist: "low", chief: "medium" },
+      complete: true,
+    };
+    withReports({ "GET /reports/proposal-session/choices": { body: CHOICES } });
+    const dialog = await openPicker();
+    await user().click(within(within(dialog).getByRole("listbox", { name: "Reports" })).getAllByRole("option")[0]);
+    const choices = await within(dialog).findByRole("region", { name: "Your choices" });
+    await within(choices).findByText("Your brief");
+
+    // A long brief is clipped until asked for whole.
+    expect(choices.textContent).toContain("at $129 each. More about the idea.");
+    expect(choices.textContent).not.toContain("More about the idea. More about the idea. ".repeat(20));
+    await user().click(within(choices).getByRole("button", { name: "Show the whole brief" }));
+    expect(choices.textContent).toContain(CHOICES.brief.trim());
+    expect(within(choices).getByRole("button", { name: "Show less" })).toBeTruthy();
+
+    // Every amount, share and span of time in the founder's words is picked out.
+    const figures = [...choices.querySelectorAll(".figure")].map((figure) => figure.textContent);
+    expect(figures.slice(0, 6)).toEqual(["$129", "€119", "€15k", "90 days", "15-20%", "12%"]);
+    expect(choices.textContent).toContain("Your follow-up: Try it at €119 instead.");
+    expect(choices.textContent).toContain("Target marketCollege students in Berlin");
+    expect(choices.textContent).toContain("ConstraintsA €15k budget and 90 days");
+    expect(choices.textContent).not.toContain("Competition");
+    expect(choices.textContent).toContain("How will you reach buyers?Campus ambassadors, paid 15-20% of each sale.");
+
+    // The facts kept, four until asked for all, each with where it came from.
+    expect(within(choices).getAllByRole("link", { name: "statista.com" })).toHaveLength(4);
+    expect(within(choices).getAllByRole("link", { name: "statista.com" })[0].getAttribute("href")).toBe(
+      "https://www.statista.com/sneakers",
+    );
+    await user().click(within(choices).getByRole("button", { name: "Show all 5 facts" }));
+    expect(within(choices).getAllByRole("link", { name: "statista.com" })).toHaveLength(5);
+    expect(choices.textContent).toContain("D1: plan.pdf (PDF, 12 pages)");
+    expect(choices.textContent).toContain(
+      "Deep research for each specialist · TavilySpecialists reasoned at lowChief of Staff reasoned at medium",
+    );
+    expect(choices.textContent).not.toContain("built before your choices were kept");
+  });
+
+  test("says when a report was built before its choices were kept", async () => {
+    withReports({
+      "GET /reports/proposal-session/choices": {
+        body: {
+          brief: "A prepaid sneaker drop.",
+          follow_up: null,
+          target_market: null,
+          constraints: null,
+          competitive_landscape: null,
+          answers: [],
+          research: null,
+          documents: [],
+          deep_research: null,
+          research_provider: null,
+          efforts: {},
+          complete: false,
+        },
+      },
+    });
+    const dialog = await openPicker();
+    await user().click(within(within(dialog).getByRole("listbox", { name: "Reports" })).getAllByRole("option")[0]);
+    const choices = await within(dialog).findByRole("region", { name: "Your choices" });
+    await within(choices).findByText("Your brief");
+    expect(choices.textContent).toContain("A prepaid sneaker drop.");
+    expect(choices.textContent).not.toContain("How the team ran");
+    expect(choices.textContent).toContain("built before your choices were kept with it");
+  });
+
+  test("lists each version with what it changed, and opens the changes from the one before", async () => {
+    const at = (day: number) => `2026-10-${day}T08:00:00Z`;
+    const converted = [
+      { path: "proposal.financial.price_per_customer_month", label: "Financial plan · Price per customer month", before: 149, after: 137.08, money: true },
+      { path: "proposal.market.pricing_strategy", label: "Market & marketing · Pricing strategy", before: "Charge $149 a month.", after: "Charge €137 a month.", money: false },
+      ...Array.from({ length: 8 }, (_, index) => ({
+        path: `proposal.financial.capex.${index}.amount`,
+        label: `Financial plan · CapEx · Item ${index + 1} · Amount`,
+        before: 1000,
+        after: 920,
+        money: true,
+      })),
+      { path: "settings.currency", label: "Settings · Currency", before: "USD", after: "EUR", money: false },
+    ];
+    withReports({
+      "GET /reports/proposal-session/versions": {
+        body: [
+          { version: 4, updated_at: at(20), change: "Rewrote the market part as you asked.", has_proposal: true, current: true, changed: 3, areas: ["Market & marketing"] },
+          {
+            version: 3,
+            updated_at: at(19),
+            change: "Converted every amount to EUR at 0.92.",
+            has_proposal: true,
+            current: false,
+            changed: converted.length,
+            areas: ["Market & marketing", "Financial plan", "Currency", "Executive summary"],
+          },
+          { version: 2, updated_at: at(18), change: "Restored version 1", has_proposal: true, current: false, changed: 0, areas: [] },
+          { version: 1, updated_at: at(17), change: "The agents wrote the investment proposal in USD", has_proposal: true, current: false, changed: null, areas: [] },
+          { version: 5, updated_at: at(16), change: "Kept for the test", has_proposal: true, current: false, changed: null, areas: [] },
+        ],
+      },
+      "GET /reports/proposal-session/versions/3/changes": {
+        body: { version: 3, since: 2, currency_before: "USD", currency: "EUR", changes: converted },
+      },
+    });
+    const dialog = await openPicker();
+    await user().click(within(within(dialog).getByRole("listbox", { name: "Reports" })).getAllByRole("option")[0]);
+    const versions = await within(dialog).findByRole("region", { name: "Versions" });
+    const entries = await within(versions).findAllByRole("listitem");
+
+    // Newest first, four of them until asked for all, each with what it changed and where.
+    expect(entries).toHaveLength(4);
+    expect(entries[0].textContent).toBe("v4Rewrote the market part as you asked.Current20 Oct, 08:00 UTC·3 changesMarket & marketingWhat changed");
+    expect(entries[1].textContent).toContain("11 changesMarket & marketingFinancial planCurrencyand 1 more");
+    expect(entries[2].textContent).toContain("Nothing changed");
+    expect(entries[3].textContent).toContain("The first version");
+    expect(within(entries[2]).queryByRole("button")).toBeNull();
+    await user().click(within(versions).getByRole("button", { name: "Show all 5 versions" }));
+    expect(within(versions).getAllByRole("listitem").at(-1)?.textContent).toContain("The version before it is no longer kept");
+
+    // Opened: each field changed, amounts before and after in their currencies, words struck and added.
+    const opener = within(versions).getByRole("button", { name: "What changed in version 3" });
+    await user().click(opener);
+    expect(opener.getAttribute("aria-expanded")).toBe("true");
+    const changes = await within(versions).findByRole("list", { name: "What changed in version 3" });
+    const items = within(changes).getAllByRole("listitem");
+    expect(items).toHaveLength(8);
+    expect(items[0].textContent).toBe("Financial plan · Price per customer month$149→€137");
+    expect(items[1].querySelector("del")?.textContent).toContain("$149");
+    expect(items[1].querySelector("ins")?.textContent).toContain("€137");
+    await user().click(within(versions).getByRole("button", { name: "Show all 11 changes" }));
+    const currency = within(changes).getAllByRole("listitem").at(-1);
+    expect([currency?.querySelector("del")?.textContent, currency?.querySelector("ins")?.textContent]).toEqual(["USD", "EUR"]);
+    await user().click(opener);
+    expect(within(versions).queryByRole("list", { name: "What changed in version 3" })).toBeNull();
+  });
+
+  test("filters by kind, searches, and sorts", async () => {
+    withReports();
+    const dialog = await openPicker();
+    const names = () =>
+      within(within(dialog).getByRole("listbox", { name: "Reports" }))
+        .queryAllByRole("option")
+        .map((option) => option.querySelector("p")?.textContent);
+
+    await user().click(within(dialog).getByRole("button", { name: "Investment proposals 1" }));
+    expect(names()).toEqual(["Sneaker Pilot Drop"]);
+    await user().click(within(dialog).getByRole("button", { name: "Team reports 2" }));
+    expect(names()).toEqual([SAMPLE_REPORT.title, OLDER.title]);
+    await user().click(within(dialog).getByRole("button", { name: "All 3" }));
+
+    await user().type(within(dialog).getByRole("combobox", { name: "Search the reports" }), "ohio");
+    expect(names()).toEqual([OLDER.title]);
+    expect(within(dialog).getByText("1 of 3 reports")).toBeTruthy();
+    await user().clear(within(dialog).getByRole("combobox", { name: "Search the reports" }));
+    await user().type(within(dialog).getByRole("combobox", { name: "Search the reports" }), "nothing like it");
+    expect(within(dialog).getByText("No report matches “nothing like it”.")).toBeTruthy();
+    await user().click(within(dialog).getByRole("button", { name: "Show them all" }));
+    expect(names()).toHaveLength(3);
+
+    await user().selectOptions(within(dialog).getByRole("combobox", { name: "Sort" }), "oldest");
+    expect(names()[0]).toBe(OLDER.title);
+    await user().selectOptions(within(dialog).getByRole("combobox", { name: "Sort" }), "title");
+    expect(names()).toEqual([OLDER.title, SAMPLE_REPORT.title, "Sneaker Pilot Drop"].sort((a, b) => a.localeCompare(b)));
+  });
+
+  test("the arrow keys move through the list, and Enter opens", async () => {
+    const { fetch } = withReports();
+    const dialog = await openPicker();
+    const search = within(dialog).getByRole("combobox", { name: "Search the reports" });
+    expect(document.activeElement).toBe(search);
+    await user().keyboard("{ArrowDown}");
+    const highlighted = () =>
+      within(within(dialog).getByRole("listbox", { name: "Reports" }))
+        .getAllByRole("option")
+        .find((option) => option.getAttribute("aria-selected") === "true");
+    expect(highlighted()?.textContent).toContain(OLDER.title);
+    expect(search.getAttribute("aria-activedescendant")).toBe(highlighted()?.id);
+    await user().keyboard("{Enter}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/reports/older-session"))).toBe(true));
+  });
+
+  test("on a phone, with no room for the preview, a tap opens a report", async () => {
+    vi.stubGlobal("matchMedia", (media: string) => ({ media, matches: false, addEventListener: () => {}, removeEventListener: () => {} }));
+    const { fetch } = withReports();
+    const dialog = await openPicker();
+    await user().click(within(dialog).getByRole("option", { name: /Sneaker Pilot Drop/ }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/reports/proposal-session"))).toBe(true));
+    vi.unstubAllGlobals();
+  });
+
+  test("a report is deleted from its preview, once confirmed; Keep it backs out", async () => {
+    const { fetch } = withReports({ "DELETE /reports/proposal-session": { status: 204 } });
+    const dialog = await openPicker();
+    await user().click(within(dialog).getByRole("option", { name: /Sneaker Pilot Drop/ }));
+    const preview = within(dialog).getByRole("article", { name: "The report highlighted" });
+
+    await user().click(within(preview).getByRole("button", { name: "Delete" }));
+    const confirm = within(preview).getByRole("region", { name: "Delete this report?" });
+    expect(confirm.textContent).toContain("Delete “Sneaker Pilot Drop”?");
+    expect(document.activeElement).toBe(within(confirm).getByRole("button", { name: "Keep it" }));
+    await user().click(within(confirm).getByRole("button", { name: "Keep it" }));
+    expect(within(preview).queryByRole("region", { name: "Delete this report?" })).toBeNull();
+    expect(fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+
+    await user().click(within(preview).getByRole("button", { name: "Delete" }));
+    await user().click(within(preview).getByRole("button", { name: "Delete the report" }));
+    await waitFor(() =>
+      expect(within(within(dialog).getByRole("listbox", { name: "Reports" })).getAllByRole("option")).toHaveLength(2),
+    );
+    expect(fetch.mock.calls.some(([url, init]) => init?.method === "DELETE" && String(url).endsWith("/reports/proposal-session"))).toBe(true);
+    expect(within(dialog).queryByText("Sneaker Pilot Drop")).toBeNull();
+    // The open report stays open, and the page says what went.
+    expect(screen.getByText("Deleted “Sneaker Pilot Drop”, with its versions.")).toBeTruthy();
+  });
+
+  test("a deletion the API refuses says why, and the report stays", async () => {
+    withReports({ "DELETE /reports/proposal-session": { status: 500, body: { detail: "The database is down." } } });
+    const dialog = await openPicker();
+    await user().click(within(dialog).getByRole("option", { name: /Sneaker Pilot Drop/ }));
+    const preview = within(dialog).getByRole("article", { name: "The report highlighted" });
+    await user().click(within(preview).getByRole("button", { name: "Delete" }));
+    await user().click(within(preview).getByRole("button", { name: "Delete the report" }));
+    expect(await within(preview).findByText(/The database is down\./)).toBeTruthy();
+    expect(within(within(dialog).getByRole("listbox", { name: "Reports" })).getAllByRole("option")).toHaveLength(3);
+    expect(within(preview).getByRole("button", { name: "Delete the report" })).toHaveProperty("disabled", false);
+  });
+
+  test("the open report is deleted from More actions, and the newest left opens", async () => {
+    const { fetch } = withReports({ [`DELETE /reports/${SESSION}`]: { status: 204 } });
+    window.history.replaceState(null, "", `/reports?session=${SESSION}`);
+    renderPage();
+    await screen.findByRole("heading", { name: "Launch Strategy" });
+    await user().click(screen.getByRole("button", { name: "More actions" }));
+    await user().click(screen.getByRole("menuitem", { name: /^Delete this report/ }));
+    const confirm = screen.getByRole("dialog", { name: "Delete this report?" });
+    expect(confirm.textContent).toContain("cannot be brought back");
+    await user().click(within(confirm).getByRole("button", { name: "Delete the report" }));
+
+    await waitFor(() => expect(fetch.mock.calls.some(([url]) => String(url).endsWith("/reports/proposal-session"))).toBe(true));
+    expect(fetch.mock.calls.some(([url, init]) => init?.method === "DELETE" && String(url).endsWith(`/reports/${SESSION}`))).toBe(true);
+    expect(await screen.findByText(`Deleted “${SAMPLE_REPORT.title}”, with its versions.`)).toBeTruthy();
+    // The next report opens, named as the picker names it: by its proposal's project.
+    expect((await screen.findByRole("button", { name: /^Report: / })).getAttribute("aria-label")).toBe(
+      `Report: ${SAMPLE_REPORT.proposal!.executive.project_name}. Choose another of 2.`,
+    );
   });
 });

@@ -37,6 +37,7 @@ from reports import (
     ReportSummary,
     SessionResults,
     Stored,
+    summary,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,14 +153,16 @@ class PostgresReports:
             ).fetchall()
         return [Report.model_validate(row["report"]) for row in rows]
 
+    def delete(self, session_id: str) -> bool:
+        with self.pool.connection() as conn, conn.transaction():
+            conn.execute("DELETE FROM report_versions WHERE session_id = %s", (session_id,))
+            return conn.execute("DELETE FROM reports WHERE session_id = %s", (session_id,)).rowcount > 0
+
     def summaries(self) -> list[ReportSummary]:
+        # The whole report, as a summary reads its strategy, sections and proposal (reports.summary).
         with self.pool.connection() as conn:
-            rows = conn.execute(
-                """SELECT report - 'objective' - 'context' - 'sections' - 'proposal' AS summary,
-                          jsonb_typeof(report -> 'proposal') = 'object' AS has_proposal
-                   FROM reports ORDER BY updated_at DESC"""
-            ).fetchall()
-        return [ReportSummary(**row["summary"], has_proposal=bool(row["has_proposal"])) for row in rows]
+            rows = conn.execute("SELECT report FROM reports ORDER BY updated_at DESC").fetchall()
+        return [summary(Report.model_validate(row["report"])) for row in rows]
 
 
 class PostgresUploads:

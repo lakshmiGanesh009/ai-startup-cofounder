@@ -10,7 +10,9 @@ from llm import CHIEF, SPECIALIST
 from main import app
 from proposal import investment_metrics
 from report_pdf import render_pdf
-from reports import Report, ReportChanged, ReportNotFound, ReportSection, ReportStore, SessionResults
+import currency
+from reports import (KeyFigure, Report, ReportChanged, ReportNotFound, ReportSection, ReportStore, SessionResults,
+                     brief_of, named_figures)
 from state import Conflict, DelegationPlan, Resolution, SpecialistCritique, Task
 from tests.sample_proposal import SAMPLE
 
@@ -85,6 +87,157 @@ def test_a_follow_up_refreshes_an_untouched_report_but_keeps_an_edited_one(fake_
     reset = client.post(f"/reports/{session_id}/reset").json()
     assert not reset["outdated"] and not reset["edited"]
     assert reset["sections"][0]["body"] != "Edited."
+
+
+def test_the_list_says_what_each_report_is(fake_llm):
+    session_id = _evaluate()
+    listed = next(s for s in client.get("/reports").json() if s["session_id"] == session_id)
+    assert listed["objective"] == fake_llm.plan.objective
+    assert listed["team"] == ["marketing", "finance", "technical", "risk"]
+    assert listed["sections"] >= 5 and listed["documents"] == 0
+    assert listed["currency"] == "USD" and listed["prepared_by"] == "AI Startup Co-Founder Team"
+    assert listed["project_name"] is None and listed["figures"] is None and listed["checks"] == 0
+
+    # A team report's verdict is the one its strategy leads with, its brief the
+    # strategy's opening, and its figures the ones the strategy, then Finance, name.
+    report = client.get(f"/reports/{session_id}").json()
+    _sections(report)["strategy"]["body"] = (
+        "## Not yet\n\nRecommendation: Not yet. The pilot costs more than the runway.\n\n"
+        "Key facts\n- Pilot budget = $40,000 [finance].\n- Runway: $25k.\n\n## How I settled it\n- Price: $99."
+    )
+    _sections(report)["finance"]["body"] = "Charge $149 a month. CAC = $400."
+    client.put(f"/reports/{session_id}", json=report)
+    listed = next(s for s in client.get("/reports").json() if s["session_id"] == session_id)
+    assert listed["verdict"] == "Not yet" and listed["edited"] and listed["version"] == 2
+    assert listed["brief"] == ("The pilot costs more than the runway.\n\n"
+                               "Key facts\n- Pilot budget = $40,000 [finance].\n- Runway: $25k.")
+    assert listed["key_figures"] == [{"label": "Pilot budget", "value": "$40,000"}, {"label": "Runway", "value": "$25k"},
+                                     {"label": "Price", "value": "$99"}, {"label": "CAC", "value": "$400"}]
+
+    # With the proposal: its own verdict, name and headline figures.
+    _write(session_id)
+    listed = next(s for s in client.get("/reports").json() if s["session_id"] == session_id)
+    metrics = investment_metrics(SAMPLE.financial)
+    assert listed["verdict"] == SAMPLE.executive.verdict and listed["project_name"] == SAMPLE.executive.project_name
+    assert listed["figures"] == {"npv": metrics.npv, "irr": metrics.irr, "payback_months": metrics.payback_months,
+                                 "break_even_customers": metrics.break_even_customers}
+    assert listed["change"]
+    # Its brief is its recommendation and financial case, and its figures are calculated from its plan.
+    assert listed["brief"] == f"{SAMPLE.executive.recommendation}\n\n{SAMPLE.executive.financial_case}"
+    plan = SAMPLE.financial
+    assert listed["key_figures"] == [
+        {"label": "Price", "value": f"{currency.full(plan.price_per_customer_month, 'USD')} a month"},
+        {"label": "Start-up cost", "value": currency.compact(sum(item.amount for item in plan.capex), "USD")},
+        {"label": "Fixed costs", "value": f"{currency.compact(sum(item.amount for item in plan.monthly_opex), 'USD')} a month"},
+        {"label": "Year-3 revenue", "value": currency.compact(metrics.revenue[-1], "USD")},
+    ]
+
+
+def test_a_strategys_brief_is_its_opening_and_its_figures_the_ones_it_names():
+    lead = "Recommendation: Go with conditions — " + "launch a paid pilot with five clinics " * 12
+    point = "- Offer: " + "a fixed deliverable set " * 10
+    strategy = f"## Go with conditions\n\n{lead}\n\nKey facts driving this\n{point}\n{point}\n{point}\n{point}"
+    brief = brief_of(strategy)
+    opening, points = brief.split("\n\n")
+    # The lead, without the verdict it restates, and each point are clipped at a word, and the
+    # points stop within the brief's length.
+    assert opening.startswith("Launch a paid pilot") and opening.endswith("…") and len(opening) <= 321
+    assert points.startswith("Key facts driving this\n- Offer:")
+    assert all(line.endswith("…") and len(line) <= 151 for line in points.splitlines()[1:])
+    assert points.count("- Offer:") == 2
+    # A word too long to clip at is cut, and the paragraph after the lead is kept,
+    # unless it only introduces points that are not there.
+    assert brief_of(f"Go.\n\n- {'x' * 700}") == f"Go.\n\n- {'x' * 148}…"
+    assert brief_of("Go.\n\nMain reason: pilots pay.\n\nMore.") == "Go.\n\nMain reason: pilots pay."
+    assert brief_of("## Go\n\nGo.\n\nKey facts driving this\n\n## Risks\n- A risk.") == "Go."
+    assert brief_of("**Recommendation:** Not yet.\n\nThe pilot costs too much.") == "The pilot costs too much."
+    assert brief_of("") == ""
+
+    named = named_figures(
+        "Price = $15,000; payment: 50% on sign ($7,500). Founder capacity: 1–2 sprints. Per\u2011sprint "
+        "time ≈120 hrs; upfront launch budget = $3,000 [finance]. Unit economics: direct costs ≈ $2,400/sprint "
+        "→ gross contribution ≈ **$12,600**.",
+        "Price: $15,000. Fees: AED 400 a month.",
+    )
+    # Amounts before shares and spans, each value once, in the order written.
+    assert named == [KeyFigure(label="Price", value="$15,000"), KeyFigure(label="Upfront launch budget", value="$3,000"),
+                     KeyFigure(label="Direct costs", value="$2,400/sprint"),
+                     KeyFigure(label="Gross contribution", value="$12,600")]
+    assert named_figures("Setup fee: $0; churn: 3% a month; payback: 4 months; CAC = 400 INR") == [
+        KeyFigure(label="Churn", value="3%"), KeyFigure(label="Payback", value="4 months"),
+        KeyFigure(label="CAC", value="400 INR")]
+    assert named_figures("Recommendation: Go. Launch at $99 a month.") == []
+    # Ranges and a floor are one figure each.
+    assert named_figures("No-shows: 8-10%. Lost chair time: $150-$200 a visit. Rivals: $300+ a month.") == [
+        KeyFigure(label="No-shows", value="8-10%"), KeyFigure(label="Lost chair time", value="$150-$200"),
+        KeyFigure(label="Rivals", value="$300+ a month")]
+    # Amounts by the unit, and in lakhs; not the comma after one.
+    assert named_figures("Price: $99 per practice per month, then more. Budget: ₹1,00,000, from savings.") == [
+        KeyFigure(label="Price", value="$99 per practice per month"), KeyFigure(label="Budget", value="₹1,00,000")]
+
+
+def test_the_founders_choices_are_kept_with_the_report(fake_llm, monkeypatch):
+    import main
+
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
+    monkeypatch.setenv("AZURE_OPENAI_CHIEF_REASONING_EFFORT", "medium")
+    research = {"findings": [{"point": "Ohio has 5,200 dental practices (2025).", "sources": [1]}],
+                "sources": [{"title": "ADA practice statistics", "url": "https://www.ada.org/stats"}]}
+    context = {
+        "target_market": "Small dental practices in Ohio",
+        "constraints": "A $40k budget and six months",
+        "answers": [{"question": "What will you charge?", "answer": "$99 a month per practice."},
+                    {"question": "Who will sell it?", "answer": "  "}],
+        "research": research,
+    }
+    response = client.post("/evaluate", json={"prompt": "A reminder service for dentists.", "context": context,
+                                              "reasoning": {"specialist": "low"}})
+    session_id = response.json()["session_id"]
+
+    assert client.get(f"/reports/{session_id}/choices").json() == {
+        "brief": "A reminder service for dentists.", "follow_up": None,
+        "target_market": "Small dental practices in Ohio", "constraints": "A $40k budget and six months",
+        "competitive_landscape": None,
+        # A question left unanswered is left out.
+        "answers": [{"question": "What will you charge?", "answer": "$99 a month per practice."}],
+        "research": research, "documents": [], "deep_research": False, "research_provider": None,
+        # The efforts it ran at: the one chosen, and the configured one for the other role.
+        "efforts": {"specialist": "low", "chief": "medium"}, "complete": True,
+    }
+
+    # A follow-up keeps the brief, and is the latest request.
+    assert client.post("/evaluate", json={"prompt": "Price it for Michigan too.", "session_id": session_id}).status_code == 200
+    choices = client.get(f"/reports/{session_id}/choices").json()
+    assert (choices["brief"], choices["follow_up"]) == ("A reminder service for dentists.", "Price it for Michigan too.")
+
+    # Results kept before the choices were: from the session's saved state, without
+    # the efforts; without that either, only what the results hold.
+    main.store.backend.update(session_id, lambda stored: stored._replace(
+        results=stored.results.model_copy(update={"choices": None})))
+    choices = client.get(f"/reports/{session_id}/choices").json()
+    assert choices["target_market"] == "Small dental practices in Ohio" and choices["efforts"] == {} and choices["complete"]
+    main.graph.checkpointer.delete_thread(session_id)
+    choices = client.get(f"/reports/{session_id}/choices").json()
+    assert choices["brief"] == "A reminder service for dentists." and choices["research"] == research
+    assert choices["answers"] == [] and not choices["complete"]
+    assert client.get("/reports/no-such-session/choices").status_code == 404
+
+
+def test_a_report_is_deleted_with_its_versions_and_the_sessions_saved_state(fake_llm):
+    import main
+
+    session_id = _evaluate()
+    report = client.get(f"/reports/{session_id}").json()
+    assert client.put(f"/reports/{session_id}", json=report).status_code == 200  # a second version
+    config = {"configurable": {"thread_id": session_id}}
+    assert main.graph.get_state(config).values  # the team's saved state for the session
+
+    assert client.delete(f"/reports/{session_id}").status_code == 204
+    assert client.get(f"/reports/{session_id}").status_code == 404
+    assert client.get(f"/reports/{session_id}/versions").status_code == 404
+    assert session_id not in [s["session_id"] for s in client.get("/reports").json()]
+    assert not main.graph.get_state(config).values
+    assert client.delete(f"/reports/{session_id}").status_code == 404
 
 
 def _write(session_id: str, **body) -> dict:

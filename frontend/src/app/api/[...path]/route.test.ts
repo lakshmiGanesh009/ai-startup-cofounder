@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 process.env.BACKEND_URL = "http://api.test:8000/";
 process.env.MAX_REQUEST_BYTES = "100";
 process.env.MAX_UPLOAD_BYTES = "300";
-const { GET, POST } = await import("./route");
+const { DELETE, GET, POST } = await import("./route");
 
 type Handler = typeof GET;
 
@@ -148,6 +148,11 @@ describe("the API proxy", () => {
     expect((await call(GET, "http://app.test/api/rates/USD")).status).toBe(200);
     expect((await call(POST, "http://app.test/api/feedback", { method: "POST", body: "{}" })).status).toBe(200);
     expect(fetch).toHaveBeenCalledTimes(2);
+
+    // A report is deleted through it too, with nothing to read in the answer.
+    backend(() => new Response(null, { status: 204 }));
+    const deleted = await call(DELETE, "http://app.test/api/reports/session-1", { method: "DELETE" });
+    expect(deleted.status).toBe(204);
   });
 
   test("an API that cannot be reached is a 502 that says so", async () => {

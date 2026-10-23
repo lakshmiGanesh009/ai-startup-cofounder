@@ -65,6 +65,16 @@ class Draft(BaseModel):
     base_version: int = Field(description="The report version the draft was made from; accepting it needs it.")
 
 
+class VersionChanges(BaseModel):
+    """What changed in a version of a report, from the version before it."""
+
+    version: int
+    since: int | None = Field(description="The version compared with: the one before it, if it is kept.")
+    currency_before: str = Field(description="The currency of the amounts before.")
+    currency: str
+    changes: list[FieldChange]
+
+
 class Unchanged(ValueError):
     """The change would leave the report as it is, so there is nothing to preview."""
 
@@ -190,6 +200,29 @@ def changes(before: Report, after: Report) -> list[FieldChange]:
         for path in paths
         if old.get(path) != new.get(path)
     ]
+
+
+def area(change: FieldChange) -> str:
+    """The part of a report a change is in: "Strategy", "Financial plan", "Currency"."""
+    parts = change.label.split(" · ")
+    return parts[1] if parts[0] in ("Team report", "Settings") and len(parts) > 1 else parts[0]
+
+
+def places(before: Report, after: Report) -> list[str]:
+    """The part of the report each field that differs between two versions is in."""
+    return [area(change) for change in changes(before, after)]
+
+
+def version_changes(report: Report, before: Report | None) -> VersionChanges:
+    """What changed in `report` since `before`, the version kept before it;
+    nothing to compare with when that one is not kept."""
+    return VersionChanges(
+        version=report.version,
+        since=before.version if before else None,
+        currency_before=(before or report).settings.currency,
+        currency=report.settings.currency,
+        changes=changes(before, report) if before else [],
+    )
 
 
 def _shown(value: Any) -> str | float | None:

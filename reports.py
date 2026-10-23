@@ -14,6 +14,7 @@ editors cannot silently overwrite each other. The versions before the current
 one are kept (the latest KEEP_VERSIONS), so any can be looked at or restored.
 """
 
+import re
 import threading
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -22,9 +23,10 @@ from typing import Literal, NamedTuple, Protocol
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 from agents.roles import ROLES, SPECIALISTS
+import currency as money
 from currency import CURRENCIES, DEFAULT
 from proposal import InvestmentMetrics, Proposal, figure_checks, investment_metrics
-from state import DeepResearch, EconomicData, Research, Resolution, number
+from state import Answer, DeepResearch, EconomicData, RequestContext, Research, Resolution, number
 
 STRATEGY = "strategy"
 DECISIONS = "decisions"
@@ -71,6 +73,42 @@ class WorkedFrom(BaseModel):
     reports: list[str] = Field(default_factory=list, description="Earlier reports, by session id.")
 
 
+class Choices(BaseModel):
+    """What the founder chose and told the team while the report was built: the
+    request and its details, the answers to the Chief of Staff's questions, the
+    research facts kept, the documents, and how the team was run."""
+
+    brief: str = Field(description="The founder's first request, as written.")
+    follow_up: str | None = Field(None, description="The latest follow-up, when the report answers one.")
+    target_market: str | None = None
+    constraints: str | None = None
+    competitive_landscape: str | None = None
+    answers: list[Answer] = Field(default_factory=list, description="The founder's answers to the Chief of Staff's questions.")
+    research: Research | None = Field(None, description="The facts from the web research the founder kept, with their sources.")
+    documents: list[str] = Field(default_factory=list, description='The founder\'s documents, a line each ("D1: plan.pdf (PDF, 12 pages)").')
+    deep_research: bool | None = Field(None, description="Whether the team researched each area on the web first; None when not known.")
+    research_provider: str | None = Field(None, description="Where that research ran: azure or tavily.")
+    efforts: dict[str, str] = Field(default_factory=dict, description='The reasoning efforts it ran at, by role ("specialist", "chief"); empty when not known.')
+    complete: bool = Field(True, description="False for a report built before its choices were kept: only what its results hold.")
+
+    @classmethod
+    def from_state(cls, state: dict, documents: list[str], efforts: dict[str, str] | None = None) -> "Choices":
+        context = state.get("context") or RequestContext()
+        venture = state.get("venture") or state["request"]
+        deep = bool(state.get("deep"))
+        return cls(
+            brief=venture,
+            follow_up=state["request"] if state["request"] != venture else None,
+            **context.model_dump(include={"target_market", "constraints", "competitive_landscape"}),
+            answers=[answer for answer in context.answers if answer.answer.strip()],
+            research=context.research if context.research and context.research.findings else None,
+            documents=documents,
+            deep_research=deep,
+            research_provider=state.get("research_provider") if deep else None,
+            efforts=efforts or {},
+        )
+
+
 class SessionResults(BaseModel):
     """What a session's latest evaluation produced; reports are built from it."""
 
@@ -86,9 +124,11 @@ class SessionResults(BaseModel):
     # The founder's documents the team worked from, a line each ("D1: plan.pdf (PDF, 12 pages)").
     documents: list[str] = []
     worked_from: WorkedFrom = Field(default_factory=WorkedFrom)
+    # What the founder chose and gave; None on results kept before it was.
+    choices: Choices | None = None
 
     @classmethod
-    def from_state(cls, state: dict) -> "SessionResults":
+    def from_state(cls, state: dict, efforts: dict[str, str] | None = None) -> "SessionResults":
         from library import describe, sources  # library reads this module's store
 
         context = state.get("context")
@@ -108,6 +148,7 @@ class SessionResults(BaseModel):
             research=context.research if context else None,
             economic=state.get("economic"),
             deep=state.get("deep_research"),
+            choices=Choices.from_state(state, documents, efforts),
         )
 
 
@@ -164,9 +205,34 @@ class VersionSummary(BaseModel):
     change: str | None
     has_proposal: bool
     current: bool
+    changed: int | None = Field(None, description="How many fields differ from the version before it; None when "
+                                "there is none kept to compare with.")
+    areas: list[str] = Field(default_factory=list, description='The parts of the report those changes are in, '
+                             'once each: "Strategy", "Financial plan", "Currency".')
+
+
+class Figures(BaseModel):
+    """The proposal's headline figures, calculated from its financial plan."""
+
+    npv: float
+    irr: float | None
+    payback_months: float | None
+    break_even_customers: int | None
+
+
+Verdict = Literal["Go", "Go with conditions", "Not yet"]
+
+
+class KeyFigure(BaseModel):
+    """A figure to see at a glance, with what it is: "Price", "$149 a month"."""
+
+    label: str
+    value: str
 
 
 class ReportSummary(BaseModel):
+    """What the founder needs to tell one report from another, and choose."""
+
     session_id: str
     title: str
     version: int
@@ -174,6 +240,21 @@ class ReportSummary(BaseModel):
     edited: bool
     outdated: bool
     updated_at: datetime
+    objective: str = Field("", description="The decision the team was asked to make.")
+    project_name: str | None = Field(None, description="The proposal's name for the project, once written.")
+    verdict: Verdict | None = Field(None, description="The recommendation: the proposal's, else the strategy's.")
+    currency: str = DEFAULT
+    prepared_by: str = "AI Startup Co-Founder Team"
+    team: list[str] = Field(default_factory=list, description="The specialists whose reports it holds.")
+    sections: int = 0
+    documents: int = Field(0, description="The founder's files and earlier reports it worked from.")
+    figures: Figures | None = None
+    checks: int = Field(0, description="How many of the proposal's figures disagree.")
+    change: str | None = Field(None, description="What made this version.")
+    brief: str = Field("", description="The report in a few lines, as markdown: the proposal's recommendation and "
+                       "financial case, else the opening of the strategy.")
+    key_figures: list[KeyFigure] = Field(default_factory=list, description="Figures to see at a glance: the "
+                                         "proposal's, calculated; else the ones the strategy and Finance name.")
 
 
 class ReportNotFound(KeyError):
@@ -293,11 +374,192 @@ class Stored(NamedTuple):
     report: Report
 
 
+# The recommendation a strategy leads with ("Recommendation: Go with conditions",
+# "**Verdict:** Not yet"); never the "go" of "go-to-market".
+_VERDICT = re.compile(r"\b(?:recommendation|verdict)\W{1,6}(go with conditions|not yet|no[- ]go|go)(?![-\w])",
+                      re.IGNORECASE)
+
+
+def verdict_of(report: Report) -> Verdict | None:
+    """The report's recommendation: the proposal's own, else the one its
+    strategy leads with; None when it states none."""
+    if report.proposal:
+        return report.proposal.executive.verdict
+    strategy = next((s.body for s in report.sections if s.key == STRATEGY), "")
+    found = _VERDICT.search(strategy[:600])
+    if not found:
+        return None
+    word = found.group(1).lower()
+    return "Go with conditions" if word == "go with conditions" else "Go" if word == "go" else "Not yet"
+
+
+# ---- A report in a few lines, and its figures at a glance ----
+
+BRIEF_CHARS = 640
+BRIEF_POINTS = 3
+LEAD_CHARS = 320
+POINT_CHARS = 150
+KEY_FIGURES = 4
+
+_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s")
+# "Recommendation: Go —", which the verdict shown beside the brief already says.
+_RESTATED = re.compile(r"^\**(?:recommendation|verdict)(?::\**|\**:)\s*\**(?:go with conditions|not yet|no[- ]go|go)\b\**"
+                       r"\s*[—–:.;,-]?\s*", re.IGNORECASE)
+_SIGNS = sorted({currency.symbol.strip() for currency in CURRENCIES.values()}
+                | {prefix for currency in CURRENCIES.values() for prefix in currency.prefixes}, key=len, reverse=True)
+# A sign that is a word ("CHF", "R") is followed by a space, so "R2" is not an amount.
+_SYMBOLS = "|".join(re.escape(sign) for sign in _SIGNS if not sign[-1].isalpha())
+_WORDED = "|".join(re.escape(sign) for sign in _SIGNS if sign[-1].isalpha())
+_CODES = "|".join(CURRENCIES)
+# "15,000", "1,00,000", "2.4"; not the comma after it.
+_NUMBER = r"\d+(?:,\d{2,3})*(?:\.\d+)?"
+_SCALE = r"(?:\s?(?:[kKmMbB]|million|billion)\b)?"
+_PER = r"(?:\s?(?:/|per |a |an )(?:month|mo|year|yr|customer|client|clinic|practice|user|seat|sprint|pilot)s?\b){0,2}"
+# What a figure is, best first: an amount ("$15,000", "€12k", "AED 4,000 a
+# month", "$150-$200", "$300+"), a share ("84%", "8-10%"), or a span of time or
+# a count ("90 days", "1–2 pilots").
+_AMOUNT = rf"(?:(?:{_SYMBOLS})\s?|(?:{_WORDED}|{_CODES})\s){_NUMBER}{_SCALE}"
+_FIGURES = (
+    rf"(?:{_AMOUNT}(?:\s?[–-]\s?(?:{_AMOUNT}|{_NUMBER}{_SCALE}))?\+?|{_NUMBER}{_SCALE}\s?(?:{_CODES})\b){_PER}",
+    rf"{_NUMBER}(?:\s?[–-]\s?{_NUMBER})?\s?%",
+    rf"{_NUMBER}(?:\s?[–-]\s?{_NUMBER})?\s(?:days?|weeks?|months?|years?|hrs|hours|customers|clients|clinics|"
+    r"practices|pilots|users|seats|sprints)\b",
+)
+# A figure the agents named: "Price = $15,000", "launch budget: $3,000",
+# "direct costs ≈ $2,400/sprint".
+_NAMED = re.compile(rf"(?P<label>[A-Za-z][A-Za-z'’ /&-]{{1,48}}?)\s*(?:=|≈|:)\s*(?:[~≈]\s?)?"
+                    rf"(?P<value>{'|'.join(f'(?P<kind{rank}>{figure})' for rank, figure in enumerate(_FIGURES))})")
+_FILLER = {"and", "the", "a", "an", "with", "at", "of", "for", "to", "its", "our", "your", "their", "is", "are", "be", "per"}
+
+
+def _clip(line: str, most: int) -> str:
+    if len(line) <= most:
+        return line
+    cut = line[:most]
+    if " " in cut[most // 2:]:
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(",;:—- ") + "…"
+
+
+def _introduces(line: str) -> bool:
+    """Whether a line only introduces what follows: "Key facts", "Why:"."""
+    return line.endswith(":") or (len(line) < 60 and line[-1] not in ".!?…)")
+
+
+def brief_of(text: str) -> str:
+    """The opening of a strategy, as markdown: its lead (the recommendation and
+    the main reason), the paragraph after it, and the first few points, each
+    clipped, within a few lines. What only restates the verdict (its heading,
+    "Recommendation: Go —") is left out, and so is a line that introduces
+    points not there."""
+    lead = intro = None
+    points: list[str] = []
+    for line in text.strip().splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            if lead:
+                break  # the next part
+            continue
+        if _ITEM.match(stripped):
+            point = _clip(stripped, POINT_CHARS)
+            if len(points) == BRIEF_POINTS or len("".join([lead or "", intro or "", *points, point])) > BRIEF_CHARS:
+                break
+            points.append(point)
+        elif points or intro:
+            break  # past the opening
+        elif lead:
+            intro = _clip(stripped, POINT_CHARS)
+        elif stripped := _RESTATED.sub("", stripped):
+            lead = _clip(stripped[0].upper() + stripped[1:], LEAD_CHARS)
+    if intro and not points and _introduces(intro):
+        intro = None
+    return "\n\n".join(part for part in (lead, "\n".join(filter(None, [intro, *points]))) if part)
+
+
+def _plain(text: str) -> str:
+    """Text without markdown emphasis, what it cites or its odd hyphens, for
+    reading figures from."""
+    text = text.replace("**", "").replace("__", "").replace("\u2011", "-").replace("\u2010", "-")
+    return re.sub(r"\[[^\]\n]{1,240}\]", "", text)
+
+
+def _label(raw: str) -> str | None:
+    words = re.split(r"[;,(—–]|\s-\s", raw)[-1].split()
+    while words and words[0].lower() in _FILLER:
+        words.pop(0)
+    words = words[-4:]
+    if not words or not any(len(word) > 2 for word in words):
+        return None
+    label = " ".join(words)
+    return label[0].upper() + label[1:]
+
+
+def named_figures(*texts: str) -> list[KeyFigure]:
+    """The figures the agents named in `texts` ("Price = $15,000"), up to
+    KEY_FIGURES: amounts before shares, shares before spans, each label and
+    value once, then in the order written. A nil one ("setup fee: $0") is not
+    one to see at a glance."""
+    found: list[tuple[int, int, KeyFigure]] = []
+    labels: set[str] = set()
+    values: set[str] = set()
+    for text in texts:
+        for match in _NAMED.finditer(_plain(text)):
+            label, value = _label(match["label"]), match["value"].strip()
+            if label and label not in labels and value not in values and re.search(r"[1-9]", value):
+                rank = next(rank for rank in range(len(_FIGURES)) if match[f"kind{rank}"])
+                found.append((rank, len(found), KeyFigure(label=label, value=value)))
+                labels.add(label)
+                values.add(value)
+    best = sorted(found, key=lambda entry: entry[:2])[:KEY_FIGURES]
+    return [figure for _, _, figure in sorted(best, key=lambda entry: entry[1])]
+
+
+def _proposal_figures(report: Report) -> list[KeyFigure]:
+    """The proposal's own figures, calculated from its financial plan."""
+    plan = report.proposal.financial
+    code = report.settings.currency
+    figures = [
+        KeyFigure(label="Price", value=f"{money.full(plan.price_per_customer_month, code)} a month"),
+        KeyFigure(label="Start-up cost", value=money.compact(sum(item.amount for item in plan.capex), code)),
+        KeyFigure(label="Fixed costs", value=f"{money.compact(sum(item.amount for item in plan.monthly_opex), code)} a month"),
+    ]
+    if report.investment and report.investment.revenue:
+        figures.append(KeyFigure(label="Year-3 revenue", value=money.compact(report.investment.revenue[-1], code)))
+    return figures
+
+
 def summary(report: Report) -> ReportSummary:
+    metrics = report.investment
+    present = {section.key for section in report.sections}
     return ReportSummary(
-        **report.model_dump(include={"session_id", "title", "version", "edited", "outdated", "updated_at"}),
+        **report.model_dump(include={"session_id", "title", "version", "edited", "outdated", "updated_at",
+                                     "objective", "change"}),
         has_proposal=report.proposal is not None,
+        project_name=report.proposal.executive.project_name if report.proposal else None,
+        verdict=verdict_of(report),
+        currency=report.settings.currency,
+        prepared_by=report.settings.prepared_by,
+        # In the team's own order, whatever the sections' order.
+        team=[role.name for role in SPECIALISTS if role.name in present],
+        sections=len(report.sections),
+        documents=len(report.worked_from.uploads) + len(report.worked_from.reports),
+        figures=Figures(**metrics.model_dump(include={"npv", "irr", "payback_months", "break_even_customers"}))
+        if metrics else None,
+        checks=len(report.checks),
+        brief=_brief(report),
+        key_figures=_proposal_figures(report) if report.proposal else named_figures(
+            *(section.body for key in (STRATEGY, "finance") for section in report.sections if section.key == key)
+        ),
     )
+
+
+def _brief(report: Report) -> str:
+    if report.proposal:
+        executive = report.proposal.executive
+        return f"{executive.recommendation}\n\n{executive.financial_case}".strip()
+    return brief_of(next((section.body for section in report.sections if section.key == STRATEGY), ""))
 
 
 class ReportBackend(Protocol):
@@ -313,6 +575,10 @@ class ReportBackend(Protocol):
 
     def history(self, session_id: str) -> list[Report]:
         """The versions before the current one, newest first."""
+        ...
+
+    def delete(self, session_id: str) -> bool:
+        """Remove a session's report and its versions; whether there was one."""
         ...
 
 
@@ -345,6 +611,11 @@ class MemoryReports:
     def history(self, session_id: str) -> list[Report]:
         with self._lock:
             return list(self._history.get(session_id, []))
+
+    def delete(self, session_id: str) -> bool:
+        with self._lock:
+            self._history.pop(session_id, None)
+            return self._stored.pop(session_id, None) is not None
 
     def summaries(self) -> list[ReportSummary]:
         with self._lock:
@@ -405,11 +676,23 @@ class ReportStore:
         """Every report, the most recently changed first."""
         return self.backend.summaries()
 
+    def delete(self, session_id: str) -> None:
+        """Delete a session's report, with its versions and the results it was built from."""
+        if not self.backend.delete(session_id):
+            raise ReportNotFound(session_id)
+
     def get(self, session_id: str) -> Report:
         stored = self.backend.get(session_id)
         if stored is None:
             raise ReportNotFound(session_id)
         return stored.report
+
+    def results(self, session_id: str) -> SessionResults:
+        """The results the session's report was built from."""
+        stored = self.backend.get(session_id)
+        if stored is None:
+            raise ReportNotFound(session_id)
+        return stored.results
 
     def save(self, session_id: str, version: int, sections: list[ReportSection]) -> Report:
         """Replace the sections with edited ones, if nobody changed them since `version`."""
@@ -450,24 +733,41 @@ class ReportStore:
 
         return self.backend.update(session_id, apply).report
 
-    def versions(self, session_id: str) -> list[VersionSummary]:
+    def kept(self, session_id: str) -> list[Report]:
         """The current version and those kept before it, newest first."""
-        current = self.get(session_id)
-        return [
-            VersionSummary(version=report.version, updated_at=report.updated_at, change=report.change,
-                           has_proposal=report.proposal is not None, current=report is current)
-            for report in [current, *self.backend.history(session_id)]
-        ]
+        return [self.get(session_id), *self.backend.history(session_id)]
+
+    def versions(self, session_id: str,
+                 compare: Callable[[Report, Report], list[str]] | None = None) -> list[VersionSummary]:
+        """The current version and those kept before it, newest first. With
+        `compare` (the version before, a version: where each field that differs
+        is), each says what changed since the version before it."""
+        kept = self.kept(session_id)
+        summaries = []
+        for index, report in enumerate(kept):
+            before = kept[index + 1] if index + 1 < len(kept) else None
+            places = compare(before, report) if compare and before else None
+            summaries.append(VersionSummary(
+                version=report.version, updated_at=report.updated_at, change=report.change,
+                has_proposal=report.proposal is not None, current=index == 0,
+                changed=None if places is None else len(places), areas=list(dict.fromkeys(places or [])),
+            ))
+        return summaries
 
     def version(self, session_id: str, version: int) -> Report:
         """The report as it was at `version`."""
-        current = self.get(session_id)
-        if version == current.version:
-            return current
-        for report in self.backend.history(session_id):
+        for report in self.kept(session_id):
             if report.version == version:
                 return report
         raise ReportNotFound(f"{session_id} v{version}")
+
+    def with_before(self, session_id: str, version: int) -> tuple[Report, Report | None]:
+        """The report at `version`, and the version kept before it, if there is one."""
+        kept = self.kept(session_id)
+        index = next((index for index, report in enumerate(kept) if report.version == version), None)
+        if index is None:
+            raise ReportNotFound(f"{session_id} v{version}")
+        return kept[index], kept[index + 1] if index + 1 < len(kept) else None
 
     def restore(self, session_id: str, version: int, wanted: int) -> Report:
         """The content of version `wanted` saved as the newest version, if

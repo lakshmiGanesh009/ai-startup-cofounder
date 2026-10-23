@@ -17,6 +17,7 @@ import { DocumentPage } from "@/components/reports/document-page";
 import { EditForm } from "@/components/reports/edit-form";
 import { type PassageAction, PassageContext } from "@/components/reports/passages";
 import { PdfPanel, type Tool } from "@/components/reports/pdf-panel";
+import { ReportPicker, withOpen } from "@/components/reports/report-picker";
 import {
   ExecutiveSection,
   FinancialSection,
@@ -32,7 +33,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Label, Select } from "@/components/ui/field";
-import { ArrowRightIcon, DocumentIcon, PencilIcon, QuestionIcon, RefreshIcon, UndoIcon } from "@/components/ui/icons";
+import { ArrowRightIcon, DocumentIcon, PencilIcon, QuestionIcon, RefreshIcon, TrashIcon, UndoIcon } from "@/components/ui/icons";
 import { Menu } from "@/components/ui/menu";
 import { Notice, type Tone } from "@/components/ui/notice";
 import { PageHeader, titleSize } from "@/components/ui/page-header";
@@ -40,6 +41,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs } from "@/components/ui/tabs";
 import {
   ApiError,
+  deleteReport,
   type Draft,
   getReport,
   type GuardrailFlag,
@@ -128,11 +130,6 @@ function when(iso: string): string {
     minute: "2-digit",
     timeZone: "UTC",
   });
-}
-
-function label(summary: ReportSummary): string {
-  const title = summary.title.length > 70 ? `${summary.title.slice(0, 67)}...` : summary.title;
-  return `${title} (${summary.has_proposal ? "investment proposal" : "team report"}, ${when(summary.updated_at)} UTC)`;
 }
 
 // The session to open first: the one in the address, else the one the
@@ -278,7 +275,7 @@ function Reports() {
   const [problem, setProblem] = useState<string | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const [writing, setWriting] = useState(false);
-  const [confirm, setConfirm] = useState<"rewrite" | "reset" | null>(null);
+  const [confirm, setConfirm] = useState<"rewrite" | "reset" | "delete" | null>(null);
   // A reload of the studio's page opens it again, once its report is in.
   const [studio, setStudio] = useState<Studio | null>(() => (inAddress() ? studioOn("revise") : null));
   const [asking, setAsking] = useState(false);
@@ -380,6 +377,33 @@ function Reports() {
     }
   }
 
+  // Deletes a report for good, after the founder confirmed it; throws, with
+  // why, if it could not. When it is the one open, the newest left opens.
+  async function remove(sessionId: string) {
+    await deleteReport(sessionId);
+    const gone = summaries?.find((each) => each.session_id === sessionId);
+    const left = (summaries ?? []).filter((each) => each.session_id !== sessionId);
+    setSummaries(left);
+    if (report?.session_id === sessionId) {
+      setStudio(null);
+      setAsking(false);
+      setReport(null);
+      setSelected(left[0]?.session_id ?? null);
+    }
+    const name = gone ? gone.project_name || gone.title : "the report";
+    setMessage({ tone: "good", text: `Deleted “${name.length > 80 ? `${name.slice(0, 77)}…` : name}”, with its versions.` });
+  }
+
+  async function removeOpen() {
+    if (!report) return;
+    setConfirm(null);
+    try {
+      await remove(report.session_id);
+    } catch (error) {
+      setMessage({ tone: "bad", text: (error as Error).message });
+    }
+  }
+
   // A paragraph revised by its writer, or removed: a draft, shown in the studio.
   async function passage(action: PassageAction): Promise<boolean> {
     if (!report) return false;
@@ -427,30 +451,24 @@ function Reports() {
   }
 
   const picker = summaries && summaries.length > 0 && report && (
-    <div className="w-full sm:w-[22rem]">
-      <Label htmlFor="report">Report</Label>
-      <Select
-        id="report"
-        value={selected ?? ""}
-        onChange={(event) => {
-          setSelected(event.target.value);
-          setMessage(null);
-          setStudio(null);
-          setAsking(false);
-        }}
-      >
-        {summaries.map((summary) => (
-          <option key={summary.session_id} value={summary.session_id}>
-            {/* The open report's label follows its changes since the list was loaded. */}
-            {label(
-              summary.session_id === report.session_id
-                ? { ...summary, has_proposal: Boolean(report.proposal), updated_at: report.updated_at }
-                : summary,
-            )}
-          </option>
-        ))}
-      </Select>
-    </div>
+    <ReportPicker
+      // The open report's entry follows its changes since the list was loaded.
+      reports={summaries.map((summary) => (summary.session_id === report.session_id ? withOpen(summary, report) : summary))}
+      openId={report.session_id}
+      onDelete={remove}
+      // Each report's brief and figures as they stand now; if the list will not load, the one held.
+      onBrowse={() =>
+        listReports()
+          .then(setSummaries)
+          .catch(() => {})
+      }
+      onOpen={(sessionId) => {
+        setSelected(sessionId);
+        setMessage(null);
+        setStudio(null);
+        setAsking(false);
+      }}
+    />
   );
 
   let body: React.ReactNode;
@@ -522,6 +540,12 @@ function Reports() {
                 description: "Rebuild the report from the session's latest results, without your edits or the proposal.",
                 icon: <UndoIcon />,
                 onSelect: () => setConfirm("reset"),
+              },
+              {
+                label: "Delete this report",
+                description: "Delete it for good, with its versions. The files you uploaded stay.",
+                icon: <TrashIcon />,
+                onSelect: () => setConfirm("delete"),
               },
             ]}
           />
@@ -667,19 +691,28 @@ function Reports() {
         <Dialog
           open={confirm !== null}
           size="small"
-          title={confirm === "rewrite" ? "Rewrite the proposal?" : "Reset the report?"}
+          title={confirm === "rewrite" ? "Rewrite the proposal?" : confirm === "delete" ? "Delete this report?" : "Reset the report?"}
           onClose={() => setConfirm(null)}
         >
           <p className="text-sm leading-relaxed text-ink-2">
             {confirm === "rewrite"
               ? "The agents write the proposal again from the team's report as it stands. This replaces it, with your edits and revisions to it."
-              : "This rebuilds the report from the session's latest results and drops your edits and the proposal."}
+              : confirm === "delete"
+                ? "The report and its earlier versions go, with the team's saved work for this session, and cannot be brought back. The files you uploaded stay, for other reports that worked from them."
+                : "This rebuilds the report from the session's latest results and drops your edits and the proposal."}
           </p>
           <div className="mt-6 flex justify-end gap-2">
             <Button onClick={() => setConfirm(null)}>Keep it</Button>
-            <Button variant="primary" onClick={confirm === "rewrite" ? write : reset}>
-              {confirm === "rewrite" ? "Rewrite it" : "Reset the report"}
-            </Button>
+            {confirm === "delete" ? (
+              <Button variant="danger" onClick={removeOpen}>
+                <TrashIcon />
+                Delete the report
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={confirm === "rewrite" ? write : reset}>
+                {confirm === "rewrite" ? "Rewrite it" : "Reset the report"}
+              </Button>
+            )}
           </div>
         </Dialog>
       </div>

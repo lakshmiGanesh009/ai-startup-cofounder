@@ -283,3 +283,23 @@ def test_through_the_api_a_restart_loses_nothing(fake_llm, api):
     starts = [event["message"] for event in seen["events"] if event["kind"] == "system"]
     assert starts == ["The API started, keeping sessions and reports in localhost:5432/cofounder_test; "
                       "open to anyone who can reach it (no API_KEY)."] * 2
+
+
+def test_through_the_api_a_deleted_report_leaves_nothing_behind(fake_llm, api):
+    fake_llm.plan = EVERYONE
+    with api() as client:
+        session = client.post("/evaluate", json={"prompt": "Evaluate an AI tool."}).json()["session_id"]
+        edit = {"version": 1, "sections": [{"key": "strategy", "title": "Strategy", "body": "Edited."}]}
+        assert client.put(f"/reports/{session}", json=edit).status_code == 200
+        assert client.delete(f"/reports/{session}").status_code == 204
+
+    with api() as client:
+        assert client.get(f"/reports/{session}").status_code == 404
+        assert client.get("/reports").json() == []
+    with psycopg.connect(URL) as conn:
+        left = conn.execute(
+            """SELECT (SELECT count(*) FROM reports), (SELECT count(*) FROM report_versions),
+                      (SELECT count(*) FROM checkpoints WHERE thread_id = %s)""",
+            (session,),
+        ).fetchone()
+    assert left == (0, 0, 0)

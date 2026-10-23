@@ -221,6 +221,28 @@ def test_a_draft_is_saved_only_when_accepted_and_the_old_version_is_kept(fake_ll
     assert client.get(f"/reports/{session}/versions/{version}").json()["settings"]["currency"] == "USD"
 
 
+def test_each_version_says_what_changed_since_the_one_before(fake_llm):
+    session, version = _session(fake_llm)
+    draft = client.post(f"/reports/{session}/drafts",
+                        json={"version": version, "change": {"kind": "currency", "to": "EUR", "rate": 0.92}}).json()
+    assert _accept(session, draft).status_code == 200
+
+    newest, written, *_, first = client.get(f"/reports/{session}/versions").json()
+    # The list says how many fields each version changed, and where.
+    assert newest["changed"] == len(draft["changes"])
+    assert "Currency" in newest["areas"] and "Financial plan" in newest["areas"]
+    assert written["changed"] > 0 and written["areas"][:2] == ["Executive summary", "Market & marketing"]
+    assert first["version"] == 1 and first["changed"] is None and first["areas"] == []
+
+    # And each change field by field: what the draft showed, with each amount's currency.
+    changes = client.get(f"/reports/{session}/versions/{version + 1}/changes").json()
+    assert changes == {"version": version + 1, "since": version, "currency_before": "USD", "currency": "EUR",
+                       "changes": draft["changes"]}
+    assert client.get(f"/reports/{session}/versions/1/changes").json()["since"] is None
+    assert client.get(f"/reports/{session}/versions/1/changes").json()["changes"] == []
+    assert client.get(f"/reports/{session}/versions/99/changes").status_code == 404
+
+
 def test_a_stale_draft_is_refused_and_a_version_restored(fake_llm):
     session, version = _session(fake_llm)
     first = client.post(f"/reports/{session}/drafts", json={

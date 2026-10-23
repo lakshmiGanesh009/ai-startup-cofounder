@@ -244,6 +244,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(UNREACHABLE);
   }
   if (!response.ok) throw await failure(response);
+  // A deletion answers 204, with nothing to read.
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -500,6 +502,17 @@ export function getMonitoring(signal?: AbortSignal): Promise<Monitoring> {
 
 export type ReportSection = { key: string; title: string; body: string };
 
+// The proposal's headline figures, calculated by the API from its financial plan.
+export type ReportFigures = {
+  npv: number;
+  irr: number | null;
+  payback_months: number | null;
+  break_even_customers: number | null;
+};
+
+// A figure to see at a glance, with what it is: "Price", "$149 a month".
+export type KeyFigure = { label: string; value: string };
+
 export type ReportSummary = {
   session_id: string;
   title: string;
@@ -508,6 +521,27 @@ export type ReportSummary = {
   edited: boolean;
   outdated: boolean;
   updated_at: string;
+  // What tells one report from another, for the picker (an older API leaves them out).
+  objective?: string;
+  project_name?: string | null;
+  verdict?: "Go" | "Go with conditions" | "Not yet" | null;
+  currency?: string;
+  prepared_by?: string;
+  // The specialists whose reports it holds.
+  team?: Specialist[];
+  sections?: number;
+  // The founder's files and earlier reports it worked from.
+  documents?: number;
+  figures?: ReportFigures | null;
+  // How many of the proposal's figures disagree.
+  checks?: number;
+  // What made this version.
+  change?: string | null;
+  // The report in a few lines, as markdown: the proposal's recommendation and
+  // financial case, else the opening of the strategy.
+  brief?: string;
+  // The proposal's figures, calculated from its plan; else the ones the strategy and Finance name.
+  key_figures?: KeyFigure[];
 };
 
 export type Level = "Low" | "Medium" | "High";
@@ -669,6 +703,42 @@ export type VersionSummary = {
   change: string | null;
   has_proposal: boolean;
   current: boolean;
+  // How many fields differ from the version before it (null when that one is
+  // not kept), and the parts of the report they are in: "Strategy", "Currency".
+  changed?: number | null;
+  areas?: string[];
+};
+
+// What the founder chose and told the team while a report was built (GET /reports/{id}/choices).
+export type Choices = {
+  brief: string;
+  follow_up: string | null;
+  target_market: string | null;
+  constraints: string | null;
+  competitive_landscape: string | null;
+  // Their answers to the Chief of Staff's questions.
+  answers: Answer[];
+  // The facts from the web research they kept.
+  research: Research | null;
+  // Their documents, a line each: "D1: plan.pdf (PDF, 12 pages)".
+  documents: string[];
+  // Whether the team researched each area on the web first, and where; null when not known.
+  deep_research: boolean | null;
+  research_provider: ResearchProvider | null;
+  // The reasoning efforts it ran at, by role ("specialist", "chief"); empty when not known.
+  efforts: Partial<Record<"specialist" | "chief", Effort>>;
+  // False for a report built before its choices were kept: only what its results hold.
+  complete: boolean;
+};
+
+// What changed in a version, field by field, from the version before it (`since`, if kept).
+export type VersionChanges = {
+  version: number;
+  since: number | null;
+  // The currencies of the amounts before and after.
+  currency_before: string;
+  currency: string;
+  changes: FieldChange[];
 };
 
 export function contentOf(report: Report): ReportContent {
@@ -692,6 +762,11 @@ export function listReports(): Promise<ReportSummary[]> {
 
 export function getReport(sessionId: string): Promise<Report> {
   return request(reportPath(sessionId));
+}
+
+// Deletes a report for good, with its versions and the session's saved state.
+export function deleteReport(sessionId: string): Promise<void> {
+  return request(reportPath(sessionId), { method: "DELETE" });
 }
 
 // Saves edited sections of the team's report; a 409 means the report changed
@@ -760,6 +835,14 @@ export function listVersions(sessionId: string): Promise<VersionSummary[]> {
 
 export function getVersion(sessionId: string, version: number): Promise<Report> {
   return request(`${reportPath(sessionId)}/versions/${version}`);
+}
+
+export function reportChoices(sessionId: string): Promise<Choices> {
+  return request(`${reportPath(sessionId)}/choices`);
+}
+
+export function versionChanges(sessionId: string, version: number): Promise<VersionChanges> {
+  return request(`${reportPath(sessionId)}/versions/${version}/changes`);
 }
 
 // Makes an earlier version the newest; `current` is the report's version now.
