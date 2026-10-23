@@ -176,6 +176,34 @@ def test_the_client_is_built_once_for_the_v1_endpoint(monkeypatch):
     assert azure_web._azure("https://azure.example/", "key") is built
 
 
+def test_a_brief_s_search_is_given_up_on_sooner_than_research(monkeypatch):
+    for name in AZURE:
+        monkeypatch.setenv(name, "https://azure.example/" if name.endswith("ENDPOINT") else "key")
+    monkeypatch.setattr(azure_web, "_client", None)
+    built = []
+
+    def client(endpoint, key, timeout, retries):
+        built.append((timeout, retries))
+        return SimpleNamespace(responses=SimpleNamespace(create=lambda **kwargs: answer("A fact.")))
+
+    monkeypatch.setattr(azure_web, "_azure", client)
+    azure_web.search("A query")
+    azure_web.research("A task")
+    assert built == [(azure_web.SEARCH_TIMEOUT, azure_web.SEARCH_RETRIES), (azure_web.LLM_TIMEOUT, azure_web.LLM_MAX_RETRIES)]
+    assert azure_web.SEARCH_TIMEOUT < azure_web.LLM_TIMEOUT and azure_web.SEARCH_RETRIES < azure_web.LLM_MAX_RETRIES
+
+
+def test_a_search_that_stalls_is_left_out_of_the_brief(azure):
+    def reply(**kwargs):
+        if "stalls" in kwargs["input"]:
+            raise openai.APITimeoutError(request=httpx.Request("POST", "https://azure.example"))
+        return answer(results=[{"title": "Found", "url": "https://found.example"}])
+
+    azure["replies"] = reply
+    hits, note = azure_web.search_all(["A search that stalls", "One that answers"])
+    assert [hit.url for hit in hits] == ["https://found.example"] and note is None
+
+
 # ---- Choosing where research runs ----
 
 def test_azure_is_the_default_and_tavily_is_used_when_asked(monkeypatch):

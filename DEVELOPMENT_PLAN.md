@@ -1048,6 +1048,23 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Each role runs on the deployment chosen for it, and the mic shows only when dictation can work.
 
+### Step 41 - A stalled web search no longer holds up a brief (Built)
+
+**Goal:** a brief took 267 s, although the Chief of Staff's own calls took 10 s: one of its four Azure web searches stalled, and the client waited out its 120 s timeout twice before the third try answered.
+
+**Built:**
+
+- A brief's web searches are given up on after 45 s and one retry (`SEARCH_TIMEOUT`, `SEARCH_RETRIES` in azure_web.py), not the model's 120 s and two; a search that still does not answer is left out, as a failed search already was. A team run's research keeps the model's timeout, since its calls take 30-40 s.
+
+**Check:**
+
+- Automated: the brief's search client gets the shorter timeout and research the model's; a stalled search is left out and the others' pages kept.
+- Live: a brief in 32 s, no call retried.
+
+**Done when:**
+
+- A brief takes at most about 1½ minutes when a search stalls, and about 30-40 s when none does.
+
 ## Target layout
 
 ```
@@ -1066,7 +1083,7 @@ brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20
 providers.py               Where web research runs            Step 21
-azure_web.py               Azure OpenAI's web search          Steps 21, 40
+azure_web.py               Azure OpenAI's web search          Steps 21, 40-41
 config.py                  Environment settings               Step 0
 llm.py                     Chat model client                  Steps 1, 39-40
 state.py                   Shared workflow state              Step 2 onward

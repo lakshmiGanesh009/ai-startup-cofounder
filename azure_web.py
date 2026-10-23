@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 # Web search does not run at "minimal" reasoning on gpt-5 models.
 EFFORT = "low"
 REPORT_WORDS = 350
+# A brief waits for the slowest of its searches, which answer in 11-30 s, so
+# one that stalls is given up on sooner than the model's calls are: once
+# retried, then left out. A team run's research keeps the model's timeout.
+SEARCH_TIMEOUT = 45.0
+SEARCH_RETRIES = 1
 
 _VARIABLES = ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT_NAME")
 
@@ -50,18 +55,17 @@ def search_deployment() -> str:
 
 
 @cache
-def _azure(endpoint: str, key: str) -> openai.OpenAI:
-    return openai.OpenAI(
-        base_url=f"{endpoint.rstrip('/')}/openai/v1/", api_key=key, timeout=LLM_TIMEOUT, max_retries=LLM_MAX_RETRIES
-    )
+def _azure(endpoint: str, key: str, timeout: float = LLM_TIMEOUT, retries: int = LLM_MAX_RETRIES) -> openai.OpenAI:
+    return openai.OpenAI(base_url=f"{endpoint.rstrip('/')}/openai/v1/", api_key=key, timeout=timeout, max_retries=retries)
 
 
-def _create(service: str, **kwargs):
+def _create(service: str, timeout: float = LLM_TIMEOUT, retries: int = LLM_MAX_RETRIES, **kwargs):
     """One Responses API call with web search, counted on the Monitor under
-    `service` ("web search" or "research"); SearchFailed if it cannot be made."""
+    `service` ("web search" or "research"), given up on after `timeout` seconds
+    and `retries` more tries; SearchFailed if it cannot be made."""
     if not available():
         raise SearchFailed("Azure OpenAI is not set up")
-    client = _client or _azure(os.environ["AZURE_OPENAI_ENDPOINT"], os.environ["AZURE_OPENAI_API_KEY"])
+    client = _client or _azure(os.environ["AZURE_OPENAI_ENDPOINT"], os.environ["AZURE_OPENAI_API_KEY"], timeout, retries)
     try:
         with monitor.calling("azure", service) as call:
             response = client.responses.create(
@@ -112,7 +116,8 @@ def _message(response) -> tuple[str, list[dict]]:
 
 def search(query: str) -> list[Hit]:
     """The pages a web search for `query` found, with their snippets."""
-    response = _create("web search", input=f"Search the web for: {query}", include=["web_search_call.results"])
+    response = _create("web search", SEARCH_TIMEOUT, SEARCH_RETRIES,
+                       input=f"Search the web for: {query}", include=["web_search_call.results"])
     hits: dict[str, Hit] = {}
     for item in response.output:
         if getattr(item, "type", "") != "web_search_call":
