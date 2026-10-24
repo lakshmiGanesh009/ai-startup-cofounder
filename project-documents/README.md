@@ -1,6 +1,6 @@
 # Project documents
 
-Five documents about the AI Startup Co-Founder Team, for the capstone review and for anyone new to the project.
+Six documents about the AI Startup Co-Founder Team, for the capstone review and for anyone new to the project.
 
 | File | What it is |
 | --- | --- |
@@ -9,6 +9,7 @@ Five documents about the AI Startup Co-Founder Team, for the capstone review and
 | [03-Deep-Dive.pdf](03-Deep-Dive.pdf) | 44 pages, presentation style: how the whole project works, the technologies the brief named and those added beyond it, the Pydantic audit of every model call (part 6), production readiness, and the design trade-offs. Its contents page and bookmarks link to every section. |
 | [04-Presenter-Readiness.pdf](04-Presenter-Readiness.pdf) | 8 pages for the presenters: likely questions with short answers, how the project was built and verified, a sign-off checklist for Steps 31 to 35, what is verified before it reaches the LLM, then, in pictures, how the technologies work together, one evaluation traced through the stack, every technology on a card, and the numbers to remember. |
 | [05-Code-Walkthrough.md](05-Code-Walkthrough.md) | The code, file by file, for explaining the project in a code editor: the project's layout, one evaluation traced through the code, how LangGraph connects the agents (state, nodes, the five routers, the checkpointer), where all 22 prompts are, the model layer, what the backend does around the graph, the web app, a 10-minute walkthrough and the questions to expect. Every link opens the file at the line it names (VS Code: ⌘⇧V for the preview). It reflects `main` on 24 October 2026, after the move to gpt-5.6 Luna and Terra. |
+| [05-Code-Walkthrough-and-QA.pdf](05-Code-Walkthrough-and-QA.pdf) | 17 A4 pages: the code walkthrough above as a PDF, its links printed as file and line references to open in the editor, followed by the questions an evaluator may ask (the design, reliability, safety, performance and cost, engineering, limits and what next), each with a short answer and where to point in the code. |
 
 The figures in documents 01 to 04 come from the main branch on 22 October 2026: the code, both test suites (run that day) and a recorded run of the app on Azure OpenAI gpt-5-mini. The screenshots are from that run.
 

@@ -280,7 +280,7 @@ A specialist that fails returns a report marked `[unavailable]` ([`GAP_PREFIX`](
 - [`failure()`](../llm.py#L54) and [`refused()`](../llm.py#L44) turn a provider error into words for the founder. A safety-policy refusal becomes a 422 and the red warning, never a raw 502 ([main.py](../main.py#L184) `_failed`).
 - Models are cached per (effort, deployment), so calls reuse one connection pool.
 
-Web search does not go through `get_llm`. It is a Responses API call with the `web_search` tool, on its own deployment, gpt-5-mini ([azure_web.py](../azure_web.py#L62)), with a 45 s limit for a brief's searches ([L37](../azure_web.py#L37)).
+Web search does not go through `get_llm`. It is a Responses API call with the `web_search` tool, on its own deployment, gpt-5-mini ([azure_web.py](../azure_web.py#L64)), with a 45 s limit for a brief's searches ([L37](../azure_web.py#L38)).
 
 ---
 
@@ -306,7 +306,7 @@ All in [main.py](../main.py). A failed model call becomes a 502 (a 422 for a ref
 
 [`prepare_brief()`](../brief.py#L173):
 1. Terra plans up to 4 web searches.
-2. They run at once on gpt-5-mini ([providers.py](../providers.py#L40) → [azure_web.py](../azure_web.py#L117)), or on Tavily if chosen.
+2. They run at once on gpt-5-mini ([providers.py](../providers.py#L40) → [azure_web.py](../azure_web.py#L119)), or on Tavily if chosen.
 3. Luna keeps the facts that bear on the decision, each with its sources, and asks up to 3 questions about what is missing.
 
 The founder reviews them, and they travel with the request in its `context`, so every agent works from them.
@@ -388,7 +388,7 @@ The order to open files in, and the point to make at each.
 | How is a follow-up handled? | The checkpointer restores the session by `thread_id`; the plan reassigns only the affected specialists. | [chief_of_staff.py](../agents/chief_of_staff.py#L148) |
 | How are LLM outputs validated? | 17 of 22 prompts answer in a Pydantic schema; a reply that doesn't parse is retried once. | [chief_of_staff.py](../agents/chief_of_staff.py#L45) |
 | Where are the numbers computed? | In code, from Finance's drivers. | [proposal.py](../proposal.py#L287) |
-| What if a specialist or a search fails? | The specialist's report is marked unavailable and the run goes on; a failed search is left out with a note. | [specialist.py](../agents/specialist.py#L88), [azure_web.py](../azure_web.py#L117) |
+| What if a specialist or a search fails? | The specialist's report is marked unavailable and the run goes on; a failed search is left out with a note. | [specialist.py](../agents/specialist.py#L88), [azure_web.py](../azure_web.py#L119) |
 | How is prompt injection handled? | Fenced, scanned, cut out, flagged; `RULES` on every system prompt. | [guardrails.py](../guardrails.py#L1) |
 | How did you optimise cost and latency? | Parallel specialists, reviews and critiques; only the needed specialists; approved reports never re-reviewed; short reports; follow-ups reuse reports and research; cheaper model for search. | [roles.py](../agents/roles.py#L17), [chief_of_staff.py](../agents/chief_of_staff.py#L233), [docs/performance.md](../docs/performance.md) |
 | Which model does what? | Luna for the Chief of Staff, Terra for the specialists, gpt-5-mini for web search. | [llm.py](../llm.py#L121) |
