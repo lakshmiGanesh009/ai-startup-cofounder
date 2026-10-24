@@ -63,7 +63,7 @@ from llm import (
     takes_reasoning_effort,
 )
 from metrics import track
-from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, ProviderUse, Run, monitor
+from monitor import MAX_EVENTS, MAX_RUNS, Monitoring, MonitorHandler, Provider, ProviderUse, Run, monitor
 from observability import REQUEST_HEADER, RequestContextMiddleware, bind_session, configure_logging
 from persistence import open_storage
 from guardrails import log_flags, scan, scan_context
@@ -374,7 +374,7 @@ def _providers(used: list[ProviderUse]) -> list[ProviderUse]:
     azure_for = [what for what, on in (("the team's model", main == "azure"), ("web search", providers.available()["azure"]),
                                        ("dictation", voice.available() and main == "azure")) if on]
     tavily_for = ["web research"] + (["competitors' pricing pages"] if lookups.tavily_configured() else [])
-    rows = [
+    rows: list[tuple[Provider, bool, str, str]] = [
         ("azure", main == "azure", _listed(azure_for) or "the team's model", "answering"),
         ("openai", main == "openai", "the team's model", "answering"),
         ("tavily", providers.available()["tavily"], _listed(tavily_for), "ready"),

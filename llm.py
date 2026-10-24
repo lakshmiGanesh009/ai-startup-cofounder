@@ -17,12 +17,12 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from functools import cache
-from typing import Literal, get_args
+from typing import Literal, TypeGuard, get_args
 
 import openai
 
 from config import LLM_MAX_RETRIES, LLM_TIMEOUT, LLM_TIMEOUT_HIGH
-from monitor import monitor
+from monitor import Provider, monitor
 
 
 class LLMNotConfigured(RuntimeError):
@@ -41,7 +41,7 @@ LLM_ERRORS = (openai.OpenAIError, LLMReplyError)
 _POLICIES = {"cyber_policy": "a possible cybersecurity risk or illegal activity"}
 
 
-def refused(error: Exception) -> bool:
+def refused(error: Exception) -> TypeGuard[openai.BadRequestError]:
     """Whether Azure refused the request for what it asks: its content filter
     ("content_filter"), or a model's own usage policy ("cyber_policy" and the
     like). That is for the founder to change, not a fault to retry."""
@@ -55,7 +55,7 @@ def failure(error: Exception) -> str:
     """What to tell the founder when a model call failed: for a refusal, why,
     in plain words, without the provider's own links."""
     if refused(error) and error.code != "content_filter":
-        what = _POLICIES.get(error.code, "a breach of its usage policy")
+        what = _POLICIES.get(error.code or "", "a breach of its usage policy")
         return (f"Azure OpenAI's safety policy refused this request: it read it as {what}. The team does not "
                 "help with that; if the idea is legitimate, rephrase it and try again.")
     if refused(error):
@@ -155,13 +155,14 @@ def _azure_llm(effort: str | None, name: str | None):
 
 def _openai_llm():
     from langchain_openai import ChatOpenAI
+    from pydantic import SecretStr
 
     missing = _missing(["OPENAI_API_KEY"])
     if missing:
         raise LLMNotConfigured(f"OpenAI is missing: {', '.join(missing)}")
 
     return ChatOpenAI(
-        api_key=os.environ["OPENAI_API_KEY"],
+        api_key=SecretStr(os.environ["OPENAI_API_KEY"]),
         model=os.getenv("MODEL_NAME", "gpt-4o-mini"),
         timeout=LLM_TIMEOUT,
         max_retries=LLM_MAX_RETRIES,
@@ -188,9 +189,9 @@ class Counted:
     """A provider's model whose calls the Monitor counts: the tokens each read
     and wrote, how long it took, and why one failed."""
 
-    def __init__(self, model, provider: str):
+    def __init__(self, model, provider: Provider):
         self.model = model
-        self.provider = provider
+        self.provider: Provider = provider
 
     def invoke(self, input, config=None, **kwargs):
         with monitor.calling(self.provider, "model") as call:

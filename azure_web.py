@@ -23,7 +23,7 @@ import openai
 from langchain_core.runnables.config import ContextThreadPoolExecutor
 
 from config import LLM_MAX_RETRIES, LLM_TIMEOUT
-from monitor import monitor
+from monitor import Service, monitor
 from search import CONTENT_CHARS, Hit, Report, SearchFailed
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ def _azure(endpoint: str, key: str, timeout: float = LLM_TIMEOUT, retries: int =
     return openai.OpenAI(base_url=f"{endpoint.rstrip('/')}/openai/v1/", api_key=key, timeout=timeout, max_retries=retries)
 
 
-def _create(service: str, timeout: float = LLM_TIMEOUT, retries: int = LLM_MAX_RETRIES, **kwargs):
+def _create(service: Service, timeout: float = LLM_TIMEOUT, retries: int = LLM_MAX_RETRIES, **kwargs):
     """One Responses API call with web search, counted on the Monitor under
     `service` ("web search" or "research"), given up on after `timeout` seconds
     and `retries` more tries; SearchFailed if it cannot be made."""
