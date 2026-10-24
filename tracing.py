@@ -263,16 +263,6 @@ def handled() -> Iterator[None]:
             pass
 
 
-def current_trace_id() -> str | None:
-    langfuse = client()
-    if langfuse is None:
-        return None
-    try:
-        return langfuse.get_current_trace_id()
-    except Exception:
-        return None
-
-
 def score(name: str, value: float | str, *, trace_id: str | None = None, session_id: str | None = None,
           comment: str | None = None, data_type: str | None = None) -> None:
     """Score a trace, or a session, in Langfuse: a number, a boolean (1 or 0)

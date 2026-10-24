@@ -1084,6 +1084,25 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - A refused request says why in plain words, in red, and the founder can rephrase it.
 
+### Step 43 - Cleanup: dead code, generated files, and a type check that works on a clean checkout (Built)
+
+**Goal:** the founder asked for unused code and boilerplate to go, carefully, so that nothing breaks. The folder was 1.9 GB, almost all of it generated files.
+
+**Built:**
+
+- Every function, class and method was checked against its uses (vulture, knip and deptry, then each flag by hand). The only dead code was `tracing.current_trace_id()`, now removed. The rest were false positives: framework-registered routes, validators, MCP tools and fixtures; packages imported under another name; the Tailwind loader `next.config.ts` names.
+- The `typecheck` script runs `next typegen` before `tsc --noEmit`. Next 16 generates the route types (`LayoutProps`) only on `next dev`, `next build` or `next typegen`, so on a clean checkout, CI's included, the type check failed.
+- Generated files deleted, none of them tracked: the web app's build cache (845 MB), the documents' packages (65 MB), test and lint caches, bytecode; git repacked (22 to 13 MB). The folder is 1.0 GB, nearly all of it the installed packages the app runs on.
+
+**Check:**
+
+- Automated: 425 backend and 200 web tests; lint; the type check from a clean state.
+- Live: the API and the web app started from the cleaned folder, every page loaded, a full team run through the web app (75 s, all four specialists, nothing failed), its report and PDF, the Monitor and the LangGraph diagram; no errors in the browser or the logs.
+
+**Done when:**
+
+- Nothing unused is left in the code, and the project builds, tests and runs from a clean folder.
+
 ## Target layout
 
 ```
@@ -1119,7 +1138,7 @@ library.py                 The founder's documents            Step 30
 lookups.py                 Look-ups through MCP servers       Step 31
 rates.py                   Today's exchange rates (ECB)       Step 34
 voice.py                   Dictation: speech-to-text          Steps 37, 39-40
-tracing.py                 Tracing, prompts, scores: Langfuse Step 35
+tracing.py                 Tracing, prompts, scores: Langfuse Steps 35, 43
 prompt_library.py          The prompts, named for Langfuse    Step 35
 judge.py                   An LLM judge of a strategy         Step 35
 experiments.py             Experiments on the scenarios       Step 35
@@ -1132,5 +1151,5 @@ scenarios/                 Startup scenarios                  Step 9
 templates/                 Decision templates                 Step 19
 demo.py                    Walkthrough script                 Step 9
 docs/                      Architecture and performance docs  Steps 10-11
-frontend/                  Next.js frontend                   Steps 13-14, 18, 32-40, 42
+frontend/                  Next.js frontend                   Steps 13-14, 18, 32-40, 42-43
 ```
