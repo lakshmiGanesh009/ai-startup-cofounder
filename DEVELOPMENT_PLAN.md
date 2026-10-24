@@ -1103,6 +1103,24 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Nothing unused is left in the code, and the project builds, tests and runs from a clean folder.
 
+### Step 44 - A stalled model call costs a minute, not two (Built)
+
+**Goal:** in the final check before the demo, one Chief of Staff call (the strategy) got no answer from Azure: the client waited out its 120 s timeout before a retry answered in seconds, and the run took 4 minutes instead of 2. The recorded runs showed the same stall on `resolve` the night before. Azure's stalls cannot be prevented here; their cost can.
+
+**Built:**
+
+- A model call is given up on after 60 s (`LLM_TIMEOUT`, was 120 s) and retried: healthy calls on gpt-5.6 Luna and Terra take 5-30 s, while every stall recorded ran to the full timeout. `LLM_TIMEOUT=120` in `.env` restores the old wait.
+- Deep research keeps 120 s (`RESEARCH_TIMEOUT` in azure_web.py), because a research task legitimately takes 25-80 s; a brief's searches keep their 45 s.
+
+**Check:**
+
+- Automated: a brief's search is given up on sooner than a model call, and research later than one.
+- Live: a team run with deep research (92 s, all four specialists and research areas) and the proposal (57 s, every part), with no call timed out or retried.
+
+**Done when:**
+
+- A stall costs about a minute, and no healthy call is cut short.
+
 ## Target layout
 
 ```
@@ -1121,8 +1139,8 @@ brief.py                   Preparing a brief                  Step 19
 search.py                  Tavily search and research         Steps 19-20
 deep_research.py           Deep research for the specialists  Step 20
 providers.py               Where web research runs            Step 21
-azure_web.py               Azure OpenAI's web search          Steps 21, 40-41
-config.py                  Environment settings               Step 0
+azure_web.py               Azure OpenAI's web search          Steps 21, 40-41, 44
+config.py                  Environment settings               Steps 0, 44
 llm.py                     Chat model client                  Steps 1, 39-40, 42
 state.py                   Shared workflow state              Step 2 onward
 graph.py                   LangGraph state machine            Step 2 onward

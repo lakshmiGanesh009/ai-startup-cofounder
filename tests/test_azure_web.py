@@ -189,8 +189,11 @@ def test_a_brief_s_search_is_given_up_on_sooner_than_research(monkeypatch):
     monkeypatch.setattr(azure_web, "_azure", client)
     azure_web.search("A query")
     azure_web.research("A task")
-    assert built == [(azure_web.SEARCH_TIMEOUT, azure_web.SEARCH_RETRIES), (azure_web.LLM_TIMEOUT, azure_web.LLM_MAX_RETRIES)]
-    assert azure_web.SEARCH_TIMEOUT < azure_web.LLM_TIMEOUT and azure_web.SEARCH_RETRIES < azure_web.LLM_MAX_RETRIES
+    assert built == [(azure_web.SEARCH_TIMEOUT, azure_web.SEARCH_RETRIES),
+                     (azure_web.RESEARCH_TIMEOUT, azure_web.LLM_MAX_RETRIES)]
+    # A search is given up on sooner than a model call, and research later than one.
+    assert azure_web.SEARCH_TIMEOUT < azure_web.LLM_TIMEOUT < azure_web.RESEARCH_TIMEOUT
+    assert azure_web.SEARCH_RETRIES < azure_web.LLM_MAX_RETRIES
 
 
 def test_a_search_that_stalls_is_left_out_of_the_brief(azure):

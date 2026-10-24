@@ -33,9 +33,11 @@ EFFORT = "low"
 REPORT_WORDS = 350
 # A brief waits for the slowest of its searches, which answer in 11-30 s, so
 # one that stalls is given up on sooner than the model's calls are: once
-# retried, then left out. A team run's research keeps the model's timeout.
+# retried, then left out. A team run's research tasks take 25-80 s, longer
+# than a model call, so they are given longer.
 SEARCH_TIMEOUT = 45.0
 SEARCH_RETRIES = 1
+RESEARCH_TIMEOUT = 120.0
 
 _VARIABLES = ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_DEPLOYMENT_NAME")
 
@@ -234,7 +236,7 @@ def research(task: str, schema: dict | None = None) -> Report:
             "report: no list of sources at the end, no questions to the reader, and no offer of "
             "further help."
         )
-        response = _create("research", input=prompt)
+        response = _create("research", RESEARCH_TIMEOUT, input=prompt)
     text, notes = _message(response)
     if not text.strip():
         raise SearchFailed("Azure OpenAI's research gave no answer")
