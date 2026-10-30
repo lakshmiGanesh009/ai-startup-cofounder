@@ -19,8 +19,8 @@ MAX_CRITIQUE_ROUNDS = int(os.getenv("MAX_CRITIQUE_ROUNDS", "1"))
 
 # Per-call LLM timeout in seconds, and how many times to retry a failed call.
 # Azure occasionally stalls a request that an identical retry answers in seconds,
-# so the timeout should be a few times the slowest normal call (5-30 s on
-# gpt-5.6 Luna and Terra, up to medium reasoning) rather than generous: a stall
+# so the timeout should be over the slowest normal call (11-40 s for the Chief
+# of Staff's on gpt-5-mini at medium reasoning) rather than generous: a stall
 # then costs a minute, not two. Calls at high reasoning can take a minute or
 # two, so they get LLM_TIMEOUT_HIGH instead.
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))

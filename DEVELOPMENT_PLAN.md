@@ -1121,6 +1121,26 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - A stall costs about a minute, and no healthy call is cut short.
 
+### Step 45 - Every role on gpt-5-mini (Built)
+
+**Goal:** the founder asked for the app to run on one model, gpt-5-mini: the Chief of Staff, the four specialists and the web search, each at its own reasoning effort as before, with Tavily kept as a choice on the research switch.
+
+**Built:**
+
+- No code changed: every role already runs on `AZURE_OPENAI_DEPLOYMENT_NAME` when `AZURE_OPENAI_CHIEF_DEPLOYMENT_NAME` and `AZURE_OPENAI_SEARCH_DEPLOYMENT_NAME` are unset (Step 40). `.env.example`, the README and the comment on `LLM_TIMEOUT` now say so; the local `.env` names `gpt-5-mini` and has the other two commented out.
+- Unchanged: the specialists at `minimal` and the Chief of Staff at `medium` by default, the sliders, and the research switch (Azure OpenAI or Tavily). gpt-5-mini takes "minimal" as it is.
+- Not a chat model, so not moved: dictation stays on the Whisper deployment, and the mic shows only where there is one.
+
+**Check:**
+
+- Automated: the existing tests of `llm.deployment` and `azure_web.search_deployment`, each role on the team's deployment when it has none of its own.
+- From the local `.env`: the specialists on `gpt-5-mini` at `minimal`, the Chief of Staff on `gpt-5-mini` at `medium`, the web search on `gpt-5-mini` at `low`, each call given 60 s.
+- Live: pending. On 2026-10-30 the Azure OpenAI resource in `.env` no longer existed (its host did not resolve), so no call could be made; Tavily, FRED and Langfuse answered. On a new resource with a gpt-5-mini deployment: a brief, a team run and the proposal, watching for Chief of Staff calls cut off at 60 s (they took 11-40 s at `medium` on 2026-10-16; `LLM_TIMEOUT=120` restores the old wait).
+
+**Done when:**
+
+- Every model call goes to gpt-5-mini, and a team run finishes on it with no call timed out.
+
 ## Target layout
 
 ```
