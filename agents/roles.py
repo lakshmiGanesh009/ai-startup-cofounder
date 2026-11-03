@@ -71,6 +71,14 @@ FINANCE = Role(
         "model with a price point and the reason for it, a spending limit for the first "
         "phase broken into its main lines, the gross margin per customer, how many paying "
         "customers it takes to break even, and how long the money lasts. "
+        "Make the figures reconcile: the budget lines add up exactly to the spending "
+        "limit, with any contingency counted once; say whether the limit is gross "
+        "spending or net of what customers pay, and when they pay; work each margin "
+        "and break-even figure out from its parts; and count founder pay and every "
+        "fixed cost in the runway, as a one-line cash balance by month or quarter to "
+        "the end of the first phase that names the month cash is lowest and the month "
+        "revenue first covers costs. State the conversion, churn and acquisition-cost "
+        "assumptions the figures rest on. "
         "Stay within finance; leave marketing, technical build, and risk to the others."
     ),
 )

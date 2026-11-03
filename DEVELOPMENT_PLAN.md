@@ -1159,6 +1159,23 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Finance never waits for a part it isn't written from, and the proposal is otherwise unchanged.
 
+### Step 47 - Finance's report passes review the first time more often (Built)
+
+**Goal:** the review loop was the largest waste in a team run. In the 37 runs traced to Langfuse before this step, only 5 were approved first time, and Finance ended at 3/5 in 23 of 30. The Chief of Staff's feedback on Finance was nearly always the same: the budget lines don't add up to the spending limit, a contingency is counted twice, gross spending is mixed up with cash burn, the arithmetic is wrong, and there is no cash balance showing the runway and the break-even month. Each send-back costs a rewrite and a second review, about 20 s and 8,000-10,000 tokens.
+
+**Built:**
+
+- `agents/roles.py`: Finance's brief asks for that before it answers: budget lines that add up exactly to the spending limit with any contingency counted once; whether the limit is gross or net of what customers pay, and when they pay; each margin and break-even figure worked out from its parts; founder pay and every fixed cost in the runway, as a one-line cash balance by month or quarter naming the month cash is lowest and the month revenue first covers costs; and the conversion, churn and acquisition-cost assumptions. The review rubric is unchanged.
+
+**Check:**
+
+- Automated: the existing tests pass unchanged.
+- Live, 2026-11-03, with `experiments.py` at the `.env` efforts (specialists `minimal`, Chief of Staff `medium`): four runs of the three scenarios on each side, 12 team runs before and 12 after, the last two rounds of each side by side so both met the same Azure conditions. Finance passed its first review in 5 of 8 runs, against 2 of 7 before (one run before lost its Finance report to an Azure timeout); it was sent back in 3 of 8, against 5 of 7. The LLM judge's mean rose from 3.08 to 3.23 (constraints 3.08 to 3.33, actionability 3.58 to 3.75, grounding 2.42 to 2.83, consistency 3.25 to 3.00; a quarter-point either way is within the noise of 12 runs). Per run: 62,833 tokens against 64,874, $0.050 against $0.054. Finance's own first draft takes about 3 s longer and is about 40% longer, which the send-backs it avoids more than repay; run time differed by less than Azure's own variation.
+
+**Done when:**
+
+- Finance's first draft passes review more often, the judge's scores hold, and a run costs no more.
+
 ## Target layout
 
 ```
