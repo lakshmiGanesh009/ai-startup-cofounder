@@ -257,7 +257,7 @@ A specialist that fails returns a report marked `[unavailable]` ([`GAP_PREFIX`](
 | `brief/review` | [brief.py](../brief.py#L115) `_REVIEW_PROMPT` | Luna | BriefReview (facts + questions) |
 | `research/competitors` | [deep_research.py](../deep_research.py#L71) | Luna | Competitors |
 | `lookups/fred-searches`, `lookups/fred-picks` | [lookups.py](../lookups.py#L151), [L292](../lookups.py#L292) | Luna | FredSearches, FredPicks |
-| `proposal/market`, `technical`, `risk`, `financial`, `executive`, `rewrite` | [proposal_writer.py](../agents/proposal_writer.py#L80) `_PARTS`, `_EXECUTIVE` ([L174](../agents/proposal_writer.py#L174)) | Terra; the executive summary on Luna | each part's schema ([proposal.py](../proposal.py#L179)) |
+| `proposal/market`, `technical`, `risk`, `financial`, `executive`, `rewrite` | [proposal_writer.py](../agents/proposal_writer.py#L83) `_PARTS`, `_EXECUTIVE` ([L177](../agents/proposal_writer.py#L177)) | Terra; the executive summary on Luna | each part's schema ([proposal.py](../proposal.py#L179)) |
 | `documents/answer` | [library.py](../library.py#L278) `ANSWERER` | Luna | Answer, with citations |
 | `judge/strategy` | [judge.py](../judge.py#L35) `JUDGE_PROMPT` | Luna | scores 1-5 |
 
@@ -319,12 +319,12 @@ The founder reviews them, and they travel with the request in its `context`, so 
 
 ### The investment proposal
 
-[`write_proposal()`](../agents/proposal_writer.py#L377) writes in **three waves** ([`WAVES`](../agents/proposal_writer.py#L54)):
+[`write_proposal()`](../agents/proposal_writer.py#L380) writes in **three waves** ([`WAVES`](../agents/proposal_writer.py#L57)):
 1. Market, Technical and Risk in parallel.
-2. Finance, with those in front of it.
+2. Finance, with Market and Technical in front of it. It starts as soon as those two are done, without waiting for Risk ([`INPUTS`](../agents/proposal_writer.py#L59)).
 3. The executive summary, by the Chief of Staff.
 
-The figures are then checked in code, and Finance gets one call to fix any that fail.
+Finance's figures are checked in code, and Finance gets one call to fix any that fail, before the executive summary is written.
 
 ### Reports, versions and storage
 

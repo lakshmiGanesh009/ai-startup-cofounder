@@ -572,7 +572,7 @@ function Reports() {
               wait={proposalWait(reasoning)}
               stages={[
                 "Marketing, Technical and Risk & Compliance write their parts at the same time",
-                "Finance writes the financial plan from them, and corrects figures that fail a check",
+                "Finance starts on the financial plan once Marketing and Technical are done, and corrects figures that fail a check",
                 "The Chief of Staff writes the executive summary and the success metrics",
               ]}
             />

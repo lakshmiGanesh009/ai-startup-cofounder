@@ -7,19 +7,21 @@ the investment proposal, the agents write it from the report as it now stands
 1. Marketing, Technical and Risk & Compliance write their parts at the same time.
 2. Finance writes the financial plan with the market and technical parts in
    front of it, so the costs agree with the channel budgets, team and stack.
+   It starts as soon as those two are done, without waiting for Risk.
 3. The Chief of Staff writes the executive summary and success metrics from
    all of them and the investment metrics calculated from Finance's figures.
 
-Finance's figures are then checked in code (figure_checks); if a check fails,
-Finance gets one more call to correct them, and whatever still fails is shown
-to the founder. A revision applies the founder's instruction to one part, or to
-every part, and then brings the parts that build on it into line in the same
-order; or, with revise_text, rewrites one text or one passage of it and leaves
+Finance's figures are checked in code (figure_checks); if a check fails,
+Finance gets one more call to correct them before the executive summary is
+written, and whatever still fails is shown to the founder. A revision applies
+the founder's instruction to one part, or to every part, and then brings the
+parts that build on it into line in the same order; or, with revise_text, rewrites one text or one passage of it and leaves
 everything else as it is. Every amount is in the report's currency, which the
 agents are told and never change (currency.py converts it).
 """
 
 import logging
+from concurrent.futures import FIRST_COMPLETED, wait
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables.config import ContextThreadPoolExecutor
@@ -50,7 +52,8 @@ from reports import Report
 logger = logging.getLogger(__name__)
 
 SCHEMAS = PARTS
-# The order parts are written in; the parts in one wave are written at the same time.
+# The order parts are written in. A part starts as soon as the parts it is
+# written from (INPUTS) are done, so parts can run beside a later wave's.
 WAVES = (("market", "technical", "risk"), ("financial",), ("executive",))
 # The parts each part is written from, so its figures agree with them.
 INPUTS = {
@@ -398,34 +401,43 @@ def _write_proposal(report: Report, instruction: str, part: str | None) -> tuple
 
     metrics: dict = {}
     with track("proposal", metrics) as tracker:
-        for wave in WAVES:
-            keys = [key for key in wave if key in redo]
-            if not keys:
-                continue
 
-            def write(key: str):
-                told = instruction if (part is None or key == part) else ""
-                changed = [k for k in INPUTS.get(key, ()) if k in redo] if current else []
-                own = getattr(current, key) if current else None
-                return _ask(key, _prompt(key, background, parts, own, told, changed), tracker)
-
-            with ContextThreadPoolExecutor(max_workers=len(keys)) as pool:
-                written = dict(zip(keys, pool.map(write, keys)))
-            for key, value in written.items():
-                if value is not None:
-                    parts[key] = value
-                elif current is None:
-                    raise ProposalNotWritten(f"The {TITLES[key]} part could not be written.")
-                else:
-                    failed.append(TITLES[key])
-            if "financial" in written and written["financial"] is not None:
+        def write(key: str):
+            told = instruction if (part is None or key == part) else ""
+            changed = [k for k in INPUTS.get(key, ()) if k in redo] if current else []
+            own = getattr(current, key) if current else None
+            value = _ask(key, _prompt(key, background, parts, own, told, changed), tracker)
+            if key == "financial" and value is not None:
                 # Check: Finance corrects figures that disagree, once.
-                issues = figure_checks(parts["market"], parts["financial"])
+                issues = figure_checks(parts["market"], value)
                 if issues:
                     logger.info("Financial figures fail checks, asking for a correction: %s", issues)
-                    messages = _prompt("financial", background, parts, parts["financial"], "", [],
-                                       issues)
-                    parts["financial"] = _ask("financial", messages, tracker) or parts["financial"]
+                    messages = _prompt("financial", background, parts, value, "", [], issues)
+                    value = _ask("financial", messages, tracker) or value
+            return value
+
+        # Each part waits only for the parts it is written from that are being
+        # rewritten; `parts` changes only here, never in the workers.
+        waiting = {key: set(INPUTS.get(key, ())) & set(redo) for key in redo}
+        running: dict = {}
+        with ContextThreadPoolExecutor(max_workers=len(redo)) as pool:
+            while waiting or running:
+                for key in [key for key, needs in waiting.items() if not needs]:
+                    del waiting[key]
+                    running[pool.submit(write, key)] = key
+                done, _ = wait(running, return_when=FIRST_COMPLETED)
+                for future in done:
+                    key = running.pop(future)
+                    value = future.result()
+                    if value is not None:
+                        parts[key] = value
+                    elif current is None:
+                        raise ProposalNotWritten(f"The {TITLES[key]} part could not be written.")
+                    else:
+                        failed.append(TITLES[key])
+                    for needs in waiting.values():
+                        needs.discard(key)
+    failed = [TITLES[key] for key in redo if TITLES[key] in failed]  # in writing order
 
     metric = metrics["proposal"]
     logger.info(

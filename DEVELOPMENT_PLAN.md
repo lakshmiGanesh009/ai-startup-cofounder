@@ -1141,6 +1141,24 @@ A streaming endpoint (LangGraph's `astream`), so the UI shows each stage as it f
 
 - Every model call goes to gpt-5-mini, and a team run finishes on it with no call timed out.
 
+### Step 46 - Finance's proposal part doesn't wait for Risk (Built)
+
+**Goal:** the founder asked for runs that burn fewer tokens and finish sooner without changing the output. The proposal was written in waves: Marketing, Technical and Risk together, then Finance, then the executive summary. Finance is written from the market and technical parts only, but it waited for Risk too, which was often the slowest part (21.8 s against 16.4 s in one proposal on 2026-11-03; 90.6 s against 82.4 s in another).
+
+**Built:**
+
+- `agents/proposal_writer.py`: each part starts as soon as the parts it is written from (`INPUTS`) are done, so Finance starts once Market and Technical are; the executive summary still waits for all four. Finance's figure check, and its one correction, now run in Finance's own worker, still before the executive summary. The prompts, the inputs and the calls are the same, so the proposal is the same; only the waiting changes. A revision still rewrites only the part asked for and the parts written from it.
+- The progress card on the Reports page and the code walkthrough say Finance starts once Market and Technical are done.
+
+**Check:**
+
+- Automated: Finance starts while Risk is still writing, and the executive summary comes after both (it fails on the old waves, "Finance waited for the risk part"); the existing proposal tests (parts, revisions, failures, the figure correction) pass unchanged.
+- Live, 2026-11-03, a fresh proposal from the founder's report of that morning, written by the new code without saving it: 83 s, all five parts. Finance started the moment Technical, its last input, was done (22.4 s), while Risk had finished at 17.5 s, so this one saved nothing; the saving is the time Risk runs on after Market and Technical, 0-8 s in the proposals measured.
+
+**Done when:**
+
+- Finance never waits for a part it isn't written from, and the proposal is otherwise unchanged.
+
 ## Target layout
 
 ```

@@ -1,5 +1,6 @@
 """Tests for the written reports: the store, the investment proposal and the PDF."""
 
+import threading
 from datetime import datetime, timezone
 
 import pytest
@@ -307,6 +308,32 @@ def test_finance_corrects_figures_that_fail_a_check_once(fake_llm):
     assert report["checks"] == ["Year 1's fixed costs ($100 a month) are below the monthly "
                                 "OpEx at launch ($850)."]
     assert "Checks on the financial figures that still fail" in fake_llm.part_prompts["executive"][0]
+
+
+def test_finance_starts_without_waiting_for_the_risk_part(fake_llm):
+    session_id = _evaluate()
+    finance_started = threading.Event()
+    finished: list[str] = []
+    produce = fake_llm._part_for
+
+    def part_for(key):
+        def write(prompt):
+            if key == "financial":
+                finance_started.set()
+            if key == "risk":
+                # Risk is often the slowest part; Finance must not wait for it.
+                assert finance_started.wait(5), "Finance waited for the risk part"
+            part = produce(key)(prompt)
+            finished.append(key)
+            return part
+
+        return write
+
+    fake_llm._part_for = part_for
+
+    assert _write(session_id)["failed"] == []
+    # The Chief of Staff still writes the executive summary from all four.
+    assert finished.index("financial") < finished.index("risk") < finished.index("executive")
 
 
 def test_revising_a_part_brings_the_parts_built_on_it_into_line(fake_llm):
