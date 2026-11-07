@@ -110,7 +110,7 @@ def test_research_tasks_run_together_and_a_failure_is_kept_apart(monkeypatch):
 
     results = search.research_all({"one": ("good", None), "two": ("bad", None)})
 
-    assert results["one"].content == "good"
+    assert isinstance(results["one"], Report) and results["one"].content == "good"
     assert isinstance(results["two"], SearchFailed)
     assert search.research_all({}) == {}
 

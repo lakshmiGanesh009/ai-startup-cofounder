@@ -53,7 +53,7 @@ class FieldChange(BaseModel):
     label: str = Field(description="Where, for a person: Market & marketing · Pricing strategy.")
     before: str | float | None
     after: str | float | None
-    money: bool = Field(False, description="A figure in the document's currency.")
+    money: bool = Field(default=False, description="A figure in the document's currency.")
 
 
 class Draft(BaseModel):

@@ -49,6 +49,7 @@ def test_the_monitor_keeps_totals_and_the_latest_runs_and_events(monkeypatch):
     assert seen.nodes[0].model_dump() == {
         "node": "plan", "runs": 1, "calls": 1, "seconds": 9.5, "tokens": 40, "p50": 9.5, "p95": 9.5,
     }
+    assert seen.evaluation_seconds is not None
     assert seen.evaluation_seconds.model_dump() == {"p50": 10.0, "p95": 10.0, "max": 10.0, "samples": 1}
     assert seen.running == 0
     assert seen.health.status == "healthy"
@@ -76,6 +77,7 @@ def test_each_step_and_the_evaluations_have_a_median_and_a_95th_percentile():
     seen = watch.snapshot()
 
     assert (seen.nodes[0].p50, seen.nodes[0].p95) == (30.0, 88.0)
+    assert seen.evaluation_seconds is not None
     assert seen.evaluation_seconds.model_dump() == {"p50": 90.0, "p95": 264.0, "max": 300.0, "samples": 5}
 
 
@@ -249,14 +251,14 @@ def test_the_api_logs_its_start_and_where_it_keeps_sessions():
 # ---- The providers ----
 
 def test_each_providers_calls_are_counted_with_what_they_used_and_why_one_failed():
-    import httpx
+    import httpx2
     import openai
 
     watch = Monitor()
     with watch.calling("azure", "model") as call:
         call.used(1_200, 300)
     refused = openai.AuthenticationError(
-        "Error code: 401", response=httpx.Response(401, request=httpx.Request("POST", "https://azure.example")),
+        "Error code: 401", response=httpx2.Response(401, request=httpx2.Request("POST", "https://azure.example")),
         body={"error": {"code": "401", "message": "Access denied due to invalid subscription key."}})
     with pytest.raises(openai.AuthenticationError):
         with watch.calling("azure", "model"):

@@ -15,7 +15,9 @@ not loaded, so nothing in a report can make the server fetch a URL.
 """
 
 import re
+from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from fpdf import FPDF
 from fpdf.fonts import FontFace, TextStyle
@@ -145,7 +147,7 @@ def _written_by(part: str) -> tuple[str, str]:
     return ("Written by", _agent(OWNERS[part]))
 
 
-def _table(pdf: FPDF, headings: list[str], rows: list[list], widths: list[float],
+def _table(pdf: FPDF, headings: list[str], rows: list[list], widths: Sequence[float],
            align: list[str] | None = None) -> None:
     """A table with a tinted heading row and hairlines between rows. A cell is
     text, or (text, FontFace) to colour it."""
@@ -186,7 +188,7 @@ def _band(pdf: FPDF, kicker: str, title: str, subtitle: str) -> None:
     pdf.cell(0, 11, chart.fit(pdf, title, pdf.epw), new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(BLUE[100])
     pdf.set_font(FONT, "", 9)
-    lines = pdf.multi_cell(pdf.epw, 4.6, subtitle, dry_run=True, output="LINES")
+    lines = cast(list[str], pdf.multi_cell(pdf.epw, 4.6, subtitle, dry_run=True, output="LINES"))
     shown = " ".join(lines[:3]) + (" …" if len(lines) > 3 else "")
     pdf.multi_cell(pdf.epw, 4.6, shown, align="L")
     pdf.set_y(60)

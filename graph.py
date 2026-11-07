@@ -41,6 +41,7 @@ from state import (
     Flag,
     NodeMetric,
     RequestContext,
+    RequestInput,
     Resolution,
     ReviewResult,
     Source,
@@ -129,7 +130,9 @@ def _route_after_resolve(state: WorkflowState) -> list[str] | str:
 def build_graph(checkpointer: BaseCheckpointSaver | None = None):
     """Build and compile the workflow graph, keeping sessions with `checkpointer`
     (in memory if none is given)."""
-    builder = StateGraph(WorkflowState)
+    # The graph is started with a request (RequestInput); its nodes share the
+    # whole WorkflowState.
+    builder = StateGraph(WorkflowState, input_schema=RequestInput)
     builder.add_node("plan", plan_node)
     builder.add_node("research", research_node)
     builder.add_node("lookup", lookup_node)

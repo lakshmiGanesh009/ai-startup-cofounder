@@ -13,11 +13,11 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parent.parent / "start.sh"
-BASH = shutil.which("bash")
+BASH = shutil.which("bash") or ""  # "" when there is none: the tests below are then skipped
 # Settings the launcher takes from the environment; CI sets POSTGRES_PASSWORD.
 OWN = ("POSTGRES_PASSWORD", "WEB_PORT", "API_PORT", "WEB_HOST")
 
-pytestmark = pytest.mark.skipif(BASH is None, reason="the launcher needs bash")
+pytestmark = pytest.mark.skipif(not BASH, reason="the launcher needs bash")
 
 
 def run(code, cwd, answers="", **env):

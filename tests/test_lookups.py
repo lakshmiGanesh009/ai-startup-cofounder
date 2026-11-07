@@ -11,6 +11,7 @@ from datetime import timedelta
 import pytest
 from fastapi.testclient import TestClient
 from mcp import Client
+from mcp.types import TextContent
 
 import deep_research
 import fred_server
@@ -31,6 +32,14 @@ from search import Report
 from tests.mcp_fakes import CORE, TODAY, monthly, series, use_fred, use_tavily
 
 client = TestClient(app)
+
+
+def _text(result) -> str:
+    """The text of an MCP tool's answer."""
+    part = result.content[0]
+    assert isinstance(part, TextContent)
+    return part.text
+
 
 WAGES = series("CES6562000001", "Average Hourly Earnings of All Employees, Health Care", units="Dollars per Hour")
 WAGES_DATA = (WAGES, monthly(35.0, *[36.0] * 11, 36.4))
@@ -72,8 +81,8 @@ def test_a_fred_failure_says_why_and_never_shows_the_key(monkeypatch, caplog):
                     await mcp.call_tool("series_data", {"series_id": "DROP TABLE"}))
 
     failed, refused = asyncio.run(work())
-    assert failed.is_error and "FRED answered 500: Internal Server Error." in failed.content[0].text
-    assert refused.is_error and "is not a FRED series id" in refused.content[0].text
+    assert failed.is_error and "FRED answered 500: Internal Server Error." in _text(failed)
+    assert refused.is_error and "is not a FRED series id" in _text(refused)
     logged = "\n".join(record.getMessage() for record in caplog.records)
     assert "api_key=[hidden]" in logged and "fred-test-key" not in logged
 
@@ -91,7 +100,7 @@ def test_fred_down_for_maintenance_is_said_plainly(monkeypatch):
 
     failed = asyncio.run(work())
     assert failed.is_error
-    assert failed.content[0].text.endswith("FRED answered with a web page instead of data; it may be down for maintenance.")
+    assert _text(failed).endswith("FRED answered with a web page instead of data; it may be down for maintenance.")
 
 
 def test_without_a_key_the_server_says_so(monkeypatch):
@@ -102,7 +111,7 @@ def test_without_a_key_the_server_says_so(monkeypatch):
         async with Client(fred_server.server) as mcp:
             return await mcp.call_tool("search_series", {"text": "wages"})
 
-    assert "FRED_API_KEY is not set." in asyncio.run(work()).content[0].text
+    assert "FRED_API_KEY is not set." in _text(asyncio.run(work()))
 
 
 # ---- The figures, worked out in code ----
@@ -112,11 +121,13 @@ def test_a_figure_moves_in_points_for_a_rate_and_in_per_cent_otherwise():
         {"date": day, "value": float(value)} for day, value in CORE["DGS10"][1]]})
     index = figure({"series": CORE["CPIAUCSL"][0], "observations": [
         {"date": day, "value": float(value)} for day, value in CORE["CPIAUCSL"][1]]})
+    assert rate is not None and index is not None
     assert (rate.value, rate.year_ago, rate.change) == (4.12, 3.98, "up 0.14 points")
     assert (index.change, index.mark) == ("up 3.0%", "[FRED · CPIAUCSL]")
     assert index.as_line().startswith("[FRED · CPIAUCSL] Consumer Price Index for All Urban Consumers: All Items: 323.42 (Index")
 
     young = figure({"series": WAGES, "observations": [{"date": TODAY.isoformat(), "value": 36.4}]})
+    assert young is not None
     assert (young.year_ago, young.change) == (None, "")
     assert figure({"series": WAGES, "observations": []}) is None
 
@@ -182,7 +193,7 @@ def test_when_fred_fails_the_look_up_says_why_and_the_run_goes_on(monkeypatch):
     use_fred(monkeypatch, failing=True)
     economic = look_up_economy(["wages"])
     assert economic.figures == []
-    assert "DGS10 could not be read" in economic.note
+    assert "DGS10 could not be read" in (economic.note or "")
 
     monkeypatch.setitem(lookups.SERVERS, "fred", lambda: (_ for _ in ()).throw(OSError("no python")))
     assert look_up_economy([]).note == "FRED could not be reached (OSError)."
@@ -222,13 +233,19 @@ def test_every_specialist_reads_the_figures_and_the_report_shows_them(fake_llm, 
 
 
 def test_the_figures_reach_a_specialist_fenced_as_data():
+    from typing import cast
+
     from agents.roles import ROLES
     from agents.specialist import _build_prompt
-    from state import EconomicData
+    from state import EconomicData, WorkflowState
 
-    economic = EconomicData(figures=[figure({"series": CORE["DGS10"][0], "observations": [
-        {"date": day, "value": float(value)} for day, value in CORE["DGS10"][1]]})])
-    prompt = _build_prompt(ROLES["finance"], {"request": "An idea.", "economic": economic})[1].content
+    rate = figure({"series": CORE["DGS10"][0], "observations": [
+        {"date": day, "value": float(value)} for day, value in CORE["DGS10"][1]]})
+    assert rate is not None
+    economic = EconomicData(figures=[rate])
+    # Only what the specialist's prompt reads from the state.
+    state = cast(WorkflowState, {"request": "An idea.", "economic": economic})
+    prompt = _build_prompt(ROLES["finance"], state)[1].content
     assert '<untrusted source="FRED economic data">\nOfficial economic data from FRED' in prompt
 
 
@@ -321,7 +338,8 @@ def test_only_the_companys_own_site_is_read_its_pricing_page_first():
         {"url": "https://www.klara.com/about", "title": "About", "text": ""},
         {"url": "https://www.klara.com/pricing", "title": "Pricing", "text": ""},
     ]
-    assert own_page("Klara", found)["url"] == "https://www.klara.com/pricing"
+    page = own_page("Klara", found)
+    assert page is not None and page["url"] == "https://www.klara.com/pricing"
     assert own_page("Weave Communications", [{"url": "https://getweave.com/pricing", "title": "", "text": ""}]) is None
     assert own_page("Phreesia", found) is None
     assert own_page("A B", found) is None
@@ -403,7 +421,7 @@ def test_pages_are_read_only_on_tavily(fake_llm, monkeypatch):
 def test_the_search_choice_is_a_structured_model():
     assert FredSearches().searches == []
     with pytest.raises(Exception):
-        FredSearches(searches="not a list")
+        FredSearches.model_validate({"searches": "not a list"})
 
 
 def test_the_api_starts_our_fred_server_as_a_subprocess_over_stdio(monkeypatch):
@@ -415,5 +433,6 @@ def test_the_api_starts_our_fred_server_as_a_subprocess_over_stdio(monkeypatch):
 
     assert asyncio.run(work()) == ["search_series", "series_data"]
     parameters = lookups._fred()
+    assert parameters.env is not None
     assert parameters.args == ["-m", "fred_server"] and parameters.env["FRED_API_KEY"] == "fred-test-key"
     assert "TAVILY_API_KEY" not in parameters.env and "DATABASE_URL" not in parameters.env

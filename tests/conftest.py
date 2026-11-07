@@ -22,6 +22,7 @@ os.environ["RUNS_PER_HOUR"] = "1000000"
 import time
 
 import httpx
+import httpx2
 import openai
 import pytest
 from langchain_core.messages import AIMessage, SystemMessage
@@ -119,6 +120,9 @@ class FakeModel:
     """
 
     USAGE = {"input_tokens": 7, "output_tokens": 3, "total_tokens": 10}
+    # Set by the fake_llm fixture: the role and the effort of each call.
+    calls: list
+    efforts: list
 
     def __init__(self):
         self.plan = DelegationPlan(
@@ -257,7 +261,7 @@ class FakeModel:
 
 def _provider_error():
     """What a provider call raises once the client has given up retrying."""
-    return openai.APIConnectionError(request=httpx.Request("POST", "https://llm.example"))
+    return openai.APIConnectionError(request=httpx2.Request("POST", "https://llm.example"))
 
 
 class _StructuredModel:

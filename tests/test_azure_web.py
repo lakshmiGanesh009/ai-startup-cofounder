@@ -5,7 +5,7 @@ a stand-in for the Responses API, and for choosing where research runs
 import json
 from types import SimpleNamespace
 
-import httpx
+import httpx2
 import openai
 import pytest
 from fastapi.testclient import TestClient
@@ -113,7 +113,7 @@ def test_a_profile_fills_its_fields_with_numbered_citations(azure):
 
     report = azure_web.research("Profile Klara.", COMPANY_SCHEMA)
 
-    assert report.content["pricing"] == "pricing [3]"
+    assert isinstance(report.content, dict) and report.content["pricing"] == "pricing [3]"
     assert len(report.sources) == len(COMPANY_SCHEMA["properties"])
     assert report.searches == 3  # counted from the calls when Azure does not report them
     schema = azure["requests"][0]["text"]["format"]
@@ -135,7 +135,7 @@ def test_research_that_cannot_be_read_fails(azure, reply, reason):
 
 def test_a_failed_or_unconfigured_call_fails_cleanly(azure, monkeypatch):
     def fail(**kwargs):
-        raise openai.APIConnectionError(request=httpx.Request("POST", "https://azure.example"))
+        raise openai.APIConnectionError(request=httpx2.Request("POST", "https://azure.example"))
 
     azure["replies"] = fail
     with pytest.raises(SearchFailed, match=r"web search failed \(APIConnectionError\)"):
@@ -154,7 +154,7 @@ def test_searches_and_research_run_together(azure):
     def reply(**kwargs):
         query = kwargs["input"]
         if "broken" in query:
-            raise openai.APIConnectionError(request=httpx.Request("POST", "https://azure.example"))
+            raise openai.APIConnectionError(request=httpx2.Request("POST", "https://azure.example"))
         return answer("A fact ([s](https://s.example)).", results=[{"title": query, "url": f"https://{len(query)}.example"}])
 
     azure["replies"] = reply
@@ -162,7 +162,8 @@ def test_searches_and_research_run_together(azure):
     hits, note = azure_web.search_all(["Search one", "broken search"])
     assert [hit.url for hit in hits] == [f"https://{len('Search the web for: Search one')}.example"] and note is None
     reports = azure_web.research_all({"a": ("A task", None), "b": ("broken", None)})
-    assert reports["a"].content == "A fact [1]." and isinstance(reports["b"], SearchFailed)
+    assert not isinstance(reports["a"], SearchFailed) and reports["a"].content == "A fact [1]."
+    assert isinstance(reports["b"], SearchFailed)
     assert azure_web.search_all([]) == ([], None) and azure_web.research_all({}) == {}
 
 
@@ -199,7 +200,7 @@ def test_a_brief_s_search_is_given_up_on_sooner_than_research(monkeypatch):
 def test_a_search_that_stalls_is_left_out_of_the_brief(azure):
     def reply(**kwargs):
         if "stalls" in kwargs["input"]:
-            raise openai.APITimeoutError(request=httpx.Request("POST", "https://azure.example"))
+            raise openai.APITimeoutError(request=httpx2.Request("POST", "https://azure.example"))
         return answer(results=[{"title": "Found", "url": "https://found.example"}])
 
     azure["replies"] = reply

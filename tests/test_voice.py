@@ -1,7 +1,7 @@
 """Dictation: the recording written down in English by Azure OpenAI's Whisper
 (its translation route), through POST /transcribe, and nothing else of it kept."""
 
-import httpx
+import httpx2
 import openai
 import pytest
 from fastapi.testclient import TestClient
@@ -21,18 +21,18 @@ def azure(monkeypatch):
     monkeypatch.setenv("AZURE_OPENAI_API_KEY", "key")
     monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://cofounder.openai.azure.com/")
     monkeypatch.delenv(voice.DEPLOYMENT, raising=False)
-    sent: list[httpx.Request] = []
+    sent: list[httpx2.Request] = []
     answers: dict[str, tuple[int, dict]] = {}
 
-    def handle(request: httpx.Request) -> httpx.Response:
+    def handle(request: httpx2.Request) -> httpx2.Response:
         sent.append(request)
         status, body = answers.get(request.url.path.rsplit("/", 1)[-1], (200, {"text": " Launch at $99 a month. "}))
-        return httpx.Response(status, json=body)
+        return httpx2.Response(status, json=body)
 
     def client_():
         return openai.AzureOpenAI(api_key="key", azure_endpoint="https://cofounder.openai.azure.com/",
                                   api_version=voice.API_VERSION, max_retries=0,
-                                  http_client=httpx.Client(transport=httpx.MockTransport(handle)))
+                                  http_client=httpx2.Client(transport=httpx2.MockTransport(handle)))
 
     monkeypatch.setattr(voice, "_client", client_)
     return sent, answers

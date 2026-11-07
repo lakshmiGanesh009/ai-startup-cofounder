@@ -50,7 +50,7 @@ def fred_api(searches: dict[str, list[dict]], data: dict[str, tuple[dict, list[t
         found = data.get(params.get("series_id", ""))
         if path == "series":
             return httpx.Response(200, json={"seriess": [found[0]] if found else []})
-        return httpx.Response(200, json={"observations": [{"date": day, "value": value} for day, value in found[1]]})
+        return httpx.Response(200, json={"observations": [{"date": day, "value": value} for day, value in (found[1] if found else [])]})
 
     return httpx.MockTransport(handle)
 

@@ -121,7 +121,8 @@ def _docx(data: bytes) -> Extracted:
         text = paragraph.text.strip()
         if not text:
             continue
-        if (paragraph.style.name or "").lower().startswith(("heading", "title")):
+        style = paragraph.style.name if paragraph.style is not None else None
+        if (style or "").lower().startswith(("heading", "title")):
             heading = text[:80]
         blocks.append((f"section “{heading}”", text))
     for number, table in enumerate(document.tables, start=1):
@@ -134,13 +135,15 @@ def _docx(data: bytes) -> Extracted:
 
 def _pptx(data: bytes) -> Extracted:
     from pptx import Presentation
+    from pptx.shapes.autoshape import Shape
+    from pptx.shapes.graphfrm import GraphicFrame
 
     deck = Presentation(io.BytesIO(data))
     blocks = []
     for number, slide in enumerate(deck.slides, start=1):
-        texts = [shape.text_frame.text for shape in slide.shapes if shape.has_text_frame]
+        texts = [shape.text_frame.text for shape in slide.shapes if isinstance(shape, Shape) and shape.has_text_frame]
         for shape in slide.shapes:
-            if shape.has_table:
+            if isinstance(shape, GraphicFrame) and shape.has_table:
                 texts.append("\n".join(" | ".join(cell.text for cell in row.cells) for row in shape.table.rows))
         if slide.has_notes_slide and slide.notes_slide.notes_text_frame is not None:
             notes = slide.notes_slide.notes_text_frame.text.strip()

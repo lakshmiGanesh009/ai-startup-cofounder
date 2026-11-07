@@ -70,9 +70,11 @@ def test_slides_and_their_notes_are_read_one_slide_at_a_time():
     deck = Presentation()
     for title, notes in (("The problem", "Clinics lose follow-ups."), ("The plan", "")):
         slide = deck.slides.add_slide(deck.slide_layouts[5])
-        slide.shapes.title.text = title
+        heading, notes_frame = slide.shapes.title, slide.notes_slide.notes_text_frame
+        assert heading is not None and notes_frame is not None
+        heading.text = title
         if notes:
-            slide.notes_slide.notes_text_frame.text = notes
+            notes_frame.text = notes
     box = deck.slides[1].shapes.add_textbox(Inches(1), Inches(2), Inches(4), Inches(1))
     box.text_frame.text = "Pilot with 5 clinics."
     buffer = io.BytesIO()
@@ -87,6 +89,7 @@ def test_slides_and_their_notes_are_read_one_slide_at_a_time():
 def test_a_spreadsheet_is_read_in_rows_by_sheet():
     book = Workbook()
     sheet = book.active
+    assert sheet is not None
     sheet.title = "Revenue"
     sheet.append(["Year", "Customers", "Revenue"])
     for year in range(1, 46):

@@ -19,13 +19,15 @@ import sys
 import uuid
 from pathlib import Path
 
+from langchain_core.runnables import RunnableConfig
+
 import judge
 import tracing
 from agents.chief_of_staff import STRATEGY_WORDS
 from agents.specialist import GAP_PREFIX
 from graph import build_graph
 from llm import EFFORTS, LLM_ERRORS, reasoning
-from state import RequestContext
+from state import RequestContext, RequestInput
 
 DATASET = "cofounder-scenarios"
 SCENARIOS = Path(__file__).parent / "scenarios"
@@ -53,10 +55,10 @@ def sync_dataset(langfuse) -> int:
 def run_team(item, efforts: dict[str, str]) -> dict:
     """One evaluation of a scenario, as the API runs it; what the evaluators read."""
     data = item.input
-    state = {"request": data["prompt"]}
+    state: RequestInput = {"request": data["prompt"]}
     if data.get("context"):
         state["context"] = RequestContext(**data["context"])
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
     with tracing.handled(), reasoning(**efforts):
         result = build_graph().invoke(state, config)
     history = result.get("review_history") or []

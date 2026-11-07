@@ -159,7 +159,7 @@ def test_error_names_the_missing_openai_key(capture_models):
 
 
 def test_the_monitor_counts_the_providers_model_calls_and_why_one_failed():
-    import httpx
+    import httpx2
     import openai
     from langchain_core.messages import AIMessage
 
@@ -181,7 +181,7 @@ def test_the_monitor_counts_the_providers_model_calls_and_why_one_failed():
     llm.Counted(Replying(replied), "azure").invoke("hello")
     llm.Counted(Replying(replied), "azure").with_structured_output(dict, include_raw=True).invoke("again")
     refused = openai.AuthenticationError(
-        "Error code: 401", response=httpx.Response(401, request=httpx.Request("POST", "https://azure.example")),
+        "Error code: 401", response=httpx2.Response(401, request=httpx2.Request("POST", "https://azure.example")),
         body={"code": "401", "message": "Access denied due to invalid subscription key."})
     with pytest.raises(openai.AuthenticationError):
         llm.Counted(Replying(error=refused), "azure").invoke("hello")

@@ -32,6 +32,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from mcp import Client
 from mcp.client.stdio import StdioServerParameters, get_default_environment
 from mcp.client.streamable_http import streamable_http_client
+from mcp.types import TextContent
 from pydantic import BaseModel, Field
 
 from agents.chief_of_staff import structured_invoke
@@ -96,7 +97,7 @@ SERVERS: dict[str, Callable[[], Any]] = {"fred": _fred, "tavily": _tavily}
 async def _call(client: Client, tool: str, arguments: dict) -> Any:
     """A tool's answer: its structured content if it has some, else its text."""
     result = await client.call_tool(tool, arguments, read_timeout_seconds=LOOKUP_TIMEOUT)
-    text = "\n".join(part.text for part in result.content if getattr(part, "text", None))
+    text = "\n".join(part.text for part in result.content if isinstance(part, TextContent) and part.text)
     if result.is_error:
         raise LookupFailed(text or f"{tool} failed.")
     data = result.structured_content

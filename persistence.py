@@ -19,12 +19,13 @@ import logging
 import queue
 import threading
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, LiteralString, cast
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
+from psycopg import AsyncConnection, Connection
 from psycopg.conninfo import conninfo_to_dict
-from psycopg.rows import dict_row
+from psycopg.rows import DictRow, dict_row
 from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool, ConnectionPool, PoolTimeout
 
@@ -51,7 +52,7 @@ MIGRATION_LOCK = 7_402_311
 
 # This app's tables, one list of statements a version; LangGraph's checkpointer
 # keeps its own. A version once released is never edited: add another.
-MIGRATIONS: list[list[str]] = [
+MIGRATIONS: list[list[LiteralString]] = [
     [
         """CREATE TABLE reports (
             session_id text PRIMARY KEY,
@@ -94,14 +95,19 @@ def where(url: str) -> str:
     return f"{parts.get('host', 'localhost')}:{parts.get('port', 5432)}/{parts.get('dbname', '')}"
 
 
-def _stored(row: dict) -> Stored:
+# The pools' connections, which give each row as a dict (row_factory=dict_row).
+Pool = ConnectionPool[Connection[DictRow]]
+AsyncPool = AsyncConnectionPool[AsyncConnection[DictRow]]
+
+
+def _stored(row: DictRow) -> Stored:
     return Stored(SessionResults.model_validate(row["results"]), Report.model_validate(row["report"]))
 
 
 class PostgresReports:
     """The reports in PostgreSQL, one row a session."""
 
-    def __init__(self, pool: ConnectionPool):
+    def __init__(self, pool: Pool):
         self.pool = pool
 
     def get(self, session_id: str) -> Stored | None:
@@ -168,7 +174,7 @@ class PostgresReports:
 class PostgresUploads:
     """The founder's uploads in PostgreSQL; the newest KEEP_UPLOADS are kept."""
 
-    def __init__(self, pool: ConnectionPool):
+    def __init__(self, pool: Pool):
         self.pool = pool
 
     def add(self, upload: Upload) -> None:
@@ -199,7 +205,7 @@ class MonitorArchive:
     TRIM_EVERY = 500  # rows written between trims
     BATCH = 200
 
-    def __init__(self, pool: ConnectionPool):
+    def __init__(self, pool: Pool):
         self.pool = pool
         self._queue: queue.SimpleQueue = queue.SimpleQueue()
         self._thread: threading.Thread | None = None
@@ -259,7 +265,10 @@ class MonitorArchive:
                 self._since_trim += len(items)
                 if self._since_trim >= self.TRIM_EVERY:
                     self._since_trim = 0
-                    for table, keep in (("monitor_runs", self.KEEP_RUNS), ("monitor_events", self.KEEP_EVENTS)):
+                    trims: tuple[tuple[LiteralString, int], ...] = (
+                        ("monitor_runs", self.KEEP_RUNS), ("monitor_events", self.KEEP_EVENTS),
+                    )
+                    for table, keep in trims:
                         cur.execute(
                             f"DELETE FROM {table} WHERE id <= (SELECT id FROM {table} ORDER BY id DESC OFFSET %s LIMIT 1)",
                             (keep,),
@@ -308,23 +317,23 @@ class PostgresStorage:
         # The reports and the history are used from worker threads, on a pool
         # of their own; LangGraph's saver and its async pool belong to the event
         # loop that opens them, so open() makes them.
-        self.pool = ConnectionPool(
+        self.pool = cast(Pool, ConnectionPool(
             url, open=False, min_size=1, max_size=5, name="reports",
             kwargs={"autocommit": True, "row_factory": dict_row},
-        )
+        ))
         self.reports = PostgresReports(self.pool)
         self.uploads = PostgresUploads(self.pool)
-        self.archive: MonitorArchive | None = MonitorArchive(self.pool)
-        self.async_pool: AsyncConnectionPool | None = None
+        self.archive = MonitorArchive(self.pool)
+        self.async_pool: AsyncPool | None = None
         self.checkpointer: AsyncPostgresSaver | None = None
 
     async def open(self) -> None:
         """Connect, bring the tables up to date and start the history's writer.
         Raises StorageUnavailable when the database cannot be reached."""
-        self.async_pool = AsyncConnectionPool(
+        self.async_pool = cast(AsyncPool, AsyncConnectionPool(
             self.url, open=False, min_size=1, max_size=10, name="checkpoints",
             kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
-        )
+        ))
         try:
             await self.async_pool.open(wait=True, timeout=OPEN_TIMEOUT)
             await asyncio.to_thread(self.pool.open, True, OPEN_TIMEOUT)
@@ -349,8 +358,9 @@ class PostgresStorage:
                 " (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
             )
             done = conn.execute("SELECT coalesce(max(version), -1) AS version FROM cofounder_migrations").fetchone()
+            applied = done["version"] if done else -1  # the aggregate always gives one row
             for version, statements in enumerate(MIGRATIONS):
-                if version <= done["version"]:
+                if version <= applied:
                     continue
                 for statement in statements:
                     conn.execute(statement)

@@ -2,7 +2,7 @@
 
 import json
 
-import httpx
+import httpx2
 import openai
 from fastapi.testclient import TestClient
 
@@ -143,7 +143,7 @@ def test_without_a_model_the_stream_says_so():
 
 def test_a_failed_plan_ends_the_stream_with_its_reason(fake_llm):
     def fail(prompt):
-        raise openai.APIConnectionError(request=httpx.Request("POST", "https://llm.example"))
+        raise openai.APIConnectionError(request=httpx2.Request("POST", "https://llm.example"))
 
     fake_llm._plan_for = fail
 

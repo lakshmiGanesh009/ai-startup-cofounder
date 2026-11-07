@@ -7,6 +7,8 @@ import asyncio
 import json
 import logging
 import sys
+from collections.abc import AsyncGenerator
+from typing import cast
 
 import httpx
 import pytest
@@ -137,7 +139,7 @@ def test_an_unexpected_error_answers_500_with_the_request_id(fake_llm, monkeypat
 def test_a_stream_the_browser_leaves_is_recorded(fake_llm):
     async def leave():
         response = await main.evaluate_stream(main.EvaluateRequest(prompt="An idea."))
-        events = response.body_iterator
+        events = cast(AsyncGenerator[str, None], response.body_iterator)  # main's events()
         assert (await anext(events)).startswith("event: start")
         await events.aclose()
 

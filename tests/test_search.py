@@ -123,4 +123,4 @@ def test_the_monitor_counts_tavilys_searches_and_the_credits_they_spend(monkeypa
     (tavily,) = monitor.usage()
     used = tavily.services[0]
     assert (tavily.provider, used.service, used.calls, used.failed, used.credits) == ("tavily", "web search", 2, 1, 1)
-    assert "API key" in used.last_failure
+    assert "API key" in (used.last_failure or "")

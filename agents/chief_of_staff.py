@@ -52,6 +52,7 @@ def structured_invoke(schema, messages, tracker, role=CHIEF, prompt: str | None 
     linked to the prompt called `prompt` (prompt_library.py).
     """
     model = get_llm(role).with_structured_output(schema, include_raw=True)
+    problem: object = None  # why the last attempt gave nothing usable
     for _ in range(2):
         try:
             with tracing.prompt(prompt) if prompt else nullcontext():

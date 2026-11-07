@@ -1,6 +1,7 @@
 import asyncio
 
 import httpx
+import httpx2
 import openai
 import pytest
 from fastapi.testclient import TestClient
@@ -81,7 +82,7 @@ def test_other_origins_are_not_allowed():
 
 def test_a_failed_llm_call_returns_502_not_500(fake_llm):
     def unreachable(prompt):
-        raise openai.APIConnectionError(request=httpx.Request("POST", "https://llm.example"))
+        raise openai.APIConnectionError(request=httpx2.Request("POST", "https://llm.example"))
 
     fake_llm._plan_for = unreachable
 

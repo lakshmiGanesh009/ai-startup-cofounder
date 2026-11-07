@@ -48,11 +48,11 @@ class DocumentSettings(BaseModel):
     (document.py): the currency of every amount, the system its measurements
     were last converted to, who it is from, and the sections left out."""
 
-    currency: str = Field(DEFAULT, description="The ISO 4217 code of every amount in the document.")
+    currency: str = Field(default=DEFAULT, description="The ISO 4217 code of every amount in the document.")
     units: Literal["metric", "imperial"] | None = Field(
-        None, description="The system the measurements were last converted to; None while as written."
+        default=None, description="The system the measurements were last converted to; None while as written."
     )
-    prepared_by: str = Field("AI Startup Co-Founder Team", min_length=1, max_length=80)
+    prepared_by: str = Field(default="AI Startup Co-Founder Team", min_length=1, max_length=80)
     hidden: list[str] = Field(
         default_factory=list, max_length=30,
         description="Keys of the team report's sections left out of the document and its PDF.",
@@ -79,17 +79,17 @@ class Choices(BaseModel):
     research facts kept, the documents, and how the team was run."""
 
     brief: str = Field(description="The founder's first request, as written.")
-    follow_up: str | None = Field(None, description="The latest follow-up, when the report answers one.")
+    follow_up: str | None = Field(default=None, description="The latest follow-up, when the report answers one.")
     target_market: str | None = None
     constraints: str | None = None
     competitive_landscape: str | None = None
     answers: list[Answer] = Field(default_factory=list, description="The founder's answers to the Chief of Staff's questions.")
-    research: Research | None = Field(None, description="The facts from the web research the founder kept, with their sources.")
+    research: Research | None = Field(default=None, description="The facts from the web research the founder kept, with their sources.")
     documents: list[str] = Field(default_factory=list, description='The founder\'s documents, a line each ("D1: plan.pdf (PDF, 12 pages)").')
-    deep_research: bool | None = Field(None, description="Whether the team researched each area on the web first; None when not known.")
-    research_provider: str | None = Field(None, description="Where that research ran: azure or tavily.")
+    deep_research: bool | None = Field(default=None, description="Whether the team researched each area on the web first; None when not known.")
+    research_provider: str | None = Field(default=None, description="Where that research ran: azure or tavily.")
     efforts: dict[str, str] = Field(default_factory=dict, description='The reasoning efforts it ran at, by role ("specialist", "chief"); empty when not known.')
-    complete: bool = Field(True, description="False for a report built before its choices were kept: only what its results hold.")
+    complete: bool = Field(default=True, description="False for a report built before its choices were kept: only what its results hold.")
 
     @classmethod
     def from_state(cls, state: dict, documents: list[str], efforts: dict[str, str] | None = None) -> "Choices":
@@ -138,7 +138,7 @@ class SessionResults(BaseModel):
             documents = []
         return cls(
             documents=documents,
-            worked_from=WorkedFrom(uploads=context.uploads, reports=context.reports) if documents else WorkedFrom(),
+            worked_from=WorkedFrom(uploads=context.uploads, reports=context.reports) if context and documents else WorkedFrom(),
             venture=state.get("venture") or state["request"],
             objective=state["plan"].objective,
             context=context.as_prompt() if context else "",
@@ -205,7 +205,7 @@ class VersionSummary(BaseModel):
     change: str | None
     has_proposal: bool
     current: bool
-    changed: int | None = Field(None, description="How many fields differ from the version before it; None when "
+    changed: int | None = Field(default=None, description="How many fields differ from the version before it; None when "
                                 "there is none kept to compare with.")
     areas: list[str] = Field(default_factory=list, description='The parts of the report those changes are in, '
                              'once each: "Strategy", "Financial plan", "Currency".')
@@ -240,18 +240,18 @@ class ReportSummary(BaseModel):
     edited: bool
     outdated: bool
     updated_at: datetime
-    objective: str = Field("", description="The decision the team was asked to make.")
-    project_name: str | None = Field(None, description="The proposal's name for the project, once written.")
-    verdict: Verdict | None = Field(None, description="The recommendation: the proposal's, else the strategy's.")
+    objective: str = Field(default="", description="The decision the team was asked to make.")
+    project_name: str | None = Field(default=None, description="The proposal's name for the project, once written.")
+    verdict: Verdict | None = Field(default=None, description="The recommendation: the proposal's, else the strategy's.")
     currency: str = DEFAULT
     prepared_by: str = "AI Startup Co-Founder Team"
     team: list[str] = Field(default_factory=list, description="The specialists whose reports it holds.")
     sections: int = 0
-    documents: int = Field(0, description="The founder's files and earlier reports it worked from.")
+    documents: int = Field(default=0, description="The founder's files and earlier reports it worked from.")
     figures: Figures | None = None
-    checks: int = Field(0, description="How many of the proposal's figures disagree.")
-    change: str | None = Field(None, description="What made this version.")
-    brief: str = Field("", description="The report in a few lines, as markdown: the proposal's recommendation and "
+    checks: int = Field(default=0, description="How many of the proposal's figures disagree.")
+    change: str | None = Field(default=None, description="What made this version.")
+    brief: str = Field(default="", description="The report in a few lines, as markdown: the proposal's recommendation and "
                        "financial case, else the opening of the strategy.")
     key_figures: list[KeyFigure] = Field(default_factory=list, description="Figures to see at a glance: the "
                                          "proposal's, calculated; else the ones the strategy and Finance name.")
@@ -516,9 +516,9 @@ def named_figures(*texts: str) -> list[KeyFigure]:
     return [figure for _, _, figure in sorted(best, key=lambda entry: entry[1])]
 
 
-def _proposal_figures(report: Report) -> list[KeyFigure]:
+def _proposal_figures(report: Report, proposal: Proposal) -> list[KeyFigure]:
     """The proposal's own figures, calculated from its financial plan."""
-    plan = report.proposal.financial
+    plan = proposal.financial
     code = report.settings.currency
     figures = [
         KeyFigure(label="Price", value=f"{money.full(plan.price_per_customer_month, code)} a month"),
@@ -549,7 +549,7 @@ def summary(report: Report) -> ReportSummary:
         if metrics else None,
         checks=len(report.checks),
         brief=_brief(report),
-        key_figures=_proposal_figures(report) if report.proposal else named_figures(
+        key_figures=_proposal_figures(report, report.proposal) if report.proposal else named_figures(
             *(section.body for key in (STRATEGY, "finance") for section in report.sections if section.key == key)
         ),
     )

@@ -63,6 +63,7 @@ def test_a_brief_is_researched_then_read_by_the_chief_of_staff(fake_llm, web):
     assert web == [["market size", "prices", "rules", "buyers"]]
     assert prepared.queries == ["market size", "prices", "rules", "buyers"]
     # Only cited, real results are kept, numbered in order of first citation.
+    assert prepared.research is not None
     assert [(f.point, f.sources) for f in prepared.research.findings] == [
         ("The market grows 8% a year.", [1, 2]),
         ("147,000 primary care physicians.", [3]),
@@ -239,5 +240,6 @@ def test_at_most_eight_facts_are_kept_and_empty_research_says_nothing(fake_llm, 
 
     prepared = prepare_brief("An idea.", None, None)
 
+    assert prepared.research is not None
     assert [f.point for f in prepared.research.findings] == [f"Fact {n}." for n in range(1, 9)]
-    assert RequestContext(research={"findings": [], "sources": []}).as_prompt() == ""
+    assert RequestContext.model_validate({"research": {"findings": [], "sources": []}}).as_prompt() == ""

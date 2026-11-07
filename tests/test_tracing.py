@@ -40,6 +40,7 @@ def langfuse(monkeypatch):
             versions = stored.get(path.removeprefix("/api/public/v2/prompts/"))
             return httpx.Response(200, json=versions[-1]) if versions else httpx.Response(404, json={"message": "Prompt not found"})
         if path == "/api/public/v2/prompts" and request.method == "POST":
+            assert body is not None
             versions = stored.setdefault(body["name"], [])
             versions.append({**body, "version": len(versions) + 1, "type": "text", "tags": body.get("tags") or [],
                              "labels": body.get("labels") or [], "config": body.get("config") or {}})
@@ -80,7 +81,10 @@ def test_without_its_keys_nothing_is_traced_and_nothing_leaves(fake_llm):
 
 
 def test_langchain_runs_inside_a_trace_are_traced_without_being_passed_a_handler(langfuse):
-    double = RunnableLambda(lambda value: value * 2, name="double")
+    def twice(value: int) -> int:
+        return value * 2
+
+    double = RunnableLambda(twice, name="double")
     with tracing.trace("work", session_id="session-1", tags=["test"]) as run:
         assert double.invoke(21) == 42
     assert double.invoke(1) == 2  # outside a trace: not traced
@@ -139,11 +143,13 @@ def test_the_prompts_are_registered_once_and_again_only_when_the_code_changes(la
 
 def test_a_call_is_linked_to_the_version_of_its_prompt(langfuse):
     tracing.register_prompts()
+    client = tracing.client()
+    assert client is not None
     with tracing.trace("work"):
         with tracing.prompt("chief/plan"):
-            tracing.client().start_observation(as_type="generation", name="call").end()
+            client.start_observation(as_type="generation", name="call").end()
         with tracing.prompt("not/a-prompt"):  # not registered: not linked
-            tracing.client().start_observation(as_type="generation", name="other").end()
+            client.start_observation(as_type="generation", name="other").end()
     spans = _spans(langfuse)
     linked = {key: value for key, value in spans["call"].attributes.items() if "prompt" in key}
     assert "chief/plan" in linked.values() and 1 in linked.values()

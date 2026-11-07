@@ -11,9 +11,11 @@ import sys
 import uuid
 from pathlib import Path
 
+from langchain_core.runnables import RunnableConfig
+
 import tracing
 from graph import build_graph
-from state import RequestContext
+from state import RequestContext, RequestInput
 
 
 def _print_stage(title: str) -> None:
@@ -52,10 +54,10 @@ def _print_result(result: dict) -> None:
 def main(path: str) -> None:
     scenario = json.loads(open(path, encoding="utf-8").read())
     graph = build_graph()
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    config: RunnableConfig = {"configurable": {"thread_id": str(uuid.uuid4())}}
 
     context = scenario.get("context")
-    state = {"request": scenario["prompt"]}
+    state: RequestInput = {"request": scenario["prompt"]}
     if context:
         state["context"] = RequestContext(**context)
 

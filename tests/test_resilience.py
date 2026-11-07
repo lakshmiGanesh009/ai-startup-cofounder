@@ -1,6 +1,6 @@
 """Tests for metrics, speed and graceful failure (Step 10)."""
 
-import httpx
+import httpx2
 import openai
 import pytest
 from langchain_core.messages import AIMessage
@@ -14,7 +14,7 @@ from metrics import track
 from state import Conflict, DelegationPlan, ReviewResult, SpecialistCritique, Task
 
 APPROVED = ReviewResult(approved=True, score=5, feedback="")
-OFFLINE = openai.APIConnectionError(request=httpx.Request("POST", "https://llm.example"))
+OFFLINE = openai.APIConnectionError(request=httpx2.Request("POST", "https://llm.example"))
 
 
 class _ScriptedModel:

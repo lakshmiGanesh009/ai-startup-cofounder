@@ -21,6 +21,7 @@ agents are told and never change (currency.py converts it).
 """
 
 import logging
+from collections.abc import Sequence
 from concurrent.futures import FIRST_COMPLETED, wait
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -325,7 +326,7 @@ def _costs_to_cover(parts: dict) -> str:
 
 
 def _prompt(part: str, background: str, parts: dict, own, instruction: str,
-            changed: list[str], issues: list[str] = ()) -> list:
+            changed: list[str], issues: Sequence[str] = ()) -> list:
     """The messages for writing `part`; `own` is its current version, if any."""
     human = background
     inputs = [key for key in INPUTS.get(part, ()) if key in parts]

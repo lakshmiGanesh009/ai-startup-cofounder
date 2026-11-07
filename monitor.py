@@ -79,8 +79,8 @@ class Event(BaseModel):
     kind: EventKind
     source: str = Field(description="The step, endpoint or module it came from.")
     message: str
-    session: str | None = Field(None, description="The first 8 characters of the session's id.")
-    request: str | None = Field(None, description="The ID of the request it happened in (X-Request-ID).")
+    session: str | None = Field(default=None, description="The first 8 characters of the session's id.")
+    request: str | None = Field(default=None, description="The ID of the request it happened in (X-Request-ID).")
 
 
 class Run(BaseModel):
@@ -97,7 +97,7 @@ class Run(BaseModel):
     reviewed: int = 0
     approved: int = 0
     conflicts: int = 0
-    research: str | None = Field(None, description="Who did the deep research, if any.")
+    research: str | None = Field(default=None, description="Who did the deep research, if any.")
     searches: int = 0
     credits: int = 0
     nodes: dict[str, NodeMetric] = Field(default_factory=dict)
@@ -178,10 +178,10 @@ class ServiceUse(BaseModel):
     failed: int = 0
     tokens_in: int = 0
     tokens_out: int = 0
-    seconds: float = Field(0, description="Time in its calls.")
-    credits: int = Field(0, description="Credits its calls spent (Tavily's).")
+    seconds: float = Field(default=0, description="Time in its calls.")
+    credits: int = Field(default=0, description="Credits its calls spent (Tavily's).")
     last_at: datetime | None = None
-    last_failure: str | None = Field(None, description="Why its last failed call failed.")
+    last_failure: str | None = Field(default=None, description="Why its last failed call failed.")
     last_failure_at: datetime | None = None
 
 
@@ -222,13 +222,13 @@ def failure_reason(error: BaseException) -> str:
 class Monitoring(BaseModel):
     started_at: datetime
     kept_in: Literal["memory", "postgres"] = Field(
-        "memory", description="Where the latest evaluations and events are kept: lost on a restart, or in PostgreSQL."
+        default="memory", description="Where the latest evaluations and events are kept: lost on a restart, or in PostgreSQL."
     )
     health: Health
-    running: int = Field(0, description="Evaluations running now.")
+    running: int = Field(default=0, description="Evaluations running now.")
     totals: Totals
     evaluation_seconds: Spread | None = Field(
-        None, description="How long the evaluations finished since the API started took; none until one has."
+        default=None, description="How long the evaluations finished since the API started took; none until one has."
     )
     nodes: list[NodeStats]
     providers: list[ProviderUse] = Field(
@@ -305,7 +305,7 @@ class Monitor:
             self._totals = Totals()
             self._nodes: dict[str, NodeStats] = {}
             self._samples: dict[str, deque[float]] = {}
-            self._usage: dict[tuple[str, str], ServiceUse] = {}
+            self._usage: dict[tuple[Provider, Service], ServiceUse] = {}
             self._running = 0
             self.metrics = Metrics()
 
@@ -415,7 +415,7 @@ class Monitor:
             raise
         self._used(provider, service, call, time.monotonic() - started, None)
 
-    def _used(self, provider: str, service: str, call: Call, seconds: float, error: BaseException | None) -> None:
+    def _used(self, provider: Provider, service: Service, call: Call, seconds: float, error: BaseException | None) -> None:
         with self._lock:
             use = self._usage.setdefault((provider, service), ServiceUse(service=service))
             use.calls += 1
@@ -441,7 +441,7 @@ class Monitor:
             return self._providers()
 
     def _providers(self) -> list[ProviderUse]:
-        providers: dict[str, ProviderUse] = {}
+        providers: dict[Provider, ProviderUse] = {}
         for (provider, service), use in sorted(
             self._usage.items(), key=lambda item: (PROVIDER_ORDER.index(item[0][0]), SERVICE_ORDER.index(item[0][1]))
         ):

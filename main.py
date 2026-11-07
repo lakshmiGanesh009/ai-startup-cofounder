@@ -6,10 +6,12 @@ import threading
 import time
 import uuid
 from collections import Counter
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from operator import attrgetter
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, cast
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, Response
@@ -18,6 +20,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from prometheus_client.exposition import choose_encoder
 from pydantic import BaseModel, Field, field_validator
 
@@ -101,7 +105,7 @@ from security import (
     check_context,
     check_sections,
 )
-from state import DeepResearch, EconomicData, Flag, NodeMetric, RequestContext, Resolution, ReviewResult
+from state import DeepResearch, EconomicData, Flag, NodeMetric, RequestContext, RequestInput, Resolution, ReviewResult
 
 SERVICE_NAME = "AI Startup Co-Founder Team"
 SCENARIO_DIR = Path(__file__).resolve().parent / "scenarios"
@@ -173,8 +177,8 @@ class Reasoning(BaseModel):
     configured effort. Higher efforts give more considered answers but take
     longer: at "high" an evaluation takes 5 to 10 minutes. Azure OpenAI only."""
 
-    specialist: Effort | None = Field(None, description="The four specialists, and their critiques.")
-    chief: Effort | None = Field(None, description="The Chief of Staff's plan, reviews, decisions and summaries.")
+    specialist: Effort | None = Field(default=None, description="The four specialists, and their critiques.")
+    chief: Effort | None = Field(default=None, description="The Chief of Staff's plan, reviews, decisions and summaries.")
 
 
 def _efforts(choice: Reasoning | None) -> dict:
@@ -197,16 +201,16 @@ SessionId = Annotated[str, InPath(pattern=SESSION_ID, description="The session's
 class EvaluateRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS)
     context: RequestContext | None = None
-    session_id: str | None = Field(None, pattern=SESSION_ID)
+    session_id: str | None = Field(default=None, pattern=SESSION_ID)
     reasoning: Reasoning | None = None
     deep_research: bool = Field(
-        False,
+        default=False,
         description="Research each assigned specialist's area and the main competitors on the web "
         "first: on Azure OpenAI about 20 s and a few dozen Bing searches; on Tavily 1-2 minutes and "
         "150-450 credits. A follow-up reuses its session's research.",
     )
     research_provider: providers.Provider | None = Field(
-        None, description="Where web research runs: azure (the default) or tavily, for demanding tasks."
+        default=None, description="Where web research runs: azure (the default) or tavily, for demanding tasks."
     )
 
     @field_validator("context")
@@ -224,17 +228,17 @@ class EvaluateResponse(BaseModel):
     resolutions: list[Resolution]
     metrics: dict[str, NodeMetric]
     final_strategy: str
-    research: DeepResearch | None = Field(None, description="The session's deep research, if any.")
+    research: DeepResearch | None = Field(default=None, description="The session's deep research, if any.")
     economic: EconomicData | None = Field(
-        None, description="The official figures the session looked up on FRED, if FRED is set up."
+        default=None, description="The official figures the session looked up on FRED, if FRED is set up."
     )
     guardrails: list[Flag] = Field(
         default_factory=list,
         description="Text that tried to instruct the agents, in the request or in the session's research: "
         "cut out of what the agents read.",
     )
-    trace_id: str | None = Field(None, description="The run's trace in Langfuse, when it is set up (tracing.py).")
-    trace_url: str | None = Field(None, description="Where to open that trace in Langfuse.")
+    trace_id: str | None = Field(default=None, description="The run's trace in Langfuse, when it is set up (tracing.py).")
+    trace_url: str | None = Field(default=None, description="Where to open that trace in Langfuse.")
 
 
 @app.get("/health")
@@ -272,7 +276,7 @@ class Scenario(BaseModel):
     title: str = Field(description="A short title to show for it.")
     prompt: str
     context: RequestContext | None = None
-    follow_up: str | None = Field(None, description="A follow-up to send after the first request.")
+    follow_up: str | None = Field(default=None, description="A follow-up to send after the first request.")
 
 
 @app.get("/scenarios", response_model=list[Scenario])
@@ -295,9 +299,9 @@ async def list_templates():
 
 class Feedback(BaseModel):
     session_id: str = Field(pattern=SESSION_ID)
-    trace_id: str | None = Field(None, pattern=r"^[0-9a-f]{32}$", description="The run's trace, from its response.")
+    trace_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$", description="The run's trace, from its response.")
     useful: bool = Field(description="Whether the founder found the strategy useful.")
-    comment: str = Field("", max_length=MAX_FIELD_CHARS)
+    comment: str = Field(default="", max_length=MAX_FIELD_CHARS)
 
 
 @app.post("/feedback", status_code=202)
@@ -385,7 +389,7 @@ def _providers(used: list[ProviderUse]) -> list[ProviderUse]:
         use = found.get(provider)
         if provider == "openai" and not on and not use:
             continue
-        latest = max((service for service in use.services if service.last_at), key=lambda service: service.last_at,
+        latest = max((service for service in use.services if service.last_at), key=attrgetter("last_at"),
                      default=None) if use else None
         failing = latest is not None and latest.last_failure_at == latest.last_at
         status = "not set up" if not on else "failing" if failing else standing
@@ -414,10 +418,10 @@ async def metrics(request: Request):
 class PrepareRequest(BaseModel):
     prompt: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS, description="The founder's brief.")
     context: RequestContext | None = None
-    template: str | None = Field(None, max_length=64, description="The template the brief was written from, by name.")
+    template: str | None = Field(default=None, max_length=64, description="The template the brief was written from, by name.")
     reasoning: Reasoning | None = None
     research_provider: providers.Provider | None = Field(
-        None, description="Where the web search runs: azure (the default) or tavily."
+        default=None, description="Where the web search runs: azure (the default) or tavily."
     )
 
     @field_validator("context")
@@ -468,7 +472,7 @@ async def prepare(request: PrepareRequest):
     return prepared
 
 
-def _documents_found(context: RequestContext | None, upload_ids: list[str] = (), report_ids: list[str] = ()) -> None:
+def _documents_found(context: RequestContext | None, upload_ids: Sequence[str] = (), report_ids: Sequence[str] = ()) -> None:
     """A 404 for a document a request names that is not there, before anything runs."""
     upload_ids = [*upload_ids, *(context.uploads if context else [])]
     report_ids = [*report_ids, *(context.reports if context else [])]
@@ -480,7 +484,7 @@ def _documents_found(context: RequestContext | None, upload_ids: list[str] = (),
         raise HTTPException(status_code=404, detail="One of the earlier reports is not there.") from error
 
 
-def _start(request: EvaluateRequest) -> tuple[str, dict, dict, list[Flag]]:
+def _start(request: EvaluateRequest) -> tuple[str, RequestInput, RunnableConfig, list[Flag]]:
     """The session, the graph's input and its config for one request, and what
     in the request tried to instruct the agents (guardrails.py)."""
     session_id = request.session_id or str(uuid.uuid4())
@@ -489,7 +493,7 @@ def _start(request: EvaluateRequest) -> tuple[str, dict, dict, list[Flag]]:
         scan(request.prompt, "your follow-up" if request.session_id else "your brief") + scan_context(request.context)
     )
     use = providers.chosen(request.research_provider)
-    state = {"request": request.prompt, "deep": request.deep_research and use is not None}
+    state: RequestInput = {"request": request.prompt, "deep": request.deep_research and use is not None}
     if use:
         state["research_provider"] = use
     if request.context:
@@ -673,7 +677,9 @@ async def evaluate_stream(request: EvaluateRequest):
 
         try:
             with reasoning(**_efforts(request.reasoning)), tracing.trace("evaluate", **_traced(request, session_id)) as run:
-                async for _, task in graph.astream(state, config, stream_mode=["tasks"]):
+                async for _, chunk in graph.astream(state, config, stream_mode=["tasks"]):
+                    # A task event: its "name", then its "input" as it starts, or its "result" or "error".
+                    task = cast(dict[str, Any], chunk)
                     node = task["name"]
                     if "input" in task:
                         runs[node] += 1
@@ -731,7 +737,7 @@ class ProposalRequest(BaseModel):
     version: int = Field(description="The report version the request was made from.")
     reasoning: Reasoning | None = None
     currency: str | None = Field(
-        None, description="For a new proposal: the currency to write it in (ISO 4217); else the report's."
+        default=None, description="For a new proposal: the currency to write it in (ISO 4217); else the report's."
     )
 
     @field_validator("currency")
@@ -745,7 +751,7 @@ class ProposalRequest(BaseModel):
 class ProposalRevision(ProposalRequest):
     instruction: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS, description="What to change, in the founder's words.")
     part: PartKey | None = Field(
-        None, description="The part to revise; the parts written from it follow. None for all."
+        default=None, description="The part to revise; the parts written from it follow. None for all."
     )
 
 
@@ -772,7 +778,7 @@ class TextRevision(BaseModel):
     version: int
     path: TextPath
     instruction: str = Field(min_length=1, max_length=MAX_PROMPT_CHARS)
-    passage: str | None = Field(None, max_length=MAX_FIELD_CHARS, description="Only this part of the text.")
+    passage: str | None = Field(default=None, max_length=MAX_FIELD_CHARS, description="Only this part of the text.")
     reasoning: Reasoning | None = None
 
 
@@ -780,7 +786,7 @@ class CurrencyChange(BaseModel):
     kind: Literal["currency"]
     to: str = Field(description="ISO 4217 code.")
     rate: float = Field(gt=0, lt=1e6, description="One unit of the document's currency, in `to`.")
-    relabel: bool = Field(False, description="Show the amounts in `to` without converting them.")
+    relabel: bool = Field(default=False, description="Show the amounts in `to` without converting them.")
 
 
 class UnitsChange(BaseModel):
@@ -887,7 +893,7 @@ async def delete_report(session_id: SessionId):
     files stay: another report may have worked from them."""
     bind_session(session_id)
     await run_in_threadpool(store.delete, session_id)
-    if graph.checkpointer is not None:
+    if isinstance(graph.checkpointer, BaseCheckpointSaver):
         await graph.checkpointer.adelete_thread(session_id)
     monitor.event("document", "reports", "Deleted a report, with its versions and the session's saved state.", session_id)
     return Response(status_code=204)

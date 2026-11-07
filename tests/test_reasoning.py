@@ -8,6 +8,7 @@ from state import (
     Conflict,
     DelegationPlan,
     RequestContext,
+    RequestInput,
     Resolution,
     SpecialistCritique,
     Task,
@@ -21,7 +22,7 @@ PLAN = DelegationPlan(
     ],
 )
 CONFLICT = Conflict(raised_by="finance", about="marketing", issue="$99 against $149.")
-REQUEST = {
+REQUEST: RequestInput = {
     "request": "Evaluate an AI scheduling tool.",
     "context": RequestContext(constraints="Under $15k to launch"),
 }

@@ -1,12 +1,12 @@
 """Tests for the review and refine loop (Step 6)."""
 
 from graph import build_graph
-from state import DelegationPlan, ReviewResult, Task
+from state import DelegationPlan, ReviewResult, SpecialistName, Task
 
 REVISE_MARKER = "asks you to revise"
 
 
-def _only(name: str) -> DelegationPlan:
+def _only(name: SpecialistName) -> DelegationPlan:
     return DelegationPlan(
         objective="Evaluate the request.",
         tasks=[Task(specialist=name, task=f"Handle {name}.")],

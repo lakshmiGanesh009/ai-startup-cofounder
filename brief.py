@@ -39,7 +39,7 @@ class TemplateField(BaseModel):
     key: str = Field(description="The name of its {placeholder} in the template's prompt.")
     label: str
     placeholder: str = ""
-    long: bool = Field(False, description="Whether the answer runs to a sentence or more.")
+    long: bool = Field(default=False, description="Whether the answer runs to a sentence or more.")
 
 
 class Template(BaseModel):
@@ -93,7 +93,7 @@ class BriefReview(BaseModel):
 
 class PreparedBrief(BaseModel):
     queries: list[str] = Field(description="The web searches that were run.")
-    provider: str | None = Field(None, description="Who searched the web: Azure OpenAI or Tavily.")
+    provider: str | None = Field(default=None, description="Who searched the web: Azure OpenAI or Tavily.")
     research: Research | None = Field(description="The facts found and their sources; None without any.")
     research_note: str | None = Field(description="Why there is no research, when there is none.")
     questions: list[Question]
@@ -166,7 +166,7 @@ def _renumbered(findings: list[Finding], hits: list[Hit]) -> Research | None:
             break
     if not kept:
         return None
-    sources = [Source(title=hits[n - 1].title, url=hits[n - 1].url) for n in sorted(order, key=order.get)]
+    sources = [Source(title=hits[n - 1].title, url=hits[n - 1].url) for n in sorted(order, key=order.__getitem__)]
     return Research(findings=kept, sources=sources)
 
 

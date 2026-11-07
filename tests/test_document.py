@@ -79,6 +79,7 @@ def test_a_rate_per_unit_converts_the_other_way():
 def test_the_pdf_font_draws_every_currency_symbol():
     font = TTFont(Path(__file__).resolve().parent.parent / "assets" / "fonts" / "DejaVuSans.ttf")
     glyphs = font.getBestCmap()
+    assert glyphs is not None
     missing = {code: char for code, c in CURRENCIES.items() for char in c.symbol if ord(char) not in glyphs}
     assert not missing
 
@@ -90,6 +91,7 @@ def test_a_currency_change_converts_every_figure_and_amount_and_the_metrics_foll
     draft = document.convert_currency(report, "EUR", 0.92)
 
     after = draft.report
+    assert after.proposal is not None and after.investment is not None
     assert after.settings.currency == "EUR"
     assert after.proposal.market.tam.value == round(SAMPLE.market.tam.value * 0.92, 2)
     assert after.proposal.financial.capex[0].amount == round(SAMPLE.financial.capex[0].amount * 0.92, 2)
@@ -109,6 +111,7 @@ def test_a_currency_change_converts_every_figure_and_amount_and_the_metrics_foll
 def test_relabelling_changes_the_currency_but_not_the_figures():
     draft = document.convert_currency(_report(), "GBP", 0.79, relabel=True)
     after = draft.report.proposal
+    assert after is not None
     assert after.financial == SAMPLE.financial.model_copy(update={"assumptions": after.financial.assumptions})
     assert after.market.tam.value == SAMPLE.market.tam.value
     assert draft.report.settings.currency == "GBP"
@@ -141,9 +144,11 @@ def test_each_change_is_listed_where_it_is():
 
 def test_text_is_replaced_and_redacted_everywhere_but_choices_are_not():
     whole = document.replace(_report(), "clinic", "practice")
+    assert whole.report.proposal is not None
     assert "per practice" in whole.report.sections[0].body
     assert "5 clinics" in whole.report.proposal.executive.recommendation  # a whole word only
     replaced = document.replace(_report(), "clinic", "practice", whole_words=False)
+    assert replaced.report.proposal is not None
     assert "5 practices" in replaced.report.proposal.executive.recommendation
     assert replaced.report.proposal.executive.verdict == SAMPLE.executive.verdict
 
@@ -170,6 +175,7 @@ def test_a_field_is_read_and_set_by_its_path():
     report = _report()
     assert document.text_at(report, "proposal.market.pricing_strategy") == SAMPLE.market.pricing_strategy
     changed = document.set_text(report, "proposal.risk.risks.0.mitigation", "Sign a BAA first.")
+    assert changed.proposal is not None
     assert changed.proposal.risk.risks[0].mitigation == "Sign a BAA first."
     with pytest.raises(KeyError):
         document.text_at(report, "proposal.market.nothing")

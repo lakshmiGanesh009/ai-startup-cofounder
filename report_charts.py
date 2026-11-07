@@ -9,10 +9,15 @@ for two, a light-to-dark blue ramp for ordered stages, and the status colours
 
 import math
 import re
+from collections.abc import Callable
+from typing import cast
 
 from fpdf import FPDF
 
 import currency
+
+# ROUND_CORNERS: fpdf2 2.8.9 annotates rect(round_corners=...) as a bool, but takes a tuple
+# of the corners to round too (its docstring says so), which is how the bars and cards use it.
 
 FONT = "DejaVu"
 
@@ -153,14 +158,14 @@ def callout(pdf: FPDF, label: str, text: str, accent: str, fill: str | None = No
     (bold with **...**)."""
     width = pdf.epw - 9
     _font(pdf, 9.5)
-    text_h = pdf.multi_cell(width, 5, text, markdown=True, dry_run=True, output="HEIGHT")
+    text_h = cast(float, pdf.multi_cell(width, 5, text, markdown=True, dry_run=True, output="HEIGHT"))
     height = text_h + 13
     room(pdf, height + 3)
     x, y = pdf.l_margin, pdf.get_y()
     pdf.set_fill_color(fill or tint(accent, 0.86))
     pdf.rect(x, y, pdf.epw, height, style="F", round_corners=True, corner_radius=2)
     pdf.set_fill_color(accent)
-    pdf.rect(x, y, 2.2, height, style="F", round_corners=("TOP_LEFT", "BOTTOM_LEFT"),
+    pdf.rect(x, y, 2.2, height, style="F", round_corners=("TOP_LEFT", "BOTTOM_LEFT"),  # pyright: ignore[reportArgumentType]  (see ROUND_CORNERS)
              corner_radius=2)
     _font(pdf, 10, "B")
     pdf.set_xy(x + 6, y + 3)
@@ -229,7 +234,7 @@ def hbars(pdf: FPDF, title: str, items: list[tuple[str, float]], x: float | None
         length = max(track * max(value, 0) / largest, 0.8)
         pdf.set_fill_color(color)
         pdf.rect(x, y + 4.4, length, 4, style="F",
-                 round_corners=("TOP_RIGHT", "BOTTOM_RIGHT") if length > 2 else False,
+                 round_corners=("TOP_RIGHT", "BOTTOM_RIGHT") if length > 2 else False,  # pyright: ignore[reportArgumentType]  (see ROUND_CORNERS)
                  corner_radius=1)
         _font(pdf, 7.5, "B", SECONDARY)
         _label(pdf, x + length + 1.5, y + 4.4, width - length - 1.5, 4, money(value))
@@ -312,7 +317,7 @@ def _legend(pdf: FPDF, x: float, y: float, entries: list[tuple[str, str]]) -> No
 
 
 def _value_axis(pdf: FPDF, left: float, top: float, width: float, height: float,
-                low: float, high: float) -> tuple[float, callable]:
+                low: float, high: float) -> tuple[float, Callable[[float], float]]:
     """Gridlines and labels for a value scale; returns the step and a function
     from a value to its y position."""
     step = _nice_step(high - low)
@@ -342,7 +347,7 @@ def _bar(pdf: FPDF, x: float, w: float, y_zero: float, y_value: float, color: st
         return
     ends = ("TOP_LEFT", "TOP_RIGHT") if y_value < y_zero else ("BOTTOM_LEFT", "BOTTOM_RIGHT")
     pdf.set_fill_color(color)
-    pdf.rect(x, top, w, height, style="F", round_corners=ends if height > 2 else False,
+    pdf.rect(x, top, w, height, style="F", round_corners=ends if height > 2 else False,  # pyright: ignore[reportArgumentType]  (see ROUND_CORNERS)
              corner_radius=1)
 
 
@@ -513,9 +518,9 @@ def risk_cards(pdf: FPDF, risks: list[tuple[str, str, str, str, str, str]]) -> N
     for rid, category, description, probability, impact, mitigation in risks:
         description, mitigation = plain(description), plain(mitigation)
         _font(pdf, 9, "B")
-        h_risk = pdf.multi_cell(inner, 4.4, description, dry_run=True, output="HEIGHT")
+        h_risk = cast(float, pdf.multi_cell(inner, 4.4, description, dry_run=True, output="HEIGHT"))
         _font(pdf, 8.5)
-        h_mit = pdf.multi_cell(inner, 4.2, f"Mitigation: {mitigation}", dry_run=True, output="HEIGHT")
+        h_mit = cast(float, pdf.multi_cell(inner, 4.2, f"Mitigation: {mitigation}", dry_run=True, output="HEIGHT"))
         height = 9 + h_risk + h_mit + 4
         room(pdf, height + 3)
         x, y = pdf.l_margin, pdf.get_y()
@@ -525,7 +530,7 @@ def risk_cards(pdf: FPDF, risks: list[tuple[str, str, str, str, str, str]]) -> N
         pdf.set_line_width(0.25)
         pdf.rect(x, y, pdf.epw, height, style="DF", round_corners=True, corner_radius=1.5)
         pdf.set_fill_color(color)
-        pdf.rect(x, y, 1.8, height, style="F", round_corners=("TOP_LEFT", "BOTTOM_LEFT"),
+        pdf.rect(x, y, 1.8, height, style="F", round_corners=("TOP_LEFT", "BOTTOM_LEFT"),  # pyright: ignore[reportArgumentType]  (see ROUND_CORNERS)
                  corner_radius=1.5)
         _font(pdf, 9, "B")
         pdf.set_xy(x + 5, y + 2.4)
@@ -555,9 +560,9 @@ def kpi_cards(pdf: FPDF, groups: list[tuple[str, list[tuple[str, str]]]]) -> Non
 
     def card_height(metric: str, target: str) -> float:
         _font(pdf, 8.5, "B")
-        h = pdf.multi_cell(inner, 4.2, metric, dry_run=True, output="HEIGHT")
+        h = cast(float, pdf.multi_cell(inner, 4.2, metric, dry_run=True, output="HEIGHT"))
         _font(pdf, 8)
-        return h + pdf.multi_cell(inner, 4, target, dry_run=True, output="HEIGHT") + 5
+        return h + cast(float, pdf.multi_cell(inner, 4, target, dry_run=True, output="HEIGHT")) + 5
 
     tallest = max((8 + sum(card_height(m, t) + 2.5 for m, t in kpis) for _, kpis in groups),
                   default=0)
@@ -578,7 +583,7 @@ def kpi_cards(pdf: FPDF, groups: list[tuple[str, list[tuple[str, str]]]]) -> Non
             pdf.set_line_width(0.25)
             pdf.rect(x, y, width, h, style="DF", round_corners=True, corner_radius=1.5)
             pdf.set_fill_color(color)
-            pdf.rect(x, y, 1.6, h, style="F", round_corners=("TOP_LEFT", "BOTTOM_LEFT"),
+            pdf.rect(x, y, 1.6, h, style="F", round_corners=("TOP_LEFT", "BOTTOM_LEFT"),  # pyright: ignore[reportArgumentType]  (see ROUND_CORNERS)
                      corner_radius=1.5)
             _font(pdf, 8.5, "B")
             pdf.set_xy(x + 4, y + 2.2)

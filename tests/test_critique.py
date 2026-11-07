@@ -85,9 +85,9 @@ def test_structured_outputs_can_only_name_the_four_specialists():
     # writes another way ("Finance specialist") cannot get through.
     assert set(get_args(SpecialistName)) == {role.name for role in SPECIALISTS}
     with pytest.raises(ValidationError):
-        Task(specialist="Finance specialist", task="Price it.")
+        Task.model_validate({"specialist": "Finance specialist", "task": "Price it."})
     with pytest.raises(ValidationError):
-        Resolution(conflict=CONFLICT, decision="Lower the price.", revise="Marketing")
+        Resolution.model_validate({"conflict": CONFLICT, "decision": "Lower the price.", "revise": "Marketing"})
     # Empty means no specialist has to revise.
     assert Resolution(conflict=CONFLICT, decision="Keep both.", revise="").revise == ""
 

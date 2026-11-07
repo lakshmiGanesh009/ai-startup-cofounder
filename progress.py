@@ -129,7 +129,7 @@ def _summary(node: str, update: dict, runs: int, given: dict) -> dict:
     return {"summary": "Done."}
 
 
-def summarize(node: str, update: dict, runs: int, given: dict | None = None) -> dict:
+def summarize(node: str, update: dict | None, runs: int, given: dict | None = None) -> dict:
     """An account of what `node` just did, from the state update it returned
     and the state it was `given`.
 

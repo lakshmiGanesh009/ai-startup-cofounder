@@ -7,7 +7,7 @@ name), the reviews, conflicts and resolutions, and per-node metrics.
 """
 
 import re
-from typing import Annotated, Literal, TypedDict
+from typing import Annotated, Literal, Required, TypedDict
 
 from pydantic import BaseModel, Field
 
@@ -192,8 +192,8 @@ class Figure(BaseModel):
     date: str
     value: float
     year_ago: float | None = None
-    change: str = Field("", description='How it moved over the year: "up 0.14 points", "up 3.0%".')
-    why: str = Field("", description="What the team reads it for.")
+    change: str = Field(default="", description='How it moved over the year: "up 0.14 points", "up 3.0%".')
+    why: str = Field(default="", description="What the team reads it for.")
     link: str
 
     @property
@@ -325,16 +325,32 @@ def _merge_metrics(current: dict, update: dict) -> dict:
     return merged
 
 
-class WorkflowState(TypedDict, total=False):
-    """The state that flows through the graph."""
+class RequestInput(TypedDict, total=False):
+    """What the graph is started with, for a first request or a follow-up in
+    the same session: the graph's input schema (graph.py). The nodes write the rest."""
 
-    request: str
+    request: Required[str]
+    context: RequestContext
+    deep: bool
+    research_provider: str
+
+
+class WorkflowState(TypedDict, total=False):
+    """The state that flows through the graph.
+
+    Every node can rely on the four Required keys: `request` comes with every
+    request, the plan step (always the first) writes `plan` and `assignments`,
+    and the specialists write `analyses` before any step that reads them. The
+    other keys may be missing, so they are read with .get().
+    """
+
+    request: Required[str]
     # The session's first request, kept so a follow-up knows what it refines.
     venture: str
     context: RequestContext
-    plan: DelegationPlan
-    assignments: dict[str, str]
-    analyses: Annotated[dict[str, str], _merge_analyses]
+    plan: Required[DelegationPlan]
+    assignments: Required[dict[str, str]]
+    analyses: Required[Annotated[dict[str, str], _merge_analyses]]
     reviews: dict[str, ReviewResult]
     revisions: dict[str, str]
     iteration: int

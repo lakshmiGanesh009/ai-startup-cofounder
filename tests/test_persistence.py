@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.runnables import RunnableConfig
 
 import persistence
 from graph import SERDE, build_graph
@@ -71,7 +72,7 @@ def test_the_tables_are_made_once_and_the_url_never_reaches_the_logs():
 
 
 def test_a_session_and_its_follow_up_survive_a_restart(fake_llm):
-    config = {"configurable": {"thread_id": "session-1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "session-1"}}
 
     async def evaluate(storage):
         return await build_graph(storage.checkpointer).ainvoke({"request": "An idea.", "deep": False}, config)

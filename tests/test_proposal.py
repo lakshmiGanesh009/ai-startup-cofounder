@@ -53,6 +53,7 @@ def test_the_investment_metrics_follow_from_the_cash_flows():
 
     # -10,000 - 3,200/1.1 + 7,200/1.21 + 24,000/1.331
     assert m.npv == pytest.approx(11_072.88, abs=0.01)
+    assert m.irr is not None
     assert _npv(m.irr, m.net_cash_flow) == pytest.approx(0, abs=5)
     # 6,000 still to recover after year 2; year 3 brings in 24,000, 2,000 a month.
     assert m.payback_months == pytest.approx(27.0)

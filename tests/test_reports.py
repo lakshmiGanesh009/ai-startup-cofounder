@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.runnables import RunnableConfig
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from guardrails import fence
 from llm import CHIEF, SPECIALIST
@@ -213,10 +215,14 @@ def test_the_founders_choices_are_kept_with_the_report(fake_llm, monkeypatch):
 
     # Results kept before the choices were: from the session's saved state, without
     # the efforts; without that either, only what the results hold.
-    main.store.backend.update(session_id, lambda stored: stored._replace(
-        results=stored.results.model_copy(update={"choices": None})))
+    def without_choices(stored):
+        assert stored is not None
+        return stored._replace(results=stored.results.model_copy(update={"choices": None}))
+
+    main.store.backend.update(session_id, without_choices)
     choices = client.get(f"/reports/{session_id}/choices").json()
     assert choices["target_market"] == "Small dental practices in Ohio" and choices["efforts"] == {} and choices["complete"]
+    assert isinstance(main.graph.checkpointer, BaseCheckpointSaver)
     main.graph.checkpointer.delete_thread(session_id)
     choices = client.get(f"/reports/{session_id}/choices").json()
     assert choices["brief"] == "A reminder service for dentists." and choices["research"] == research
@@ -230,7 +236,7 @@ def test_a_report_is_deleted_with_its_versions_and_the_sessions_saved_state(fake
     session_id = _evaluate()
     report = client.get(f"/reports/{session_id}").json()
     assert client.put(f"/reports/{session_id}", json=report).status_code == 200  # a second version
-    config = {"configurable": {"thread_id": session_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": session_id}}
     assert main.graph.get_state(config).values  # the team's saved state for the session
 
     assert client.delete(f"/reports/{session_id}").status_code == 204
@@ -526,6 +532,7 @@ def test_a_roadmap_phase_of_under_a_month_still_draws():
         update={"roadmap": [first.model_copy(update={"start_month": 1, "duration_months": 0}), *rest]}
     )
     report = _proposal_report()
+    assert report.proposal is not None
     report = report.model_copy(update={"proposal": report.proposal.model_copy(update={"technical": technical})})
 
     assert render_pdf(report).startswith(b"%PDF")

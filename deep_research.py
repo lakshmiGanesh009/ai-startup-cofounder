@@ -172,7 +172,10 @@ def research_node(state: WorkflowState) -> dict:
                 competitors = structured_invoke(Competitors, messages, tracker, CHIEF, "research/competitors").companies[:MAX_COMPANIES]
             except LLM_ERRORS as error:  # the specialists' research still goes ahead
                 logger.warning("Naming the competitors failed: %s", error)
-        tasks = {f"area:{name}": (_area_task(name, state["assignments"][name], brief), None) for name in areas}
+        # Each task: what to research, and the schema of its answer (None for a free-form report).
+        tasks: dict[str, tuple[str, dict | None]] = {
+            f"area:{name}": (_area_task(name, state["assignments"][name], brief), None) for name in areas
+        }
         tasks |= {f"company:{company.name}": (_company_task(company, brief), COMPANY_SCHEMA) for company in competitors}
         reports = research_all(tasks, use)
 
